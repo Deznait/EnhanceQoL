@@ -18,7 +18,7 @@ local function Constructor()
 	local function showDragIcon(texture)
 		if not tree.dragIcon then
 			tree.dragIcon = CreateFrame("Frame", nil, UIParent)
-			tree.dragIcon:SetSize(18, 18)
+			tree.dragIcon:SetSize(24, 24)
 			tree.dragIcon:SetFrameStrata("TOOLTIP")
 			local tex = tree.dragIcon:CreateTexture(nil, "OVERLAY")
 			tex:SetAllPoints()
@@ -53,7 +53,7 @@ local function Constructor()
 		local oldLeave = btn:GetScript("OnLeave")
 
 		btn:SetScript("OnMouseDown", function(frame, button)
-			if button == "LeftButton" and IsAltKeyDown() then
+			if button == "LeftButton" then --and IsAltKeyDown() then
 				frame.obj.dragSource = frame.uniquevalue
 				frame.obj.dragging = true
 				frame.obj.dragButton = frame
