@@ -550,6 +550,8 @@ function addon.Aura.functions.buildCategoryOptions(container, catId)
 				anchor:Hide()
 			end
 		end
+		applyLockState()
+		scanBuffs()
 	end)
 	core:AddChild(enableCB)
 
