@@ -1,4 +1,5 @@
 local AceGUI = LibStub("AceGUI-3.0")
+local GetMouseFocus = _G.GetMouseFocus
 
 --[[ DragTreeGroup - simple TreeGroup extension with drag-and-drop
      Dragging is started with a left-click while holding ALT.
@@ -6,7 +7,7 @@ local AceGUI = LibStub("AceGUI-3.0")
      an "OnDragDrop" callback with the source and target unique values.
 ]]
 
-local Type, Version = "EQOL_DragTreeGroup", 2
+local Type, Version = "EQOL_DragTreeGroup", 3
 
 local function Constructor()
 	local tree = AceGUI:Create("TreeGroup")
