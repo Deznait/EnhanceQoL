@@ -862,7 +862,7 @@ function addon.Aura.functions.addBuffTrackerOptions(container)
 	wrapper:SetFullHeight(true)
 	container:AddChild(wrapper)
 
-	local left = addon.functions.createContainer("SimpleGroup", "Fill")
+	local left = addon.functions.createContainer("SimpleGroup", "Flow")
 	left:SetWidth(220)
 	left:SetFullHeight(true)
 	wrapper:AddChild(left)
@@ -878,7 +878,7 @@ function addon.Aura.functions.addBuffTrackerOptions(container)
 	treeGroup:SetTree(getCategoryTree())
 	treeGroup:SetCallback("OnGroupSelected", function(widget, _, value)
 		if right and right.frame then
-			right.frame:Show()   -- ensure the scroll container becomes visible
+			right.frame:Show() -- ensure the scroll container becomes visible
 		end
 		local catId, buffId = strsplit("\001", value)
 		catId = tonumber(catId)
@@ -919,11 +919,9 @@ function addon.Aura.functions.addBuffTrackerOptions(container)
 	-- ensure the first category is selected and options shown
 	local ok = treeGroup:SelectByValue(tostring(selectedCategory))
 	if not ok then
-	    -- fallback: pick first root node from current tree
-	    local tree = treeGroup.tree
-	    if tree and tree[1] and tree[1].value then
-	        treeGroup:SelectByValue(tree[1].value)
-	    end
+		-- fallback: pick first root node from current tree
+		local tree = treeGroup.tree
+		if tree and tree[1] and tree[1].value then treeGroup:SelectByValue(tree[1].value) end
 	end
 end
 
