@@ -1381,6 +1381,27 @@ local function addUnitFrame(container)
 	sliderName:SetDisabled(not addon.db.unitFrameTruncateNames)
 	groupCoreUF:AddChild(sliderName)
 
+	local sliderScale
+	local cbScale = addon.functions.createCheckboxAce(L["unitFrameScaleEnable"], addon.db.unitFrameScaleEnabled, function(self, _, v)
+		addon.db.unitFrameScaleEnabled = v
+		if sliderScale then sliderScale:SetDisabled(not v) end
+		if v then
+			addon.functions.updatePartyFrameScale()
+		else
+			addon.variables.requireReload = true
+			addon.functions.checkReloadFrame()
+		end
+	end)
+	groupCoreUF:AddChild(cbScale)
+
+	sliderScale = addon.functions.createSliderAce(L["unitFrameScale"] .. ": " .. addon.db.unitFrameScale, addon.db.unitFrameScale, 0.5, 2, 0.05, function(self, _, val)
+		addon.db.unitFrameScale = val
+		self:SetLabel(L["unitFrameScale"] .. ": " .. string.format("%.2f", val))
+		addon.functions.updatePartyFrameScale()
+	end)
+	sliderScale:SetDisabled(not addon.db.unitFrameScaleEnabled)
+	groupCoreUF:AddChild(sliderScale)
+
 	groupCoreUF:AddChild(addon.functions.createSpacerAce())
 end
 
@@ -3183,6 +3204,8 @@ local function initUnitFrame()
 	addon.functions.InitDBValue("hideRaidFrameBuffs", false)
 	addon.functions.InitDBValue("unitFrameTruncateNames", false)
 	addon.functions.InitDBValue("unitFrameMaxNameLength", addon.variables.unitFrameMaxNameLength)
+	addon.functions.InitDBValue("unitFrameScaleEnabled", false)
+	addon.functions.InitDBValue("unitFrameScale", addon.variables.unitFrameScale)
 	if addon.db["hideHitIndicatorPlayer"] then PlayerFrame.PlayerFrameContent.PlayerFrameContentMain.HitIndicator:Hide() end
 
 	if PetHitIndicator then hooksecurefunc(PetHitIndicator, "Show", function(self)
@@ -3252,8 +3275,15 @@ local function initUnitFrame()
 		end
 	end
 
+	function addon.functions.updatePartyFrameScale()
+		if not addon.db["unitFrameScaleEnabled"] then return end
+		if not addon.db["unitFrameScale"] then return end
+		if CompactPartyFrame then CompactPartyFrame:SetScale(addon.db["unitFrameScale"]) end
+	end
+
 	if addon.db["hideRaidFrameBuffs"] then addon.functions.updateRaidFrameBuffs() end
 	if addon.db["unitFrameTruncateNames"] then addon.functions.updateUnitFrameNames() end
+	if addon.db["unitFrameScaleEnabled"] then addon.functions.updatePartyFrameScale() end
 
 	for _, cbData in ipairs(addon.variables.unitFrameNames) do
 		if cbData.var and cbData.name then
