@@ -4771,10 +4771,10 @@ local eventHandlers = {
 			EQOL.PersistSignUpNote()
 
 			--@debug@
-			loadSubAddon("EnhanceQoLAura")
 			loadSubAddon("EnhanceQoLLayoutTools")
 			loadSubAddon("EnhanceQoLQuery")
 			--@end-debug@
+			loadSubAddon("EnhanceQoLAura")
 			loadSubAddon("EnhanceQoLSound")
 			loadSubAddon("EnhanceQoLMouse")
 			loadSubAddon("EnhanceQoLMythicPlus")

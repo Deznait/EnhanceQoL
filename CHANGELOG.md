@@ -5,6 +5,7 @@
 - **Aura Tracker (module)**
   - Create draggable panels that show your own auras (buffs & debuffs).
   - Extensive filters: role, class, spec, stack count, remaining time, and more.
+  - Ultra‑lightweight code – virtually zero performance impact even with hundreds of auras.
 - **Truncate Raid-Frame Names**
   - Limit the number of characters(name-length) shown in the default party/raid frames.
 - **Extended Raid-Frame Scale**
