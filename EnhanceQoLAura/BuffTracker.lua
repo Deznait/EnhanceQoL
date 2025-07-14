@@ -350,20 +350,20 @@ local function playBuffSound(catId, baseId, altId)
 end
 
 local function updateBuff(catId, id, changedId)
-        local cat = getCategory(catId)
-        local buff = cat and cat.buffs and cat.buffs[id]
-        local key = catId .. ":" .. id
-        local before = timedAuras[key] ~= nil
-        if buff and buff.timeOp and buff.timeVal then
-                timedAuras[key] = { catId = catId, buffId = id }
-        else
-                timedAuras[key] = nil
-        end
-        if before ~= (timedAuras[key] ~= nil) and refreshTimeTicker then refreshTimeTicker() end
-        if buff and not buffAllowed(buff) then
-                if activeBuffFrames[catId] and activeBuffFrames[catId][id] then activeBuffFrames[catId][id]:Hide() end
-                return
-        end
+	local cat = getCategory(catId)
+	local buff = cat and cat.buffs and cat.buffs[id]
+	local key = catId .. ":" .. id
+	local before = timedAuras[key] ~= nil
+	if buff and buff.timeOp and buff.timeVal then
+		timedAuras[key] = { catId = catId, buffId = id }
+	else
+		timedAuras[key] = nil
+	end
+	if before ~= (timedAuras[key] ~= nil) and refreshTimeTicker then refreshTimeTicker() end
+	if buff and not buffAllowed(buff) then
+		if activeBuffFrames[catId] and activeBuffFrames[catId][id] then activeBuffFrames[catId][id]:Hide() end
+		return
+	end
 
 	local aura
 	local triggeredId = id
@@ -533,26 +533,31 @@ local function updateBuff(catId, id, changedId)
 end
 
 refreshTimeTicker = function()
-        if timeTicker then
-                timeTicker:Cancel()
-                timeTicker = nil
-        end
-        if next(timedAuras) then
-                timeTicker = C_Timer.NewTicker(1, function()
-                        for _, info in pairs(timedAuras) do
-                                updateBuff(info.catId, info.buffId)
-                        end
-                end)
-        end
+	if timeTicker then
+		timeTicker:Cancel()
+		timeTicker = nil
+	end
+	if next(timedAuras) then
+		timeTicker = C_Timer.NewTicker(1, function()
+			local updatedCats = {}
+			for _, info in pairs(timedAuras) do
+				updateBuff(info.catId, info.buffId)
+				updatedCats[info.catId] = true
+			end
+			for catId in pairs(updatedCats) do
+				updatePositions(catId)
+			end
+		end)
+	end
 end
 
 local function scanBuffs()
-        wipe(timedAuras)
-        for catId, cat in pairs(addon.db["buffTrackerCategories"]) do
-                if addon.db["buffTrackerEnabled"][catId] and categoryAllowed(cat) then
-                        for id in pairs(cat.buffs) do
-                                if not addon.db["buffTrackerHidden"][id] then
-                                        updateBuff(catId, id)
+	wipe(timedAuras)
+	for catId, cat in pairs(addon.db["buffTrackerCategories"]) do
+		if addon.db["buffTrackerEnabled"][catId] and categoryAllowed(cat) then
+			for id in pairs(cat.buffs) do
+				if not addon.db["buffTrackerHidden"][id] then
+					updateBuff(catId, id)
 				elseif activeBuffFrames[catId] and activeBuffFrames[catId][id] then
 					activeBuffFrames[catId][id]:Hide()
 				end
@@ -564,11 +569,11 @@ local function scanBuffs()
 			if activeBuffFrames[catId] then
 				for _, frame in pairs(activeBuffFrames[catId]) do
 					frame:Hide()
-                        end
-                end
-        end
-       end
-       refreshTimeTicker()
+				end
+			end
+		end
+	end
+	refreshTimeTicker()
 end
 
 addon.Aura.buffAnchors = anchors
