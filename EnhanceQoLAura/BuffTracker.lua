@@ -13,13 +13,16 @@ local AceGUI = addon.AceGUI
 local selectedCategory = addon.db["buffTrackerSelectedCategory"] or 1
 
 for _, cat in pairs(addon.db["buffTrackerCategories"]) do
-	for _, buff in pairs(cat.buffs or {}) do
-		if not buff.trackType then buff.trackType = "BUFF" end
-		if not buff.allowedSpecs then buff.allowedSpecs = {} end
-		if not buff.allowedClasses then buff.allowedClasses = {} end
-		if not buff.allowedRoles then buff.allowedRoles = {} end
-		if not buff.conditions then buff.conditions = { join = "AND", conditions = {} } end
-	end
+        for _, buff in pairs(cat.buffs or {}) do
+                if not buff.trackType then buff.trackType = "BUFF" end
+                if not buff.allowedSpecs then buff.allowedSpecs = {} end
+                if not buff.allowedClasses then buff.allowedClasses = {} end
+                if not buff.allowedRoles then buff.allowedRoles = {} end
+                if not buff.conditions then buff.conditions = { join = "AND", conditions = {} } end
+        end
+        cat.allowedSpecs = nil
+        cat.allowedClasses = nil
+        cat.allowedRoles = nil
 end
 
 local anchors = {}
@@ -252,7 +255,7 @@ local function ensureAnchor(id)
 	anchor:RegisterForDrag("LeftButton")
 	anchor.text = anchor:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 	anchor.text:SetPoint("CENTER", anchor, "CENTER")
-	anchor.text:SetText(L["DragToPosition"])
+    anchor.text:SetText(string.format("Drag me\n%s", "|cffffd700" .. (cat.name or "") .. "|r"))
 
 	anchor:SetScript("OnDragStart", anchor.StartMoving)
 	anchor:SetScript("OnDragStop", function(self)
@@ -337,10 +340,15 @@ local function applySize(id)
 	local size = cat.size
 	anchor:SetSize(size, size)
 	activeBuffFrames[id] = activeBuffFrames[id] or {}
-	for _, frame in pairs(activeBuffFrames[id]) do
-		frame:SetSize(size, size)
-		frame.cd:SetAllPoints(frame)
-	end
+        for buffId, frame in pairs(activeBuffFrames[id]) do
+                frame:SetSize(size, size)
+                frame.cd:SetAllPoints(frame)
+                if frame.SpellActivationAlert then
+                        ActionButton_HideOverlayGlow(frame)
+                        local buff = cat.buffs and cat.buffs[buffId]
+                        if buff and buff.glow and frame.isActive then ActionButton_ShowOverlayGlow(frame) end
+                end
+        end
 	updatePositions(id)
 end
 
@@ -887,11 +895,13 @@ function addon.Aura.functions.buildCategoryOptions(container, catId)
 	end)
 	core:AddChild(lockCB)
 
-	local nameEdit = addon.functions.createEditboxAce(L["CategoryName"], cat.name, function(self, _, text)
-		if text ~= "" then cat.name = text end
-		refreshTree(catId)
-	end)
-	core:AddChild(nameEdit)
+        local nameEdit = addon.functions.createEditboxAce(L["CategoryName"], cat.name, function(self, _, text)
+                if text ~= "" then cat.name = text end
+                refreshTree(catId)
+                container:ReleaseChildren()
+                addon.Aura.functions.buildCategoryOptions(container, catId)
+        end)
+        core:AddChild(nameEdit)
 
 	local sizeSlider = addon.functions.createSliderAce(L["buffTrackerIconSizeHeadline"] .. ": " .. cat.size, cat.size, 0, 100, 1, function(self, _, val)
 		cat.size = val
@@ -940,10 +950,11 @@ function addon.Aura.functions.buildCategoryOptions(container, catId)
 				anchors[catId]:Hide()
 				anchors[catId] = nil
 			end
-			selectedCategory = next(addon.db["buffTrackerCategories"]) or 1
-			rebuildAltMapping()
-			refreshTree(selectedCategory)
-		end
+                        selectedCategory = next(addon.db["buffTrackerCategories"]) or 1
+                        rebuildAltMapping()
+                        refreshTree(selectedCategory)
+                        if treeGroup then treeGroup:SelectByValue(tostring(selectedCategory)) end
+                end
 		StaticPopup_Show("EQOL_DELETE_CATEGORY", catName)
 	end)
 	core:AddChild(delBtn)
@@ -1226,17 +1237,29 @@ function addon.Aura.functions.buildBuffOptions(container, catId, buffId)
 		wrapper:AddChild(row)
 	end
 
-	local altEdit = addon.functions.createEditboxAce(L["AddAltSpellID"], nil, function(self, _, text)
-		local alt = tonumber(text)
-		if alt then
-			if not tContains(buff.altIDs, alt) then table.insert(buff.altIDs, alt) end
-			rebuildAltMapping()
-			self:SetText("")
-			container:ReleaseChildren()
-			addon.Aura.functions.buildBuffOptions(container, catId, buffId)
-		end
-	end)
-	wrapper:AddChild(altEdit)
+        local altEdit = addon.functions.createEditboxAce(L["AddAltSpellID"], nil, function(self, _, text)
+                local alt = tonumber(text)
+                if alt then
+                        if not tContains(buff.altIDs, alt) then table.insert(buff.altIDs, alt) end
+                        rebuildAltMapping()
+                        self:SetText("")
+                        container:ReleaseChildren()
+                        addon.Aura.functions.buildBuffOptions(container, catId, buffId)
+                end
+        end)
+        wrapper:AddChild(altEdit)
+
+        local infoIcon = AceGUI:Create("Icon")
+        infoIcon:SetImage("Interface\\FriendsFrame\\InformationIcon")
+        infoIcon:SetImageSize(16, 16)
+        infoIcon:SetWidth(16)
+        infoIcon:SetCallback("OnEnter", function(widget)
+                GameTooltip:SetOwner(widget.frame, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Alternative spell IDs are treated as the same aura. Use this to track multiple IDs of one spell.")
+                GameTooltip:Show()
+        end)
+        infoIcon:SetCallback("OnLeave", function() GameTooltip:Hide() end)
+        wrapper:AddChild(infoIcon)
 
 	wrapper:AddChild(addon.functions.createSpacerAce())
 
@@ -1279,9 +1302,10 @@ function addon.Aura.functions.addBuffTrackerOptions(container)
 				direction = "RIGHT",
 				buffs = {},
 			}
-			ensureAnchor(newId)
-			refreshTree(newId) -- rebuild tree and select new node
-			return -- don’t build options for pseudo‑node
+                        ensureAnchor(newId)
+                        refreshTree(newId)
+                        if treeGroup then treeGroup:SelectByValue(tostring(newId)) end
+                        return -- don’t build options for pseudo‑node
 		end
 
 		local catId, _, buffId = strsplit("\001", value)
