@@ -64,5 +64,6 @@ for _, cat in pairs(addon.db["buffTrackerCategories"]) do
 			buff.showTimerText = addon.db["buffTrackerShowTimerText"]
 			if buff.showTimerText == nil then buff.showTimerText = true end
 		end
+		if buff.showCooldown == nil then buff.showCooldown = false end
 	end
 end

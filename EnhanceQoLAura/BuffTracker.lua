@@ -20,6 +20,7 @@ for _, cat in pairs(addon.db["buffTrackerCategories"]) do
 		if not buff.allowedSpecs then buff.allowedSpecs = {} end
 		if not buff.allowedClasses then buff.allowedClasses = {} end
 		if not buff.allowedRoles then buff.allowedRoles = {} end
+		if buff.showCooldown == nil then buff.showCooldown = false end
 		if not buff.conditions then buff.conditions = { join = "AND", conditions = {} } end
 	end
 	cat.allowedSpecs = nil
@@ -38,6 +39,7 @@ local timeTicker
 local refreshTimeTicker
 
 local LSM = LibStub("LibSharedMedia-3.0")
+local getSpellCooldown = C_Spell and C_Spell.GetSpellCooldown or GetSpellCooldown
 
 local function isNumber(val)
 	if type(val) == "number" then return true end
@@ -522,9 +524,22 @@ local function updateBuff(catId, id, changedId)
 			if not wasActive then playBuffSound(catId, id, triggeredId) end
 			frame.isActive = true
 		else
-			frame.cd:Clear()
-			frame.icon:SetDesaturated(true)
-			frame.icon:SetAlpha(0.5)
+			if buff.showCooldown then
+				local cdStart, cdDur, cdEnable, modRate = getSpellCooldown(id)
+				if cdEnable and cdDur and cdDur > 0 and cdStart > 0 and (cdStart + cdDur) > GetTime() then
+					frame.cd:SetCooldown(cdStart, cdDur, modRate)
+					frame.icon:SetDesaturated(true)
+					frame.icon:SetAlpha(0.5)
+				else
+					frame.cd:Clear()
+					frame.icon:SetDesaturated(false)
+					frame.icon:SetAlpha(1)
+				end
+			else
+				frame.cd:Clear()
+				frame.icon:SetDesaturated(true)
+				frame.icon:SetAlpha(0.5)
+			end
 			frame.isActive = false
 		end
 		if buff.glow then
@@ -759,6 +774,7 @@ local function addBuff(catId, id)
 		showAlways = false,
 		glow = false,
 		castOnClick = false,
+		showCooldown = false,
 		trackType = "BUFF",
 		conditions = { join = "AND", conditions = {} },
 		allowedSpecs = {},
@@ -1190,11 +1206,19 @@ function addon.Aura.functions.buildBuffOptions(container, catId, buffId)
 		wrapper:AddChild(addon.functions.createSpacerAce())
 	end
 
+	local cbCooldown = addon.functions.createCheckboxAce(L["buffTrackerShowCooldown"], buff.showCooldown, function(_, _, val)
+		buff.showCooldown = val
+		scanBuffs()
+	end)
+
 	local alwaysCB = addon.functions.createCheckboxAce(L["buffTrackerAlwaysShow"], buff.showAlways, function(_, _, val)
 		buff.showAlways = val
+		cbCooldown:SetDisabled(not val)
 		scanBuffs()
 	end)
 	wrapper:AddChild(alwaysCB)
+	cbCooldown:SetDisabled(not buff.showAlways)
+	wrapper:AddChild(cbCooldown)
 
 	local cbGlow = addon.functions.createCheckboxAce(L["buffTrackerGlow"], buff.glow, function(_, _, val)
 		buff.glow = val
