@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.30.0] – 2025-07-16
+### ✨ Added
+- **Aura Tracker**
+  - *Export/Import Categories* - Share your Auras to your friends
+    - Just copy/paste the string provided
+### 🐛 Fixed
+- **Aura Tracker** - database missmatch in some rare cases
+
 ## [3.29.0] – 2025-07-15
 ### ✨ Added
 - **Hide Boss-Kill Banner**  
