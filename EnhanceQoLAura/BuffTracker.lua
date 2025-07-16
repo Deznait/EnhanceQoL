@@ -826,7 +826,8 @@ local function sanitiseCategory(cat)
 	end
 end
 
-local function exportCategory(catId, forChat)
+-- encodeMode = "chat" | "addon" | nil
+local function exportCategory(catId, encodeMode)
 	local cat = addon.db["buffTrackerCategories"][catId]
 	if not cat then return end
 	local data = {
@@ -840,15 +841,21 @@ local function exportCategory(catId, forChat)
 	local deflate = LibStub("LibDeflate")
 	local serialized = serializer:Serialize(data)
 	local compressed = deflate:CompressDeflate(serialized)
-	if forChat then return deflate:EncodeForWoWChatChannel(compressed) end
-	return deflate:EncodeForPrint(compressed)
+       if encodeMode == "chat" then
+               return deflate:EncodeForWoWChatChannel(compressed)
+       elseif encodeMode == "addon" then
+               return deflate:EncodeForWoWAddonChannel(compressed)
+       end
+       return deflate:EncodeForPrint(compressed)
 end
 
 local function importCategory(encoded)
 	if type(encoded) ~= "string" or encoded == "" then return end
 	local deflate = LibStub("LibDeflate")
 	local serializer = LibStub("AceSerializer-3.0")
-	local decoded = deflate:DecodeForPrint(encoded) or deflate:DecodeForWoWChatChannel(encoded)
+       local decoded = deflate:DecodeForPrint(encoded)
+               or deflate:DecodeForWoWChatChannel(encoded)
+               or deflate:DecodeForWoWAddonChannel(encoded)
 	if not decoded then return end
 	local decompressed = deflate:DecompressDeflate(decoded)
 	if not decompressed then return end
@@ -1051,9 +1058,9 @@ function addon.Aura.functions.buildCategoryOptions(container, catId)
 	spellEdit:SetRelativeWidth(0.6)
 	core:AddChild(spellEdit)
 
-	local exportBtn = addon.functions.createButtonAce(L["ExportCategory"], 150, function()
-		local data = exportCategory(catId)
-		if not data then return end
+       local exportBtn = addon.functions.createButtonAce(L["ExportCategory"], 150, function()
+               local data = exportCategory(catId)
+               if not data then return end
 		StaticPopupDialogs["EQOL_EXPORT_CATEGORY"] = StaticPopupDialogs["EQOL_EXPORT_CATEGORY"]
 			or {
 				text = L["ExportCategory"],
@@ -1073,7 +1080,12 @@ function addon.Aura.functions.buildCategoryOptions(container, catId)
 		end
 		StaticPopup_Show("EQOL_EXPORT_CATEGORY")
 	end)
-	core:AddChild(exportBtn)
+       core:AddChild(exportBtn)
+
+local shareBtn = addon.functions.createButtonAce(L["ShareCategory"] or "Share Category", 150, function()
+               ShareCategory(catId)
+       end)
+       core:AddChild(shareBtn)
 
 	local delBtn = addon.functions.createButtonAce(L["DeleteCategory"], 150, function()
 		local catName = addon.db["buffTrackerCategories"][catId].name or ""
@@ -1526,3 +1538,91 @@ for id in pairs(addon.db["buffTrackerCategories"]) do
 end
 applyLockState()
 applyTimerText()
+
+-- ---------------------------------------------------------------------------
+-- Share Aura-Category via Chat & Addon-Channel
+-- ---------------------------------------------------------------------------
+local COMM_PREFIX = "EQOLBTSHARE"
+local CTL = ChatThrottleLib
+local AceComm = LibStub("AceComm-3.0")
+
+local incoming = {}
+
+local function getCatName(catId)
+       local cat = addon.db["buffTrackerCategories"][catId]
+       return cat and cat.name or tostring(catId)
+end
+
+local function ShareCategory(catId, targetPlayer)
+       local chatEncoded = exportCategory(catId, "chat")
+       local addonEncoded = exportCategory(catId, "addon")
+       if not chatEncoded or not addonEncoded then return end
+
+       local placeholder = ("[EQOL: %s - %s]"):format(UnitName("player"), getCatName(catId))
+       ChatFrame_OpenChat(placeholder)
+
+       local pktID = tostring(time() * 1000):gsub("%D", "")
+       CTL:SendChatMessage(
+               "BULK",
+               COMM_PREFIX,
+               ("<%s>%s"):format(pktID, addonEncoded),
+               "SAY",
+               targetPlayer
+       )
+end
+
+local PATTERN = "%[EQOL: ([^%]]+)%]"
+
+local function EQOL_ChatFilter(_, _, msg, ...)
+       local newMsg, hits = msg:gsub(PATTERN, function(label)
+               return ("|Hgarrmission:eqolaura:%s|h|cff00ff88[%s]|h|r"):format(label, label)
+       end)
+       if hits > 0 then return false, newMsg, ... end
+end
+
+for _, ev in ipairs({
+       "CHAT_MSG_SAY",
+       "CHAT_MSG_PARTY",
+       "CHAT_MSG_RAID",
+       "CHAT_MSG_GUILD",
+       "CHAT_MSG_WHISPER",
+       "CHAT_MSG_WHISPER_INFORM",
+}) do
+       ChatFrame_AddMessageEventFilter(ev, EQOL_ChatFilter)
+end
+
+local origSetItemRef = SetItemRef
+function SetItemRef(link, text, button, frame, ...)
+       local id = link:match("^eqolaura:(.+)")
+       if id and incoming[id] then
+               StaticPopupDialogs["EQOL_IMPORT_FROM_SHARE"] = StaticPopupDialogs["EQOL_IMPORT_FROM_SHARE"]
+                       or {
+                               text = L["ImportCategory"],
+                               button1 = ACCEPT,
+                               button2 = CANCEL,
+                               timeout = 0,
+                               whileDead = true,
+                               hideOnEscape = true,
+                               preferredIndex = 3,
+                               OnAccept = function(_, data)
+                                       local encoded = incoming[data]
+                                       incoming[data] = nil
+                                       local newId = importCategory(encoded)
+                                       if newId then refreshTree(newId) end
+                               end,
+                       }
+               StaticPopup_Show("EQOL_IMPORT_FROM_SHARE", nil, nil, id)
+               return
+       end
+       origSetItemRef(link, text, button, frame, ...)
+end
+
+local function OnComm(prefix, message, dist, sender)
+       if prefix ~= COMM_PREFIX then return end
+       local pktID, payload = message:match("^<(%d+)>(.+)")
+       if not pktID then return end
+       incoming[pktID] = payload
+end
+
+AceComm:RegisterComm(COMM_PREFIX, OnComm)
+
