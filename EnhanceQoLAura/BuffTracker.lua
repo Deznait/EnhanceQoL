@@ -1568,11 +1568,27 @@ ShareCategory = function(catId, targetPlayer)
 
        local pktID = tostring(time() * 1000):gsub("%D", "")
        pending[label] = pktID
+
+       local dist, target = "WHISPER", targetPlayer
+       if not targetPlayer then
+               if IsInRaid(LE_PARTY_CATEGORY_HOME) then
+                       dist = "RAID"
+               elseif IsInGroup(LE_PARTY_CATEGORY_INSTANCE) then
+                       dist = "INSTANCE_CHAT"
+               elseif IsInGroup() then
+                       dist = "PARTY"
+               elseif IsInGuild() then
+                       dist = "GUILD"
+               else
+                       target = UnitName("player")
+               end
+       end
+
        AceComm:SendCommMessage(
                COMM_PREFIX,
                ("<%s>%s"):format(pktID, addonEncoded),
-               "SAY",
-               targetPlayer,
+               dist,
+               target,
                "BULK"
        )
 end
