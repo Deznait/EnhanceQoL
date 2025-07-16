@@ -10,7 +10,7 @@ end
 local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_Aura")
 local AceGUI = addon.AceGUI
 
--- luacheck: globals ChatThrottleLib ChatFrame_OpenChat
+-- luacheck: globals ChatFrame_OpenChat
 
 local selectedCategory = addon.db["buffTrackerSelectedCategory"] or 1
 
@@ -1548,7 +1548,6 @@ applyTimerText()
 -- Share Aura-Category via Chat & Addon-Channel
 -- ---------------------------------------------------------------------------
 local COMM_PREFIX = "EQOLBTSHARE"
-local CTL = ChatThrottleLib
 local AceComm = LibStub("AceComm-3.0")
 
 local incoming = {}
@@ -1567,12 +1566,12 @@ ShareCategory = function(catId, targetPlayer)
        ChatFrame_OpenChat(placeholder)
 
        local pktID = tostring(time() * 1000):gsub("%D", "")
-       CTL:SendChatMessage(
-               "BULK",
+       AceComm:SendCommMessage(
                COMM_PREFIX,
                ("<%s>%s"):format(pktID, addonEncoded),
                "SAY",
-               targetPlayer
+               targetPlayer,
+               "BULK"
        )
 end
 
