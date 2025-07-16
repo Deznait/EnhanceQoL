@@ -530,13 +530,19 @@ local function updateBuff(catId, id, changedId)
 					frame.cd:SetCooldown(cdStart, cdDur, modRate)
 					frame.icon:SetDesaturated(true)
 					frame.icon:SetAlpha(0.5)
+					frame.cd:SetScript("OnCooldownDone", function()
+						frame.icon:SetDesaturated(false)
+						frame.icon:SetAlpha(1)
+					end)
 				else
 					frame.cd:Clear()
+					frame.cd:SetScript("OnCooldownDone", nil)
 					frame.icon:SetDesaturated(false)
 					frame.icon:SetAlpha(1)
 				end
 			else
 				frame.cd:Clear()
+				frame.cd:SetScript("OnCooldownDone", nil)
 				frame.icon:SetDesaturated(true)
 				frame.icon:SetAlpha(0.5)
 			end
