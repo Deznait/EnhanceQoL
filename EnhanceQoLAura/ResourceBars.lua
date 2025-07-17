@@ -19,6 +19,7 @@ local healthBar
 local powerbar = {}
 local powerfrequent = {}
 local getBarSettings
+local lastTabIndex
 
 function addon.Aura.functions.addResourceFrame(container)
 	local scroll = addon.functions.createContainer("ScrollFrame", "Flow")
