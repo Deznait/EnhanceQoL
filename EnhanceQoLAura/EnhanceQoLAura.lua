@@ -2,8 +2,6 @@
 local parentAddonName = "EnhanceQoL"
 local addonName, addon = ...
 
-addon.tempScrollPos = 0 -- holds last scroll offset for Essential list
-
 if _G[parentAddonName] then
 	addon = _G[parentAddonName]
 else
@@ -12,8 +10,6 @@ end
 
 local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_Aura")
 local AceGUI = addon.AceGUI
-
-local lastTabIndex
 
 addon.variables.statusTable.groups["aura"] = true
 
