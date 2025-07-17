@@ -38,6 +38,17 @@ local chargeSpells = {}
 local timedAuras = {}
 local timeTicker
 local refreshTimeTicker
+local rescanTimer
+
+local function scheduleRescan()
+    if rescanTimer then
+        rescanTimer:Cancel()
+    end
+    rescanTimer = C_Timer.NewTimer(0.1, function()
+        rescanTimer = nil
+        addon.Aura.scanBuffs()
+    end)
+end
 
 local LSM = LibStub("LibSharedMedia-3.0")
 local getSpellCooldown = C_Spell and C_Spell.GetSpellCooldown or GetSpellCooldown
@@ -441,14 +452,14 @@ local function createBuffFrame(icon, parent, size, castOnClick, spellID, showTim
 	charges:SetShadowColor(0, 0, 0, 1)
 	frame.charges = charges
 
-	frame.castOnClick = castOnClick
-	if castOnClick then
-		frame:SetAttribute("type", "spell")
-		frame:SetAttribute("spell", spellID)
-		frame:EnableMouse(true)
-		frame:RegisterForClicks("AnyUp", "AnyDown")
-		frame:SetScript("PostClick", function() C_Timer.After(0.1, addon.Aura.scanBuffs) end)
-	end
+       frame.castOnClick = castOnClick
+       if castOnClick then
+               frame:SetAttribute("type", "spell")
+               frame:SetAttribute("spell", spellID)
+               frame:EnableMouse(true)
+               frame:RegisterForClicks("AnyUp", "AnyDown")
+               frame:SetScript("PostClick", scheduleRescan)
+       end
 
 	return frame
 end
