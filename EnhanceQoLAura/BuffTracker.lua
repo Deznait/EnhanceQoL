@@ -39,6 +39,7 @@ local timedAuras = {}
 local timeTicker
 local refreshTimeTicker
 local rescanTimer
+local firstScan = true
 
 local function scheduleRescan()
     if rescanTimer then
@@ -481,8 +482,9 @@ local function playBuffSound(catId, baseId, altId)
 	if file then PlaySoundFile(file, "Master") end
 end
 
-local function updateBuff(catId, id, changedId)
-	local cat = getCategory(catId)
+local function updateBuff(catId, id, changedId, firstScan)
+        if firstScan == nil then firstScan = false end
+        local cat = getCategory(catId)
 	local buff = cat and cat.buffs and cat.buffs[id]
 	local key = catId .. ":" .. id
 	local before = timedAuras[key] ~= nil
@@ -515,14 +517,16 @@ local function updateBuff(catId, id, changedId)
 			end
 		end
 	end
-	if aura then
-		local tType = buff and buff.trackType or (cat and cat.trackType) or "BUFF"
-		if tType == "DEBUFF" and not aura.isHarmful then
-			aura = nil
-		elseif tType == "BUFF" and not aura.isHelpful then
-			aura = nil
-		end
-	end
+        if aura then
+                local tType = buff and buff.trackType or (cat and cat.trackType) or "BUFF"
+                if tType == "DEBUFF" and not aura.isHarmful then
+                        aura = nil
+                elseif tType == "BUFF" and not aura.isHelpful then
+                        aura = nil
+                elseif firstScan and aura.expirationTime and aura.expirationTime > 0 and (not aura.duration or aura.duration <= 0) then
+                        aura.duration = aura.expirationTime - GetTime()
+                end
+        end
 
 	local condOk = evaluateGroup(buff and buff.conditions, aura)
 	if aura == nil and not hasMissingCondition(buff and buff.conditions) then condOk = false end
@@ -547,14 +551,17 @@ local function updateBuff(catId, id, changedId)
 			frame.cd:SetHideCountdownNumbers(not showTimer)
 		end
 		frame.icon:SetTexture(icon)
-		if aura then
-			if aura.duration and aura.duration > 0 then
-				frame.cd:SetCooldown(aura.expirationTime - aura.duration, aura.duration)
-				frame.cd:SetReverse(true)
-			else
-				frame.cd:SetReverse(false)
-				frame.cd:Clear()
-			end
+                if aura then
+                        if firstScan and aura.expirationTime and aura.expirationTime > 0 and (not aura.duration or aura.duration <= 0) then
+                                aura.duration = aura.expirationTime - GetTime()
+                        end
+                        if aura.duration and aura.duration > 0 then
+                                frame.cd:SetCooldown(aura.expirationTime - aura.duration, aura.duration)
+                                frame.cd:SetReverse(true)
+                        else
+                                frame.cd:SetReverse(false)
+                                frame.cd:Clear()
+                        end
 			frame.icon:SetDesaturated(false)
 			frame.icon:SetAlpha(1)
 			if not wasActive then playBuffSound(catId, id, triggeredId) end
@@ -597,8 +604,11 @@ local function updateBuff(catId, id, changedId)
 		end
 		frame:Show()
 	elseif condOk then
-		if displayAura then
-			local icon = buff and buff.icon or displayAura.icon
+                if displayAura then
+                        if firstScan and displayAura.expirationTime and displayAura.expirationTime > 0 and (not displayAura.duration or displayAura.duration <= 0) then
+                                displayAura.duration = displayAura.expirationTime - GetTime()
+                        end
+                        local icon = buff and buff.icon or displayAura.icon
 			local showTimer = buff and buff.showTimerText
 			if showTimer == nil then showTimer = addon.db["buffTrackerShowTimerText"] end
 			if showTimer == nil then showTimer = true end
@@ -745,16 +755,16 @@ refreshTimeTicker = function()
 end
 
 local function scanBuffs()
-	wipe(timedAuras)
-	for catId, cat in pairs(addon.db["buffTrackerCategories"]) do
-		if addon.db["buffTrackerEnabled"][catId] and categoryAllowed(cat) then
-			for id in pairs(cat.buffs) do
-				if not addon.db["buffTrackerHidden"][id] then
-					updateBuff(catId, id)
-				elseif activeBuffFrames[catId] and activeBuffFrames[catId][id] then
-					activeBuffFrames[catId][id]:Hide()
-				end
-			end
+        wipe(timedAuras)
+        for catId, cat in pairs(addon.db["buffTrackerCategories"]) do
+                if addon.db["buffTrackerEnabled"][catId] and categoryAllowed(cat) then
+                        for id in pairs(cat.buffs) do
+                                if not addon.db["buffTrackerHidden"][id] then
+                                        updateBuff(catId, id, nil, firstScan)
+                                elseif activeBuffFrames[catId] and activeBuffFrames[catId][id] then
+                                        activeBuffFrames[catId][id]:Hide()
+                                end
+                        end
 			updatePositions(catId)
 			if anchors[catId] then anchors[catId]:Show() end
 		else
@@ -765,8 +775,9 @@ local function scanBuffs()
 				end
 			end
 		end
-	end
-	refreshTimeTicker()
+        end
+        refreshTimeTicker()
+        firstScan = false
 end
 
 local function collectActiveAuras()
