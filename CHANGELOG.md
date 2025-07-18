@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.31.0] – 2025-07-16
+### ✨ Added
+- **Quick vendor include-list management**
+  - **Alt + Left-Click**: add the item to the include list (auto-sell)
+  - **Alt + Right-Click**: remove the item from the include list
+
 ## [3.30.1] – 2025-07-16
 ### 🐛 Fixed
 - **Aura Tracker on Login without Duration**
