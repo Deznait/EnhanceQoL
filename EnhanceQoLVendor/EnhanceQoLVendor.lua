@@ -552,8 +552,9 @@ local function updateSellMarks()
 						itemButton.ItemMarkSell = itemButton:CreateTexture(nil, "ARTWORK")
 						itemButton.ItemMarkSell:SetDrawLayer("ARTWORK", 2)
 						itemButton.ItemMarkSell:SetTexture("Interface\\AddOns\\EnhanceQoLVendor\\Art\\sell.tga")
-						itemButton.ItemMarkSell:SetSize(14, 14)
-						itemButton.ItemMarkSell:SetPoint("TOPLEFT", itemButton, "TOPLEFT", 0, 0)
+						itemButton.ItemMarkSell:SetSize(18, 18)
+						itemButton.ItemMarkSell:SetVertexColor(0, 1, 1, .9)
+						itemButton.ItemMarkSell:SetPoint("BOTTOMLEFT", itemButton, "BOTTOMLEFT", 0, 0)
 					end
 					itemButton.ItemMarkSell:Show()
 				elseif itemButton.ItemMarkSell then
