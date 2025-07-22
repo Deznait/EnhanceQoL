@@ -615,7 +615,9 @@ if TooltipDataProcessor then
 		if not oTooltip or not oTooltip.GetBagID or not oTooltip.GetID then return end
 		local bagID = oTooltip:GetBagID()
 		local slotIndex = oTooltip:GetID()
-		local key = bagID .. "_" .. slotIndex
-		if sellMarkLookup[key] then tooltip:AddLine(L["vendorWillBeSold"], 1, 0, 0) end
+		if bagID and slotIndex then
+			local key = bagID .. "_" .. slotIndex
+			if sellMarkLookup[key] then tooltip:AddLine(L["vendorWillBeSold"], 1, 0, 0) end
+		end
 	end)
 end
