@@ -2370,7 +2370,11 @@ local function addLootFrame(container, d)
 			var = "autoQuickLoot",
 			desc = L["autoQuickLootDesc"],
 			type = "CheckBox",
-			callback = function(self, _, value) addon.db["autoQuickLoot"] = value end,
+			callback = function(self, _, value)
+				addon.db["autoQuickLoot"] = value
+				container:ReleaseChildren()
+				addLootFrame(container)
+			end,
 		},
 		{
 			parent = "",
@@ -2420,6 +2424,11 @@ local function addLootFrame(container, d)
 		if checkboxData.callback then uFunc = checkboxData.callback end
 		local cb = addon.functions.createCheckboxAce(text, addon.db[checkboxData.var], uFunc, desc)
 		groupCore:AddChild(cb)
+	end
+
+	if addon.db["autoQuickLoot"] then
+		local cbShift = addon.functions.createCheckboxAce(L["autoQuickLootWithShift"], addon.db["autoQuickLootWithShift"], function(self, _, value) addon.db["autoQuickLootWithShift"] = value end)
+		groupCore:AddChild(cbShift)
 	end
 
 	if addon.db.enableLootToastFilter then
@@ -3142,6 +3151,8 @@ local function initMisc()
 	addon.functions.InitDBValue("autoCancelCinematic", false)
 	addon.functions.InitDBValue("ignoreTalkingHead", false)
 	addon.functions.InitDBValue("autoHideBossBanner", false)
+	addon.functions.InitDBValue("autoQuickLoot", false)
+	addon.functions.InitDBValue("autoQuickLootWithShift", false)
 	addon.functions.InitDBValue("hideAzeriteToast", false)
 	addon.functions.InitDBValue("hiddenLandingPages", {})
 	addon.functions.InitDBValue("hideMinimapButton", false)
@@ -4935,9 +4946,12 @@ local eventHandlers = {
 		if addon.db["groupfinderAppText"] then toggleGroupApplication(true) end
 	end,
 	["LOOT_READY"] = function()
-		if addon.db["autoQuickLoot"] and not IsShiftKeyDown() then
-			for i = 1, GetNumLootItems() do
-				C_Timer.After(0.1, function() LootSlot(i) end)
+		if addon.db["autoQuickLoot"] then
+			local requireShift = addon.db["autoQuickLootWithShift"]
+			if (requireShift and IsShiftKeyDown()) or (not requireShift and not IsShiftKeyDown()) then
+				for i = 1, GetNumLootItems() do
+					C_Timer.After(0.1, function() LootSlot(i) end)
+				end
 			end
 		end
 	end,

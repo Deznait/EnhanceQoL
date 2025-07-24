@@ -99,6 +99,7 @@ L["ignoreWarbandCompleted"] = "Don't automatically handle %s %s"
 
 L["autoQuickLoot"] = "Quick loot items"
 L["autoQuickLootDesc"] = "Fixes a default-UI bug that sometimes prevents you from looting. For best results, turn off WoW’s built-in Auto Loot option."
+L["autoQuickLootWithShift"] = "Only quick loot while holding Shift"
 L["openCharframeOnUpgrade"] = "Open the character frame when upgrading items at the vendor"
 L["instantCatalystEnabled"] = "Instant Catalyst button"
 L["Instant Catalyst"] = "Instant Catalyst"
