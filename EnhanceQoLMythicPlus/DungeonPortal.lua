@@ -14,7 +14,7 @@ local cModeIDs
 local portalSpells = {}
 local allSpells = {} --  for Cooldown checking
 local mapInfo = {}
-local mapIDInfo = {}
+local mapIDInfo = {} -- TODO 11.2: remove mapIDInfo after new mapID from GetMapUIInfo
 local selectedMapId
 local faction = select(2, UnitFactionGroup("player"))
 local checkCooldown
@@ -84,7 +84,7 @@ local function getCurrentSeasonPortal()
 	end
 	portalSpells = filteredPortalSpells
 	mapInfo = filteredMapInfo
-	mapIDInfo = filteredMapID
+        mapIDInfo = filteredMapID -- TODO 11.2: remove mapIDInfo once mapID param is used
 end
 
 local isKnown = {}
@@ -1193,7 +1193,7 @@ GameTooltip:HookScript("OnShow", function(self)
 					local mapData = C_LFGList.GetActivityInfoTable(searchResultInfo.activityIDs[1])
 					if mapData then
 						if mapIDInfo[mapData.mapID] then selectedMapId = mapIDInfo[mapData.mapID] end
-					end
+                                                if mapIDInfo[mapData.mapID] then selectedMapId = mapIDInfo[mapData.mapID] end -- TODO 11.2: use new mapID result
 				end
 			end
 			CreateRioScore()

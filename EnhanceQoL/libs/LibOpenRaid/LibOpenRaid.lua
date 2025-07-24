@@ -1637,7 +1637,9 @@ function UnitInfoManager.GetPlayerFullInfo()
 
     local specId = 0
     if (getSpecializationVersion() == CONST_SPECIALIZATION_VERSION_MODERN) then
+        -- TODO 11.2: use C_SpecializationInfo.GetSpecialization
         local selectedSpecialization = GetSpecialization()
+        -- TODO 11.2: use C_SpecializationInfo.GetSpecializationInfo
         if (selectedSpecialization) then
             specId = GetSpecializationInfo(selectedSpecialization) or 0
         end
@@ -1662,6 +1664,9 @@ function UnitInfoManager.OnPlayerTalentChanged()
     local playerName = UnitName("player")
     local unitInfo = UnitInfoManager.GetUnitInfo(playerName, true)
     local specId = 0
+        -- TODO 11.2: use C_SpecializationInfo.GetSpecialization
+        -- TODO 11.2: use C_SpecializationInfo.GetSpecialization
+        -- TODO 11.2: use C_SpecializationInfo.GetSpecializationInfo
 
     if (getSpecializationVersion() == CONST_SPECIALIZATION_VERSION_MODERN) then
         local selectedSpecialization = GetSpecialization()

@@ -250,7 +250,9 @@ end
 
 local function CheckReagentBankCount(itemID)
        -- TODO 11.2: Remove this function as Reagent Bank is removed
+        -- TODO 11.2: IsReagentBankUnlocked removed
 	if not IsReagentBankUnlocked then return end
+        -- TODO 11.2: IsReagentBankUnlocked removed
 	local count = 0
 	if IsReagentBankUnlocked() then
 		for i = 1, C_Container.GetContainerNumSlots(REAGENTBANK_CONTAINER) do
