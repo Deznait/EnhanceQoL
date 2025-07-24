@@ -467,7 +467,8 @@ function ChatIM:AddMessage(partner, text, outbound, isBN, bnetID)
 	local timestamp = date("%H:%M")
 	local shortName = outbound and AUCTION_HOUSE_SELLER_YOU or Ambiguate(partner, "short")
 	local prefix = "|cff999999" .. timestamp .. "|r"
-	text = self:FormatURLs(text)
+	local formattedText = self:FormatURLs(text)
+	local storeText = formattedText:gsub("%%", "%%%%")
 	local nameLink, colorInfo
 	if isBN then
 		nameLink = string.format("|HBNplayer:%s|h[%s]|h", partner, shortName)
@@ -479,7 +480,7 @@ function ChatIM:AddMessage(partner, text, outbound, isBN, bnetID)
 	local cHex = ("%02x%02x%02x"):format(colorInfo.r * 255, colorInfo.g * 255, colorInfo.b * 255)
 
 	-- plain line (no |cff…) so embedded hyperlinks keep native colours
-	local line = string.format("%s |cff%s%s|r: |cff%s%s|r", prefix, cHex, nameLink, cHex, text)
+	local line = string.format("%s |cff%s%s|r: |cff%s%s|r", prefix, cHex, nameLink, cHex, formattedText)
 	tab.msg:AddMessage(line)
 	local historyKey = isBN and tab.battleTag or partner
 	local storeLine
@@ -490,7 +491,7 @@ function ChatIM:AddMessage(partner, text, outbound, isBN, bnetID)
 		else
 			nameLinkFmt = "|HBNplayer:%s|h[%s]|h"
 		end
-		storeLine = string.format("%s |cff%s%s|r: |cff%s%s|r", prefix, cHex, nameLinkFmt, cHex, text)
+		storeLine = string.format("%s |cff%s%s|r: |cff%s%s|r", prefix, cHex, nameLinkFmt, cHex, storeText)
 	else
 		storeLine = line
 	end
