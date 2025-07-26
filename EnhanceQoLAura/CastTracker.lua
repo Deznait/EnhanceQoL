@@ -14,25 +14,70 @@ CastTracker.functions = CastTracker.functions or {}
 local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_Aura")
 local AceGUI = addon.AceGUI
 
-local framePool = {}
+local anchors = {}
+local framePools = {}
 local activeBars = {}
 local activeOrder = {}
-local anchor
+local selectedCategory = addon.db["castTrackerSelectedCategory"] or 1
 
-local function UpdateActiveBars()
-       local db = addon.db.castTracker or {}
-       for _, bar in pairs(activeBars) do
-               bar.status:SetStatusBarColor(unpack(db.color or { 1, 0.5, 0, 1 }))
-               bar.icon:SetSize(db.height or 20, db.height or 20)
-               bar:SetSize(db.width or 200, db.height or 20)
-       end
-       CastTracker.functions.LayoutBars()
+local function UpdateActiveBars(catId)
+	local cat = addon.db.castTrackerCategories and addon.db.castTrackerCategories[catId] or {}
+	for _, bar in pairs(activeBars[catId] or {}) do
+		bar.status:SetStatusBarColor(unpack(cat.color or { 1, 0.5, 0, 1 }))
+		bar.icon:SetSize(cat.height or 20, cat.height or 20)
+		bar:SetSize(cat.width or 200, cat.height or 20)
+	end
+	CastTracker.functions.LayoutBars(catId)
 end
 
-local function AcquireBar()
-	local bar = table.remove(framePool)
+local function ensureAnchor(id)
+	if anchors[id] then return anchors[id] end
+	local cat = addon.db.castTrackerCategories[id]
+	if not cat then return nil end
+	local a = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+	a:SetBackdrop({ bgFile = "Interface/Tooltips/UI-Tooltip-Background" })
+	a:SetBackdropColor(0, 0, 0, 0.6)
+	a:SetMovable(true)
+	a:EnableMouse(true)
+	a:RegisterForDrag("LeftButton")
+	a:SetScript("OnDragStart", a.StartMoving)
+	a:SetScript("OnDragStop", function(self)
+		self:StopMovingOrSizing()
+		local point, _, _, xOfs, yOfs = self:GetPoint()
+		cat.anchor.point = point
+		cat.anchor.x = xOfs
+		cat.anchor.y = yOfs
+	end)
+	if cat.anchor then a:SetPoint(cat.anchor.point, UIParent, cat.anchor.point, cat.anchor.x, cat.anchor.y) end
+	anchors[id] = a
+	return a
+end
+
+local function applyLockState()
+	for id, anchor in pairs(anchors) do
+		if addon.db.castTrackerEnabled[id] then
+			anchor:Show()
+		else
+			anchor:Hide()
+		end
+		if addon.db.castTrackerLocked[id] then
+			anchor:RegisterForDrag()
+			anchor:SetMovable(false)
+			anchor:EnableMouse(false)
+		else
+			anchor:RegisterForDrag("LeftButton")
+			anchor:SetMovable(true)
+			anchor:EnableMouse(true)
+		end
+	end
+end
+
+local function AcquireBar(catId)
+	framePools[catId] = framePools[catId] or {}
+	local pool = framePools[catId]
+	local bar = table.remove(pool)
 	if not bar then
-		bar = CreateFrame("Frame", nil, anchor)
+		bar = CreateFrame("Frame", nil, ensureAnchor(catId))
 		bar.status = CreateFrame("StatusBar", nil, bar)
 		bar.status:SetAllPoints()
 		bar.status:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
@@ -43,58 +88,65 @@ local function AcquireBar()
 		bar.time:SetPoint("RIGHT", -4, 0)
 		bar.time:SetJustifyH("RIGHT")
 	end
+	bar:SetParent(ensureAnchor(catId))
 	bar:Show()
 	return bar
 end
 
-local function ReleaseBar(bar)
+local function ReleaseBar(catId, bar)
 	if not bar then return end
 	bar:SetScript("OnUpdate", nil)
 	bar:Hide()
-	activeBars[bar.owner] = nil
-	for i, b in ipairs(activeOrder) do
+	activeBars[catId][bar.owner] = nil
+	for i, b in ipairs(activeOrder[catId]) do
 		if b == bar then
-			table.remove(activeOrder, i)
+			table.remove(activeOrder[catId], i)
 			break
 		end
 	end
-	table.insert(framePool, bar)
-	CastTracker.functions.LayoutBars()
+	table.insert(framePools[catId], bar)
+	CastTracker.functions.LayoutBars(catId)
 end
 
 local function BarUpdate(self)
 	local now = GetTime()
 	if now >= self.finish then
-		ReleaseBar(self)
+		ReleaseBar(self.catId, self)
 		return
 	end
 	self.status:SetValue(now - self.start)
 	self.time:SetFormattedText("%.1f", self.finish - now)
 end
 
-function CastTracker.functions.LayoutBars()
-	for i, bar in ipairs(activeOrder) do
+function CastTracker.functions.LayoutBars(catId)
+	local order = activeOrder[catId] or {}
+	local anchor = ensureAnchor(catId)
+	for i, bar in ipairs(order) do
 		bar:ClearAllPoints()
 		if i == 1 then
 			bar:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, 0)
 		else
-			bar:SetPoint("TOPLEFT", activeOrder[i - 1], "BOTTOMLEFT", 0, -2)
+			bar:SetPoint("TOPLEFT", order[i - 1], "BOTTOMLEFT", 0, -2)
 		end
 	end
 end
 
-function CastTracker.functions.StartBar(spellId, sourceGUID)
-        local name, _, icon, castTime = GetSpellInfo(spellId)
-        castTime = (castTime or 0) / 1000
-        local db = addon.db.castTracker or {}
-        if db.duration and db.duration > 0 then castTime = db.duration end
-        if castTime <= 0 then return end
-        local bar = activeBars[sourceGUID]
-        if bar then ReleaseBar(bar) end
-	bar = AcquireBar()
-	activeBars[sourceGUID] = bar
+function CastTracker.functions.StartBar(spellId, sourceGUID, catId)
+	local name, _, icon, castTime = GetSpellInfo(spellId)
+	castTime = (castTime or 0) / 1000
+	local db = addon.db.castTrackerCategories and addon.db.castTrackerCategories[catId] or {}
+	if db.duration and db.duration > 0 then castTime = db.duration end
+	if castTime <= 0 then return end
+	activeBars[catId] = activeBars[catId] or {}
+	activeOrder[catId] = activeOrder[catId] or {}
+	framePools[catId] = framePools[catId] or {}
+	local bar = activeBars[catId][sourceGUID]
+	if bar then ReleaseBar(catId, bar) end
+	bar = AcquireBar(catId)
+	activeBars[catId][sourceGUID] = bar
 	bar.owner = sourceGUID
 	bar.spellId = spellId
+	bar.catId = catId
 	bar.icon:SetTexture(icon)
 	bar.text:SetText(name)
 	bar.status:SetMinMaxValues(0, castTime)
@@ -106,8 +158,8 @@ function CastTracker.functions.StartBar(spellId, sourceGUID)
 	bar.start = GetTime()
 	bar.finish = bar.start + castTime
 	bar:SetScript("OnUpdate", BarUpdate)
-	table.insert(activeOrder, bar)
-	CastTracker.functions.LayoutBars()
+	table.insert(activeOrder[catId], bar)
+	CastTracker.functions.LayoutBars(catId)
 	if db.sound then PlaySound(db.sound) end
 end
 
@@ -117,127 +169,162 @@ CastTracker.functions.BarUpdate = BarUpdate
 CastTracker.functions.UpdateActiveBars = UpdateActiveBars
 
 local function HandleCLEU()
-       local _, subevent, _, sourceGUID, _, sourceFlags, _, destGUID, _, _, _, spellId = CombatLogGetCurrentEventInfo()
-       if subevent == "SPELL_CAST_START" then
-               local db = addon.db.castTracker or {}
-               if db.spells and db.spells[spellId] and bit.band(sourceFlags, COMBATLOG_OBJECT_REACTION_HOSTILE) ~= 0 then
-                       CastTracker.functions.StartBar(spellId, sourceGUID)
-               end
-       elseif subevent == "SPELL_CAST_SUCCESS" or subevent == "SPELL_CAST_FAILED" or subevent == "SPELL_INTERRUPT" then
-		local bar = activeBars[sourceGUID]
-		if bar and bar.spellId == spellId then ReleaseBar(bar) end
+	local _, subevent, _, sourceGUID, _, sourceFlags, _, destGUID, _, _, _, spellId = CombatLogGetCurrentEventInfo()
+	if subevent == "SPELL_CAST_START" then
+		for catId, cat in pairs(addon.db.castTrackerCategories or {}) do
+			if addon.db.castTrackerEnabled[catId] and cat.spells and cat.spells[spellId] and bit.band(sourceFlags, COMBATLOG_OBJECT_REACTION_HOSTILE) ~= 0 then
+				CastTracker.functions.StartBar(spellId, sourceGUID, catId)
+			end
+		end
+	elseif subevent == "SPELL_CAST_SUCCESS" or subevent == "SPELL_CAST_FAILED" or subevent == "SPELL_INTERRUPT" then
+		for id, bars in pairs(activeBars) do
+			local bar = bars[sourceGUID]
+			if bar and bar.spellId == spellId then ReleaseBar(id, bar) end
+		end
 	elseif subevent == "UNIT_DIED" then
-		ReleaseBar(activeBars[destGUID])
+		for id, bars in pairs(activeBars) do
+			local bar = bars[destGUID]
+			if bar then ReleaseBar(id, bar) end
+		end
 	end
 end
 
 local eventFrame = CreateFrame("Frame")
 
 function CastTracker.functions.Refresh()
-       local db = addon.db.castTracker or {}
-       if not anchor then
-               anchor = CreateFrame("Frame", nil, UIParent)
-       end
-       anchor:ClearAllPoints()
-       anchor:SetPoint(db.anchor.point, UIParent, db.anchor.point, db.anchor.x, db.anchor.y)
-       eventFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-       eventFrame:SetScript("OnEvent", HandleCLEU)
-       UpdateActiveBars()
+	for id, cat in pairs(addon.db.castTrackerCategories or {}) do
+		local a = ensureAnchor(id)
+		a:ClearAllPoints()
+		a:SetPoint(cat.anchor.point, UIParent, cat.anchor.point, cat.anchor.x, cat.anchor.y)
+		UpdateActiveBars(id)
+	end
+	eventFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+	eventFrame:SetScript("OnEvent", HandleCLEU)
+	applyLockState()
 end
 
 function CastTracker.functions.addCastTrackerOptions(container)
-       local db = addon.db.castTracker or {}
-       db.spells = db.spells or {}
+	local db = addon.db.castTrackerCategories[selectedCategory] or {}
+	db.spells = db.spells or {}
 
-       local function rebuild()
-               container:ReleaseChildren()
-               CastTracker.functions.addCastTrackerOptions(container)
-       end
+	local function rebuild()
+		container:ReleaseChildren()
+		CastTracker.functions.addCastTrackerOptions(container)
+	end
 
-       local wrapper = addon.functions.createContainer("SimpleGroup", "Flow")
-       container:AddChild(wrapper)
+	local wrapper = addon.functions.createContainer("SimpleGroup", "Flow")
+	container:AddChild(wrapper)
 
-       local groupCore = addon.functions.createContainer("InlineGroup", "List")
-       groupCore:SetTitle(L["CastTracker"])
-       wrapper:AddChild(groupCore)
+	local drop = addon.functions.createDropdownAce("Category", {}, nil, function(self, _, val)
+		selectedCategory = val
+		addon.db.castTrackerSelectedCategory = val
+		rebuild()
+	end)
+	local catlist, order = {}, {}
+	for id, cat in pairs(addon.db.castTrackerCategories or {}) do
+		catlist[id] = cat.name or tostring(id)
+		table.insert(order, id)
+	end
+	table.sort(order)
+	drop:SetList(catlist, order)
+	drop:SetValue(selectedCategory)
+	wrapper:AddChild(drop)
 
-       local sw = addon.functions.createSliderAce(L["CastTrackerWidth"] .. ": " .. (db.width or 200), db.width or 200, 50, 400, 1, function(self, _, val)
-               db.width = val
-               self:SetLabel(L["CastTrackerWidth"] .. ": " .. val)
-               UpdateActiveBars()
-       end)
-       groupCore:AddChild(sw)
+	local enableCB = addon.functions.createCheckboxAce(_G.ENABLE, addon.db.castTrackerEnabled[selectedCategory], function(self, _, val)
+		addon.db.castTrackerEnabled[selectedCategory] = val
+		applyLockState()
+	end)
+	wrapper:AddChild(enableCB)
 
-       local sh = addon.functions.createSliderAce(L["CastTrackerHeight"] .. ": " .. (db.height or 20), db.height or 20, 10, 60, 1, function(self, _, val)
-               db.height = val
-               self:SetLabel(L["CastTrackerHeight"] .. ": " .. val)
-               UpdateActiveBars()
-       end)
-       groupCore:AddChild(sh)
+	local lockCB = addon.functions.createCheckboxAce(L["buffTrackerLocked"], addon.db.castTrackerLocked[selectedCategory], function(self, _, val)
+		addon.db.castTrackerLocked[selectedCategory] = val
+		applyLockState()
+	end)
+	wrapper:AddChild(lockCB)
 
-       local dur = addon.functions.createSliderAce(L["CastTrackerDuration"] .. ": " .. (db.duration or 0), db.duration or 0, 0, 10, 0.5, function(self, _, val)
-               db.duration = val
-               self:SetLabel(L["CastTrackerDuration"] .. ": " .. val)
-       end)
-       groupCore:AddChild(dur)
+	local groupCore = addon.functions.createContainer("InlineGroup", "List")
+	groupCore:SetTitle(L["CastTracker"])
+	wrapper:AddChild(groupCore)
 
-       local col = AceGUI:Create("ColorPicker")
-       col:SetLabel(L["CastTrackerColor"])
-       local c = db.color or { 1, 0.5, 0, 1 }
-       col:SetColor(c[1], c[2], c[3], c[4])
-       col:SetCallback("OnValueChanged", function(_, _, r, g, b, a)
-               db.color = { r, g, b, a }
-               UpdateActiveBars()
-       end)
-       groupCore:AddChild(col)
+	local sw = addon.functions.createSliderAce(L["CastTrackerWidth"] .. ": " .. (db.width or 200), db.width or 200, 50, 400, 1, function(self, _, val)
+		db.width = val
+		self:SetLabel(L["CastTrackerWidth"] .. ": " .. val)
+		UpdateActiveBars(selectedCategory)
+	end)
+	groupCore:AddChild(sw)
 
-       local soundList = {}
-       for sname in pairs(addon.Aura.sounds or {}) do
-               soundList[sname] = sname
-       end
-       local list, order = addon.functions.prepareListForDropdown(soundList)
-       local dropSound = addon.functions.createDropdownAce(L["SoundFile"], list, order, function(self, _, val)
-               db.sound = val
-               self:SetValue(val)
-               local file = addon.Aura.sounds and addon.Aura.sounds[val]
-               if file then PlaySoundFile(file, "Master") end
-       end)
-       dropSound:SetValue(db.sound)
-       groupCore:AddChild(dropSound)
+	local sh = addon.functions.createSliderAce(L["CastTrackerHeight"] .. ": " .. (db.height or 20), db.height or 20, 10, 60, 1, function(self, _, val)
+		db.height = val
+		self:SetLabel(L["CastTrackerHeight"] .. ": " .. val)
+		UpdateActiveBars(selectedCategory)
+	end)
+	groupCore:AddChild(sh)
 
-       wrapper:AddChild(addon.functions.createSpacerAce())
+	local dur = addon.functions.createSliderAce(L["CastTrackerDuration"] .. ": " .. (db.duration or 0), db.duration or 0, 0, 10, 0.5, function(self, _, val)
+		db.duration = val
+		self:SetLabel(L["CastTrackerDuration"] .. ": " .. val)
+	end)
+	groupCore:AddChild(dur)
 
-       local groupSpells = addon.functions.createContainer("InlineGroup", "Flow")
-       groupSpells:SetTitle(L["CastTrackerSpells"])
-       wrapper:AddChild(groupSpells)
+	local col = AceGUI:Create("ColorPicker")
+	col:SetLabel(L["CastTrackerColor"])
+	local c = db.color or { 1, 0.5, 0, 1 }
+	col:SetColor(c[1], c[2], c[3], c[4])
+	col:SetCallback("OnValueChanged", function(_, _, r, g, b, a)
+		db.color = { r, g, b, a }
+		UpdateActiveBars(selectedCategory)
+	end)
+	groupCore:AddChild(col)
 
-       local addEdit = addon.functions.createEditboxAce(L["AddSpellID"], nil, function(self, _, text)
-               local id = tonumber(text)
-               if id then
-                       db.spells[id] = true
-                       self:SetText("")
-                       rebuild()
-               end
-       end)
-       groupSpells:AddChild(addEdit)
+	local soundList = {}
+	for sname in pairs(addon.Aura.sounds or {}) do
+		soundList[sname] = sname
+	end
+	local list, soundOrder = addon.functions.prepareListForDropdown(soundList)
+	local dropSound = addon.functions.createDropdownAce(L["SoundFile"], list, soundOrder, function(self, _, val)
+		db.sound = val
+		self:SetValue(val)
+		local file = addon.Aura.sounds and addon.Aura.sounds[val]
+		if file then PlaySoundFile(file, "Master") end
+	end)
+	dropSound:SetValue(db.sound)
+	groupCore:AddChild(dropSound)
 
-       for spellId in pairs(db.spells) do
-               local line = addon.functions.createContainer("SimpleGroup", "Flow")
-               line:SetFullWidth(true)
-               local name = GetSpellInfo(spellId) or tostring(spellId)
-               local label = addon.functions.createLabelAce(name .. " (" .. spellId .. ")")
-               label:SetRelativeWidth(0.7)
-               line:AddChild(label)
-               local btn = addon.functions.createButtonAce(L["Remove"], 80, function()
-                       db.spells[spellId] = nil
-                       for _, b in pairs(activeBars) do
-                               if b.spellId == spellId then ReleaseBar(b) end
-                       end
-                       rebuild()
-               end)
-               line:AddChild(btn)
-               groupSpells:AddChild(line)
-       end
+	wrapper:AddChild(addon.functions.createSpacerAce())
+
+	local groupSpells = addon.functions.createContainer("InlineGroup", "Flow")
+	groupSpells:SetTitle(L["CastTrackerSpells"])
+	wrapper:AddChild(groupSpells)
+
+	local addEdit = addon.functions.createEditboxAce(L["AddSpellID"], nil, function(self, _, text)
+		local id = tonumber(text)
+		if id then
+			db.spells[id] = true
+			self:SetText("")
+			rebuild()
+		end
+	end)
+	groupSpells:AddChild(addEdit)
+
+	for spellId in pairs(db.spells) do
+		local line = addon.functions.createContainer("SimpleGroup", "Flow")
+		line:SetFullWidth(true)
+		local name = GetSpellInfo(spellId) or tostring(spellId)
+		local label = addon.functions.createLabelAce(name .. " (" .. spellId .. ")")
+		label:SetRelativeWidth(0.7)
+		line:AddChild(label)
+		local btn = addon.functions.createButtonAce(L["Remove"], 80, function()
+			db.spells[spellId] = nil
+			for id, bars in pairs(activeBars) do
+				for owner, b in pairs(bars) do
+					if b.spellId == spellId then ReleaseBar(id, b) end
+				end
+			end
+			rebuild()
+		end)
+		line:AddChild(btn)
+		groupSpells:AddChild(line)
+	end
 end
 
 CastTracker.functions.Refresh()

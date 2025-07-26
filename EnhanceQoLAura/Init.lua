@@ -84,13 +84,51 @@ for _, cat in pairs(addon.db["buffTrackerCategories"]) do
 	end
 end
 
-addon.functions.InitDBValue("castTrackerEnabled", true)
-addon.functions.InitDBValue("castTracker", {
-        anchor = { point = "CENTER", x = 0, y = 0 },
-        width = 200,
-        height = 20,
-        color = { 1, 0.5, 0, 1 },
-       duration = 0,
-       sound = SOUNDKIT.ALARM_CLOCK_WARNING_3,
-       spells = {},
+addon.functions.InitDBValue("castTrackerCategories", {
+	[1] = {
+		name = string.format("%s", L["Example"]),
+		anchor = { point = "CENTER", x = 0, y = 0 },
+		width = 200,
+		height = 20,
+		color = { 1, 0.5, 0, 1 },
+		duration = 0,
+		sound = SOUNDKIT.ALARM_CLOCK_WARNING_3,
+		spells = {},
+	},
 })
+addon.functions.InitDBValue("castTrackerEnabled", {})
+addon.functions.InitDBValue("castTrackerLocked", {})
+addon.functions.InitDBValue("castTrackerOrder", {})
+addon.functions.InitDBValue("castTrackerSelectedCategory", 1)
+
+if addon.db["castTracker"] and not addon.db["castTrackerCategories"] then
+	local old = addon.db["castTracker"]
+	addon.db["castTrackerCategories"] = {
+		[1] = {
+			name = string.format("%s", L["Example"]),
+			anchor = old.anchor or { point = "CENTER", x = 0, y = 0 },
+			width = old.width or 200,
+			height = old.height or 20,
+			color = old.color or { 1, 0.5, 0, 1 },
+			duration = old.duration or 0,
+			sound = old.sound,
+			spells = old.spells or {},
+		},
+	}
+	addon.db["castTracker"] = nil
+end
+
+for id, cat in pairs(addon.db["castTrackerCategories"] or {}) do
+	cat.anchor = cat.anchor or { point = "CENTER", x = 0, y = 0 }
+	cat.width = cat.width or 200
+	cat.height = cat.height or 20
+	cat.color = cat.color or { 1, 0.5, 0, 1 }
+	if cat.duration == nil then cat.duration = 0 end
+	if cat.sound == nil then cat.sound = SOUNDKIT.ALARM_CLOCK_WARNING_3 end
+	cat.spells = cat.spells or {}
+	if addon.db["castTrackerEnabled"][id] == nil then addon.db["castTrackerEnabled"][id] = true end
+	if addon.db["castTrackerLocked"][id] == nil then addon.db["castTrackerLocked"][id] = false end
+	addon.db["castTrackerOrder"][id] = addon.db["castTrackerOrder"][id] or {}
+end
+
+if type(addon.db["castTrackerSelectedCategory"]) ~= "number" then addon.db["castTrackerSelectedCategory"] = 1 end
