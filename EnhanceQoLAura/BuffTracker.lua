@@ -505,6 +505,7 @@ local function updateBuff(catId, id, changedId, firstScan)
 	if firstScan == nil then firstScan = false end
 	local cat = getCategory(catId)
 	local buff = cat and cat.buffs and cat.buffs[id]
+	local tType = buff and buff.trackType or (cat and cat.trackType) or "BUFF"
 	local key = catId .. ":" .. id
 	local before = timedAuras[key] ~= nil
 	if buff and hasTimeCondition(buff.conditions) then
@@ -575,7 +576,7 @@ local function updateBuff(catId, id, changedId, firstScan)
 			if firstScan and aura.expirationTime and aura.expirationTime > 0 and (not aura.duration or aura.duration <= 0) then aura.duration = aura.expirationTime - GetTime() end
 			if aura.duration and aura.duration > 0 then
 				frame.cd:SetCooldown(aura.expirationTime - aura.duration, aura.duration)
-				frame.cd:SetReverse(true)
+				frame.cd:SetReverse(tType == "DEBUFF")
 			else
 				frame.cd:SetReverse(false)
 				frame.cd:Clear()
@@ -641,6 +642,7 @@ local function updateBuff(catId, id, changedId, firstScan)
 			frame.icon:SetAlpha(1)
 			if displayAura.duration and displayAura.duration > 0 then
 				frame.cd:SetCooldown(displayAura.expirationTime - displayAura.duration, displayAura.duration)
+				frame.cd:SetReverse(tType == "DEBUFF")
 			else
 				frame.cd:Clear()
 			end
