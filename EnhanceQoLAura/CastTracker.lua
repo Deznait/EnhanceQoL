@@ -169,11 +169,35 @@ local function ReleaseBar(catId, bar)
 end
 
 local function getNextCategoryId()
-	local max = 0
-	for id in pairs(addon.db.castTrackerCategories or {}) do
-		if type(id) == "number" and id > max then max = id end
-	end
-	return max + 1
+        local max = 0
+        for id in pairs(addon.db.castTrackerCategories or {}) do
+                if type(id) == "number" and id > max then max = id end
+        end
+        return max + 1
+end
+
+-- encodeMode = "chat" | "addon" | nil
+-- forward declaration so luacheck sees ShareCategory below
+local ShareCategory
+
+local function exportCategory(catId, encodeMode)
+       local cat = addon.db.castTrackerCategories and addon.db.castTrackerCategories[catId]
+       if not cat then return end
+       local data = {
+               category = cat,
+               order = addon.db.castTrackerOrder and addon.db.castTrackerOrder[catId] or {},
+               version = 1,
+       }
+       local serializer = LibStub("AceSerializer-3.0")
+       local deflate = LibStub("LibDeflate")
+       local serialized = serializer:Serialize(data)
+       local compressed = deflate:CompressDeflate(serialized)
+       if encodeMode == "chat" then
+               return deflate:EncodeForWoWChatChannel(compressed)
+       elseif encodeMode == "addon" then
+               return deflate:EncodeForWoWAddonChannel(compressed)
+       end
+       return deflate:EncodeForPrint(compressed)
 end
 
 local function importCategory(encoded)
@@ -405,11 +429,11 @@ local function buildCategoryOptions(container, catId)
         end)
 	groupSpells:AddChild(addEdit)
 
-	for _, spellId in ipairs(addon.db.castTrackerOrder[catId] or {}) do
-		if db.spells[spellId] then
-			local line = addon.functions.createContainer("SimpleGroup", "Flow")
-			line:SetFullWidth(true)
-			local name = GetSpellInfo(spellId) or tostring(spellId)
+        for _, spellId in ipairs(addon.db.castTrackerOrder[catId] or {}) do
+                if db.spells[spellId] then
+                        local line = addon.functions.createContainer("SimpleGroup", "Flow")
+                        line:SetFullWidth(true)
+                        local name = GetSpellInfo(spellId) or tostring(spellId)
 			local label = addon.functions.createLabelAce(name .. " (" .. spellId .. ")")
 			label:SetRelativeWidth(0.7)
 			line:AddChild(label)
@@ -421,9 +445,80 @@ local function buildCategoryOptions(container, catId)
                                 buildCategoryOptions(container, catId)
                         end)
 			line:AddChild(btn)
-			groupSpells:AddChild(line)
-		end
-	end
+                        groupSpells:AddChild(line)
+                end
+        end
+
+        container:AddChild(addon.functions.createSpacerAce())
+
+        local exportBtn = addon.functions.createButtonAce(L["ExportCategory"], 150, function()
+                local data = exportCategory(catId)
+                if not data then return end
+                StaticPopupDialogs["EQOL_EXPORT_CATEGORY"] = StaticPopupDialogs["EQOL_EXPORT_CATEGORY"]
+                        or {
+                                text = L["ExportCategory"],
+                                button1 = CLOSE,
+                                hasEditBox = true,
+                                editBoxWidth = 320,
+                                timeout = 0,
+                                whileDead = true,
+                                hideOnEscape = true,
+                                preferredIndex = 3,
+                        }
+                StaticPopupDialogs["EQOL_EXPORT_CATEGORY"].OnShow = function(self)
+                        self:SetFrameStrata("FULLSCREEN_DIALOG")
+                        self.editBox:SetText(data)
+                        self.editBox:HighlightText()
+                        self.editBox:SetFocus()
+                end
+                StaticPopup_Show("EQOL_EXPORT_CATEGORY")
+        end)
+        container:AddChild(exportBtn)
+
+        local shareBtn = addon.functions.createButtonAce(L["ShareCategory"] or "Share Category", 150, function()
+                ShareCategory(catId)
+        end)
+        container:AddChild(shareBtn)
+
+        local importBtn = addon.functions.createButtonAce(L["ImportCategory"], 150, function()
+                StaticPopupDialogs["EQOL_IMPORT_CATEGORY_BTN"] = StaticPopupDialogs["EQOL_IMPORT_CATEGORY_BTN"]
+                        or {
+                                text = L["ImportCategory"],
+                                button1 = ACCEPT,
+                                button2 = CANCEL,
+                                hasEditBox = true,
+                                editBoxWidth = 320,
+                                timeout = 0,
+                                whileDead = true,
+                                hideOnEscape = true,
+                                preferredIndex = 3,
+                        }
+                StaticPopupDialogs["EQOL_IMPORT_CATEGORY_BTN"].OnShow = function(self)
+                        self.editBox:SetText("")
+                        self.editBox:SetFocus()
+                        self.text:SetText(L["ImportCategory"])
+                end
+                StaticPopupDialogs["EQOL_IMPORT_CATEGORY_BTN"].EditBoxOnTextChanged = function(editBox)
+                        local frame = editBox:GetParent()
+                        local name, count = previewImportCategory(editBox:GetText())
+                        if name then
+                                frame.text:SetFormattedText("%s\n%s", L["ImportCategory"], (L["ImportCategoryPreview"] or "Category: %s (%d auras)"):format(name, count))
+                        else
+                                frame.text:SetText(L["ImportCategory"])
+                        end
+                end
+                StaticPopupDialogs["EQOL_IMPORT_CATEGORY_BTN"].OnAccept = function(self)
+                        local text = self.editBox:GetText()
+                        local id = importCategory(text)
+                        if id then
+                                refreshTree(id)
+                        else
+                                print(L["ImportCategoryError"] or "Invalid string")
+                        end
+                end
+                StaticPopup_Show("EQOL_IMPORT_CATEGORY_BTN")
+        end)
+        container:AddChild(importBtn)
 end
 
 local function buildSpellOptions(container, catId, spellId)
@@ -709,3 +804,120 @@ function CastTracker.functions.addCastTrackerOptions(container)
 end
 
 CastTracker.functions.Refresh()
+
+-- ---------------------------------------------------------------------------
+-- Share Category via Chat & Addon-Channel
+-- ---------------------------------------------------------------------------
+local COMM_PREFIX = "EQOLCTSHARE"
+local AceComm = LibStub("AceComm-3.0")
+
+local incoming = {}
+local pending = {}
+
+local function getCatName(catId)
+       local cat = addon.db.castTrackerCategories and addon.db.castTrackerCategories[catId]
+       return cat and cat.name or tostring(catId)
+end
+
+ShareCategory = function(catId, targetPlayer)
+       local addonEncoded = exportCategory(catId, "addon")
+       if not addonEncoded then return end
+
+       local label = ("%s - %s"):format(UnitName("player"), getCatName(catId))
+       local placeholder = ("[EQOL: %s]"):format(label)
+       ChatFrame_OpenChat(placeholder)
+
+       local pktID = tostring(time() * 1000):gsub("%D", "")
+       pending[label] = pktID
+
+       local dist, target = "WHISPER", targetPlayer
+       if not targetPlayer then
+               if IsInRaid(LE_PARTY_CATEGORY_HOME) then
+                       dist = "RAID"
+               elseif IsInGroup(LE_PARTY_CATEGORY_INSTANCE) then
+                       dist = "INSTANCE_CHAT"
+               elseif IsInGroup() then
+                       dist = "PARTY"
+               elseif IsInGuild() then
+                       dist = "GUILD"
+               else
+                       target = UnitName("player")
+               end
+       end
+
+       AceComm:SendCommMessage(COMM_PREFIX, ("<%s>%s"):format(pktID, addonEncoded), dist, target, "BULK")
+end
+
+local PATTERN = "%[EQOL: ([^%]]+)%]"
+
+local function EQOL_ChatFilter(_, _, msg, ...)
+       local newMsg, hits = msg:gsub(PATTERN, function(label)
+               return ("|Hgarrmission:eqolcast:%s|h|cff00ff88[%s]|h|r"):format(label, label)
+       end)
+       if hits > 0 then return false, newMsg, ... end
+end
+
+for _, ev in ipairs({
+       "CHAT_MSG_INSTANCE_CHAT",
+       "CHAT_MSG_INSTANCE_CHAT_LEADER",
+       "CHAT_MSG_SAY",
+       "CHAT_MSG_PARTY",
+       "CHAT_MSG_PARTY_LEADER",
+       "CHAT_MSG_RAID",
+       "CHAT_MSG_RAID_LEADER",
+       "CHAT_MSG_GUILD",
+       "CHAT_MSG_OFFICER",
+       "CHAT_MSG_WHISPER",
+       "CHAT_MSG_WHISPER_INFORM",
+}) do
+       ChatFrame_AddMessageEventFilter(ev, EQOL_ChatFilter)
+end
+
+local function HandleEQOLLink(link, text, button, frame)
+       local label = link:match("^garrmission:eqolcast:(.+)")
+       if not label then return end
+
+       local pktID = pending[label]
+       if not (pktID and incoming[pktID]) then return end
+
+       StaticPopupDialogs["EQOL_IMPORT_FROM_SHARE"] = StaticPopupDialogs["EQOL_IMPORT_FROM_SHARE"]
+               or {
+                       text = L["ImportCategory"],
+                       button1 = ACCEPT,
+                       button2 = CANCEL,
+                       timeout = 0,
+                       whileDead = true,
+                       hideOnEscape = true,
+                       preferredIndex = 3,
+                       OnAccept = function(_, data)
+                               local encoded = incoming[data]
+                               incoming[data] = nil
+                               pending[label] = nil
+                               local newId = importCategory(encoded)
+                               if newId then refreshTree(newId) end
+                       end,
+               }
+
+       StaticPopupDialogs["EQOL_IMPORT_FROM_SHARE"].OnShow = function(self, data)
+               local encoded = incoming[data]
+               local name, count = previewImportCategory(encoded or "")
+               if name then
+                       self.text:SetFormattedText("%s\n%s", L["ImportCategory"], (L["ImportCategoryPreview"] or "Category: %s (%d auras)"):format(name, count))
+               else
+                       self.text:SetText(L["ImportCategory"])
+               end
+       end
+
+       StaticPopup_Show("EQOL_IMPORT_FROM_SHARE", nil, nil, pktID)
+end
+
+hooksecurefunc("SetItemRef", HandleEQOLLink)
+
+local function OnComm(prefix, message, dist, sender)
+       if prefix ~= COMM_PREFIX then return end
+       local pktID, payload = message:match("^<(%d+)>(.+)")
+       if not pktID then return end
+       incoming[pktID] = payload
+end
+
+AceComm:RegisterComm(COMM_PREFIX, OnComm)
