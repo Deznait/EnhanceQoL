@@ -20,6 +20,7 @@ local framePools = {}
 local activeBars = {}
 local activeOrder = {}
 local selectedCategory = addon.db["castTrackerSelectedCategory"] or 1
+local treeGroup
 
 local function UpdateActiveBars(catId)
 	local cat = addon.db.castTrackerCategories and addon.db.castTrackerCategories[catId] or {}
@@ -148,6 +149,268 @@ local function ReleaseBar(catId, bar)
 	CastTracker.functions.LayoutBars(catId)
 end
 
+local function getNextCategoryId()
+	local max = 0
+	for id in pairs(addon.db.castTrackerCategories or {}) do
+		if type(id) == "number" and id > max then max = id end
+	end
+	return max + 1
+end
+
+local function importCategory(encoded)
+	if type(encoded) ~= "string" or encoded == "" then return end
+	local deflate = LibStub("LibDeflate")
+	local serializer = LibStub("AceSerializer-3.0")
+	local decoded = deflate:DecodeForPrint(encoded) or deflate:DecodeForWoWChatChannel(encoded) or deflate:DecodeForWoWAddonChannel(encoded)
+	if not decoded then return end
+	local decompressed = deflate:DecompressDeflate(decoded)
+	if not decompressed then return end
+	local ok, data = serializer:Deserialize(decompressed)
+	if not ok or type(data) ~= "table" then return end
+	local cat = data.category or data.cat or data
+	if type(cat) ~= "table" then return end
+	cat.anchor = cat.anchor or { point = "CENTER", x = 0, y = 0 }
+	cat.width = cat.width or 200
+	cat.height = cat.height or 20
+	cat.color = cat.color or { 1, 0.5, 0, 1 }
+	if cat.duration == nil then cat.duration = 0 end
+	if cat.sound == nil then cat.sound = SOUNDKIT.ALARM_CLOCK_WARNING_3 end
+	cat.spells = cat.spells or {}
+	local newId = getNextCategoryId()
+	addon.db.castTrackerCategories[newId] = cat
+	addon.db.castTrackerOrder[newId] = data.order or {}
+	addon.db.castTrackerEnabled[newId] = true
+	addon.db.castTrackerLocked[newId] = false
+	ensureAnchor(newId)
+	return newId
+end
+
+local function previewImportCategory(encoded)
+	if type(encoded) ~= "string" or encoded == "" then return end
+	local deflate = LibStub("LibDeflate")
+	local serializer = LibStub("AceSerializer-3.0")
+	local decoded = deflate:DecodeForPrint(encoded) or deflate:DecodeForWoWChatChannel(encoded) or deflate:DecodeForWoWAddonChannel(encoded)
+	if not decoded then return end
+	local decompressed = deflate:DecompressDeflate(decoded)
+	if not decompressed then return end
+	local ok, data = serializer:Deserialize(decompressed)
+	if not ok or type(data) ~= "table" then return end
+	local cat = data.category or data.cat or data
+	if type(cat) ~= "table" then return end
+	local count = 0
+	for _ in pairs(cat.spells or {}) do
+		count = count + 1
+	end
+	return cat.name or "", count
+end
+
+local function getCategoryTree()
+	local tree = {}
+	for catId, cat in pairs(addon.db.castTrackerCategories or {}) do
+		local text = cat.name
+		if addon.db.castTrackerEnabled and addon.db.castTrackerEnabled[catId] == false then text = "|cff808080" .. text .. "|r" end
+		local node = { value = catId, text = text, children = {} }
+		local spells = {}
+		for id in pairs(cat.spells or {}) do
+			table.insert(spells, id)
+		end
+		if nil == addon.db.castTrackerOrder[catId] then addon.db.castTrackerOrder[catId] = {} end
+		local orderIndex = {}
+		for idx, sid in ipairs(addon.db.castTrackerOrder[catId]) do
+			orderIndex[sid] = idx
+		end
+		table.sort(spells, function(a, b)
+			local ia = orderIndex[a] or math.huge
+			local ib = orderIndex[b] or math.huge
+			if ia ~= ib then return ia < ib end
+			local na = GetSpellInfo(a)
+			local nb = GetSpellInfo(b)
+			return (na or tostring(a)) < (nb or tostring(b))
+		end)
+		for _, spellId in ipairs(spells) do
+			local name, _, icon = GetSpellInfo(spellId)
+			table.insert(node.children, { value = catId .. "\001" .. spellId, text = name or tostring(spellId), icon = icon })
+		end
+		table.insert(tree, node)
+	end
+	table.sort(tree, function(a, b) return a.value < b.value end)
+	table.insert(tree, { value = "ADD_CATEGORY", text = "|cff00ff00+ " .. (L["Add Category"] or "Add Category ...") })
+	table.insert(tree, { value = "IMPORT_CATEGORY", text = "|cff00ccff+ " .. (L["ImportCategory"] or "Import Category ...") })
+	return tree
+end
+
+local function refreshTree(selectValue)
+	if not treeGroup then return end
+	treeGroup:SetTree(getCategoryTree())
+	if selectValue then
+		treeGroup:SelectByValue(tostring(selectValue))
+		treeGroup:Select(selectValue)
+	end
+end
+
+local function handleDragDrop(src, dst)
+	if not src or not dst then return end
+	local sCat, _, sSpell = strsplit("\001", src)
+	local dCat, _, dSpell = strsplit("\001", dst)
+	sCat = tonumber(sCat)
+	dCat = tonumber(dCat)
+	if not sSpell then return end
+	sSpell = tonumber(sSpell)
+	if dSpell then dSpell = tonumber(dSpell) end
+
+	local srcCat = addon.db.castTrackerCategories[sCat]
+	local dstCat = addon.db.castTrackerCategories[dCat]
+	if not srcCat or not dstCat then return end
+	if not srcCat.spells[sSpell] then return end
+
+	srcCat.spells[sSpell] = nil
+	addon.db.castTrackerOrder[sCat] = addon.db.castTrackerOrder[sCat] or {}
+	for i, v in ipairs(addon.db.castTrackerOrder[sCat]) do
+		if v == sSpell then
+			table.remove(addon.db.castTrackerOrder[sCat], i)
+			break
+		end
+	end
+
+	dstCat.spells[sSpell] = true
+	addon.db.castTrackerOrder[dCat] = addon.db.castTrackerOrder[dCat] or {}
+	local insertPos = #addon.db.castTrackerOrder[dCat] + 1
+	if dSpell then
+		for i, v in ipairs(addon.db.castTrackerOrder[dCat]) do
+			if v == dSpell then
+				insertPos = i
+				break
+			end
+		end
+	end
+	table.insert(addon.db.castTrackerOrder[dCat], insertPos, sSpell)
+
+	refreshTree(selectedCategory)
+end
+
+local function buildCategoryOptions(container, catId)
+	local db = addon.db.castTrackerCategories[catId]
+	if not db then return end
+	db.spells = db.spells or {}
+
+	local enableCB = addon.functions.createCheckboxAce(_G.ENABLE, addon.db.castTrackerEnabled[catId], function(self, _, val)
+		addon.db.castTrackerEnabled[catId] = val
+		applyLockState()
+	end)
+	container:AddChild(enableCB)
+
+	local lockCB = addon.functions.createCheckboxAce(L["buffTrackerLocked"], addon.db.castTrackerLocked[catId], function(self, _, val)
+		addon.db.castTrackerLocked[catId] = val
+		applyLockState()
+	end)
+	container:AddChild(lockCB)
+
+	local nameEdit = addon.functions.createEditboxAce(L["CategoryName"], db.name, function(self, _, text)
+		if text ~= "" then db.name = text end
+		refreshTree(catId)
+		container:ReleaseChildren()
+		buildCategoryOptions(container, catId)
+	end)
+	container:AddChild(nameEdit)
+
+	local sw = addon.functions.createSliderAce(L["CastTrackerWidth"] .. ": " .. (db.width or 200), db.width or 200, 50, 400, 1, function(self, _, val)
+		db.width = val
+		self:SetLabel(L["CastTrackerWidth"] .. ": " .. val)
+		UpdateActiveBars(catId)
+	end)
+	container:AddChild(sw)
+
+	local sh = addon.functions.createSliderAce(L["CastTrackerHeight"] .. ": " .. (db.height or 20), db.height or 20, 10, 60, 1, function(self, _, val)
+		db.height = val
+		self:SetLabel(L["CastTrackerHeight"] .. ": " .. val)
+		UpdateActiveBars(catId)
+	end)
+	container:AddChild(sh)
+
+	local dur = addon.functions.createSliderAce(L["CastTrackerDuration"] .. ": " .. (db.duration or 0), db.duration or 0, 0, 10, 0.5, function(self, _, val)
+		db.duration = val
+		self:SetLabel(L["CastTrackerDuration"] .. ": " .. val)
+	end)
+	container:AddChild(dur)
+
+	local col = AceGUI:Create("ColorPicker")
+	col:SetLabel(L["CastTrackerColor"])
+	local c = db.color or { 1, 0.5, 0, 1 }
+	col:SetColor(c[1], c[2], c[3], c[4])
+	col:SetCallback("OnValueChanged", function(_, _, r, g, b, a)
+		db.color = { r, g, b, a }
+		UpdateActiveBars(catId)
+	end)
+	container:AddChild(col)
+
+	local soundList = {}
+	for sname in pairs(addon.Aura.sounds or {}) do
+		soundList[sname] = sname
+	end
+	local list, order = addon.functions.prepareListForDropdown(soundList)
+	local dropSound = addon.functions.createDropdownAce(L["SoundFile"], list, order, function(self, _, val)
+		db.sound = val
+		self:SetValue(val)
+		local file = addon.Aura.sounds and addon.Aura.sounds[val]
+		if file then PlaySoundFile(file, "Master") end
+	end)
+	dropSound:SetValue(db.sound)
+	container:AddChild(dropSound)
+
+	container:AddChild(addon.functions.createSpacerAce())
+
+	local groupSpells = addon.functions.createContainer("InlineGroup", "Flow")
+	groupSpells:SetTitle(L["CastTrackerSpells"])
+	container:AddChild(groupSpells)
+
+	local addEdit = addon.functions.createEditboxAce(L["AddSpellID"], nil, function(self, _, text)
+		local id = tonumber(text)
+		if id then
+			db.spells[id] = true
+			self:SetText("")
+			refreshTree(catId)
+			container:ReleaseChildren()
+			buildCategoryOptions(container, catId)
+		end
+	end)
+	groupSpells:AddChild(addEdit)
+
+	for _, spellId in ipairs(addon.db.castTrackerOrder[catId] or {}) do
+		if db.spells[spellId] then
+			local line = addon.functions.createContainer("SimpleGroup", "Flow")
+			line:SetFullWidth(true)
+			local name = GetSpellInfo(spellId) or tostring(spellId)
+			local label = addon.functions.createLabelAce(name .. " (" .. spellId .. ")")
+			label:SetRelativeWidth(0.7)
+			line:AddChild(label)
+			local btn = addon.functions.createButtonAce(L["Remove"], 80, function()
+				db.spells[spellId] = nil
+				refreshTree(catId)
+				container:ReleaseChildren()
+				buildCategoryOptions(container, catId)
+			end)
+			line:AddChild(btn)
+			groupSpells:AddChild(line)
+		end
+	end
+end
+
+local function buildSpellOptions(container, catId, spellId)
+	local cat = addon.db.castTrackerCategories[catId]
+	if not cat or not cat.spells[spellId] then return end
+
+	local name = GetSpellInfo(spellId) or tostring(spellId)
+	local label = addon.functions.createLabelAce(name .. " (" .. spellId .. ")")
+	container:AddChild(label)
+
+	local btn = addon.functions.createButtonAce(L["Remove"], 150, function()
+		cat.spells[spellId] = nil
+		refreshTree(catId)
+		container:ReleaseChildren()
+	end)
+	container:AddChild(btn)
+end
+
 local function BarUpdate(self)
 	local now = GetTime()
 	if now >= self.finish then
@@ -244,126 +507,104 @@ function CastTracker.functions.Refresh()
 end
 
 function CastTracker.functions.addCastTrackerOptions(container)
-	local db = addon.db.castTrackerCategories[selectedCategory] or {}
-	db.spells = db.spells or {}
-
-	local function rebuild()
-		container:ReleaseChildren()
-		CastTracker.functions.addCastTrackerOptions(container)
-	end
-
 	local wrapper = addon.functions.createContainer("SimpleGroup", "Flow")
+	wrapper:SetFullHeight(true)
 	container:AddChild(wrapper)
 
-	local drop = addon.functions.createDropdownAce("Category", {}, nil, function(self, _, val)
-		selectedCategory = val
-		addon.db.castTrackerSelectedCategory = val
-		rebuild()
-	end)
-	local catlist, order = {}, {}
-	for id, cat in pairs(addon.db.castTrackerCategories or {}) do
-		catlist[id] = cat.name or tostring(id)
-		table.insert(order, id)
-	end
-	table.sort(order)
-	drop:SetList(catlist, order)
-	drop:SetValue(selectedCategory)
-	wrapper:AddChild(drop)
+	local left = addon.functions.createContainer("SimpleGroup", "Flow")
+	left:SetWidth(300)
+	left:SetFullHeight(true)
+	wrapper:AddChild(left)
 
-	local enableCB = addon.functions.createCheckboxAce(_G.ENABLE, addon.db.castTrackerEnabled[selectedCategory], function(self, _, val)
-		addon.db.castTrackerEnabled[selectedCategory] = val
-		applyLockState()
-	end)
-	wrapper:AddChild(enableCB)
-
-	local lockCB = addon.functions.createCheckboxAce(L["buffTrackerLocked"], addon.db.castTrackerLocked[selectedCategory], function(self, _, val)
-		addon.db.castTrackerLocked[selectedCategory] = val
-		applyLockState()
-	end)
-	wrapper:AddChild(lockCB)
-
-	local groupCore = addon.functions.createContainer("InlineGroup", "List")
-	groupCore:SetTitle(L["CastTracker"])
-	wrapper:AddChild(groupCore)
-
-	local sw = addon.functions.createSliderAce(L["CastTrackerWidth"] .. ": " .. (db.width or 200), db.width or 200, 50, 400, 1, function(self, _, val)
-		db.width = val
-		self:SetLabel(L["CastTrackerWidth"] .. ": " .. val)
-		UpdateActiveBars(selectedCategory)
-	end)
-	groupCore:AddChild(sw)
-
-	local sh = addon.functions.createSliderAce(L["CastTrackerHeight"] .. ": " .. (db.height or 20), db.height or 20, 10, 60, 1, function(self, _, val)
-		db.height = val
-		self:SetLabel(L["CastTrackerHeight"] .. ": " .. val)
-		UpdateActiveBars(selectedCategory)
-	end)
-	groupCore:AddChild(sh)
-
-	local dur = addon.functions.createSliderAce(L["CastTrackerDuration"] .. ": " .. (db.duration or 0), db.duration or 0, 0, 10, 0.5, function(self, _, val)
-		db.duration = val
-		self:SetLabel(L["CastTrackerDuration"] .. ": " .. val)
-	end)
-	groupCore:AddChild(dur)
-
-	local col = AceGUI:Create("ColorPicker")
-	col:SetLabel(L["CastTrackerColor"])
-	local c = db.color or { 1, 0.5, 0, 1 }
-	col:SetColor(c[1], c[2], c[3], c[4])
-	col:SetCallback("OnValueChanged", function(_, _, r, g, b, a)
-		db.color = { r, g, b, a }
-		UpdateActiveBars(selectedCategory)
-	end)
-	groupCore:AddChild(col)
-
-	local soundList = {}
-	for sname in pairs(addon.Aura.sounds or {}) do
-		soundList[sname] = sname
-	end
-	local list, soundOrder = addon.functions.prepareListForDropdown(soundList)
-	local dropSound = addon.functions.createDropdownAce(L["SoundFile"], list, soundOrder, function(self, _, val)
-		db.sound = val
-		self:SetValue(val)
-		local file = addon.Aura.sounds and addon.Aura.sounds[val]
-		if file then PlaySoundFile(file, "Master") end
-	end)
-	dropSound:SetValue(db.sound)
-	groupCore:AddChild(dropSound)
-
-	wrapper:AddChild(addon.functions.createSpacerAce())
-
-	local groupSpells = addon.functions.createContainer("InlineGroup", "Flow")
-	groupSpells:SetTitle(L["CastTrackerSpells"])
-	wrapper:AddChild(groupSpells)
-
-	local addEdit = addon.functions.createEditboxAce(L["AddSpellID"], nil, function(self, _, text)
-		local id = tonumber(text)
-		if id then
-			db.spells[id] = true
-			self:SetText("")
-			rebuild()
-		end
-	end)
-	groupSpells:AddChild(addEdit)
-
-	for spellId in pairs(db.spells) do
-		local line = addon.functions.createContainer("SimpleGroup", "Flow")
-		line:SetFullWidth(true)
-		local name = GetSpellInfo(spellId) or tostring(spellId)
-		local label = addon.functions.createLabelAce(name .. " (" .. spellId .. ")")
-		label:SetRelativeWidth(0.7)
-		line:AddChild(label)
-		local btn = addon.functions.createButtonAce(L["Remove"], 80, function()
-			db.spells[spellId] = nil
-			for id, bars in pairs(activeBars) do
-				for owner, b in pairs(bars) do
-					if b.spellId == spellId then ReleaseBar(id, b) end
+	treeGroup = AceGUI:Create("EQOL_DragTreeGroup")
+	treeGroup:SetFullHeight(true)
+	treeGroup:SetFullWidth(true)
+	treeGroup:SetTreeWidth(200, true)
+	treeGroup:SetTree(getCategoryTree())
+	treeGroup:SetCallback("OnGroupSelected", function(widget, _, value)
+		if value == "ADD_CATEGORY" then
+			local newId = getNextCategoryId()
+			addon.db.castTrackerCategories[newId] = {
+				name = L["NewCategoryName"] or "New",
+				anchor = { point = "CENTER", x = 0, y = 0 },
+				width = 200,
+				height = 20,
+				color = { 1, 0.5, 0, 1 },
+				duration = 0,
+				sound = SOUNDKIT.ALARM_CLOCK_WARNING_3,
+				spells = {},
+			}
+			addon.db.castTrackerEnabled[newId] = true
+			addon.db.castTrackerLocked[newId] = false
+			addon.db.castTrackerOrder[newId] = {}
+			ensureAnchor(newId)
+			refreshTree(newId)
+			return
+		elseif value == "IMPORT_CATEGORY" then
+			StaticPopupDialogs["EQOL_IMPORT_CATEGORY"] = StaticPopupDialogs["EQOL_IMPORT_CATEGORY"]
+				or {
+					text = L["ImportCategory"],
+					button1 = ACCEPT,
+					button2 = CANCEL,
+					hasEditBox = true,
+					editBoxWidth = 320,
+					timeout = 0,
+					whileDead = true,
+					hideOnEscape = true,
+					preferredIndex = 3,
+				}
+			StaticPopupDialogs["EQOL_IMPORT_CATEGORY"].OnShow = function(self)
+				self.editBox:SetText("")
+				self.editBox:SetFocus()
+				self.text:SetText(L["ImportCategory"])
+			end
+			StaticPopupDialogs["EQOL_IMPORT_CATEGORY"].EditBoxOnTextChanged = function(editBox)
+				local frame = editBox:GetParent()
+				local name, count = previewImportCategory(editBox:GetText())
+				if name then
+					frame.text:SetFormattedText("%s\n%s", L["ImportCategory"], (L["ImportCategoryPreview"] or "Category: %s (%d auras)"):format(name, count))
+				else
+					frame.text:SetText(L["ImportCategory"])
 				end
 			end
-			rebuild()
-		end)
-		line:AddChild(btn)
-		groupSpells:AddChild(line)
+			StaticPopupDialogs["EQOL_IMPORT_CATEGORY"].OnAccept = function(self)
+				local text = self.editBox:GetText()
+				local id = importCategory(text)
+				if id then
+					refreshTree(id)
+				else
+					print(L["ImportCategoryError"] or "Invalid string")
+				end
+			end
+			StaticPopup_Show("EQOL_IMPORT_CATEGORY")
+			return
+		end
+
+		local catId, _, spellId = strsplit("\001", value)
+		catId = tonumber(catId)
+		selectedCategory = catId
+		addon.db.castTrackerSelectedCategory = catId
+		widget:ReleaseChildren()
+
+		local scroll = addon.functions.createContainer("ScrollFrame", "Flow")
+		scroll:SetFullWidth(true)
+		scroll:SetFullHeight(true)
+		widget:AddChild(scroll)
+
+		if spellId then
+			buildSpellOptions(scroll, catId, tonumber(spellId))
+		else
+			buildCategoryOptions(scroll, catId)
+		end
+	end)
+	treeGroup:SetCallback("OnDragDrop", function(_, _, src, dst) handleDragDrop(src, dst) end)
+
+	left:AddChild(treeGroup)
+
+	local ok = treeGroup:SelectByValue(tostring(selectedCategory))
+	if not ok then
+		local tree = treeGroup.tree
+		if tree and tree[1] and tree[1].value then treeGroup:SelectByValue(tree[1].value) end
 	end
 end
 
