@@ -659,7 +659,7 @@ local function buildSpellOptions(container, catId, spellId)
 
 	local info = C_Spell.GetSpellInfo(spellId)
 	local name = info and info.name or tostring(spellId)
-    local labelName = (spell.treeName and spell.treeName ~= "" and spell.treeName) or name
+	local labelName = (spell.treeName and spell.treeName ~= "" and spell.treeName) or name
 	local label = addon.functions.createLabelAce(labelName .. " (" .. spellId .. ")")
 	wrapper:AddChild(label)
 
@@ -717,6 +717,30 @@ local function buildSpellOptions(container, catId, spellId)
 	end
 
 	wrapper:AddChild(addon.functions.createSpacerAce())
+	local altEdit = addon.functions.createEditboxAce(L["AddAltSpellID"], nil, function(self, _, text)
+		local alt = tonumber(text)
+		if alt then
+			if not tContains(spell.altIDs, alt) then table.insert(spell.altIDs, alt) end
+			rebuildAltMapping()
+			self:SetText("")
+			container:ReleaseChildren()
+			buildSpellOptions(container, catId, spellId)
+		end
+	end)
+	wrapper:AddChild(altEdit)
+
+	local infoIcon = AceGUI:Create("Icon")
+	infoIcon:SetImage("Interface\\FriendsFrame\\InformationIcon")
+	infoIcon:SetImageSize(16, 16)
+	infoIcon:SetWidth(16)
+	infoIcon:SetCallback("OnEnter", function(widget)
+		GameTooltip:SetOwner(widget.frame, "ANCHOR_RIGHT")
+		GameTooltip:SetText(L["AlternativeSpellInfo"])
+		GameTooltip:Show()
+	end)
+	infoIcon:SetCallback("OnLeave", function() GameTooltip:Hide() end)
+	wrapper:AddChild(infoIcon)
+	wrapper:AddChild(addon.functions.createSpacerAce())
 
 	spell.altIDs = spell.altIDs or {}
 	for _, altId in ipairs(spell.altIDs) do
@@ -752,30 +776,6 @@ local function buildSpellOptions(container, catId, spellId)
 		row:AddChild(removeIcon)
 		wrapper:AddChild(row)
 	end
-
-	local altEdit = addon.functions.createEditboxAce(L["AddAltSpellID"], nil, function(self, _, text)
-		local alt = tonumber(text)
-		if alt then
-			if not tContains(spell.altIDs, alt) then table.insert(spell.altIDs, alt) end
-			rebuildAltMapping()
-			self:SetText("")
-			container:ReleaseChildren()
-			buildSpellOptions(container, catId, spellId)
-		end
-	end)
-	wrapper:AddChild(altEdit)
-
-	local infoIcon = AceGUI:Create("Icon")
-	infoIcon:SetImage("Interface\\FriendsFrame\\InformationIcon")
-	infoIcon:SetImageSize(16, 16)
-	infoIcon:SetWidth(16)
-	infoIcon:SetCallback("OnEnter", function(widget)
-		GameTooltip:SetOwner(widget.frame, "ANCHOR_RIGHT")
-		GameTooltip:SetText(L["AlternativeSpellInfo"])
-		GameTooltip:Show()
-	end)
-	infoIcon:SetCallback("OnLeave", function() GameTooltip:Hide() end)
-	wrapper:AddChild(infoIcon)
 
 	local btn = addon.functions.createButtonAce(L["Remove"], 150, function()
 		local info = C_Spell.GetSpellInfo(spellId)
