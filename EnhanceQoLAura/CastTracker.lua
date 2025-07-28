@@ -547,11 +547,26 @@ local function buildCategoryOptions(container, catId)
 			label:SetRelativeWidth(0.7)
 			line:AddChild(label)
 			local btn = addon.functions.createButtonAce(L["Remove"], 80, function()
-				db.spells[spellId] = nil
-				rebuildAltMapping()
-				refreshTree(catId)
-				container:ReleaseChildren()
-				buildCategoryOptions(container, catId)
+				local info = C_Spell.GetSpellInfo(spellId)
+				local spellName = info and info.name or tostring(spellId)
+				StaticPopupDialogs["EQOL_DELETE_CAST_SPELL"] = StaticPopupDialogs["EQOL_DELETE_CAST_SPELL"]
+					or {
+						text = L["DeleteSpellConfirm"],
+						button1 = YES,
+						button2 = CANCEL,
+						timeout = 0,
+						whileDead = true,
+						hideOnEscape = true,
+						preferredIndex = 3,
+					}
+				StaticPopupDialogs["EQOL_DELETE_CAST_SPELL"].OnAccept = function()
+					db.spells[spellId] = nil
+					rebuildAltMapping()
+					refreshTree(catId)
+					container:ReleaseChildren()
+					buildCategoryOptions(container, catId)
+				end
+				StaticPopup_Show("EQOL_DELETE_CAST_SPELL", spellName)
 			end)
 			line:AddChild(btn)
 			groupSpells:AddChild(line)
@@ -781,10 +796,25 @@ local function buildSpellOptions(container, catId, spellId)
 	wrapper:AddChild(infoIcon)
 
 	local btn = addon.functions.createButtonAce(L["Remove"], 150, function()
-		cat.spells[spellId] = nil
-		rebuildAltMapping()
-		refreshTree(catId)
-		container:ReleaseChildren()
+		local info = C_Spell.GetSpellInfo(spellId)
+		local spellName = info and info.name or tostring(spellId)
+		StaticPopupDialogs["EQOL_DELETE_CAST_SPELL"] = StaticPopupDialogs["EQOL_DELETE_CAST_SPELL"]
+			or {
+				text = L["DeleteSpellConfirm"],
+				button1 = YES,
+				button2 = CANCEL,
+				timeout = 0,
+				whileDead = true,
+				hideOnEscape = true,
+				preferredIndex = 3,
+			}
+		StaticPopupDialogs["EQOL_DELETE_CAST_SPELL"].OnAccept = function()
+			cat.spells[spellId] = nil
+			rebuildAltMapping()
+			refreshTree(catId)
+			container:ReleaseChildren()
+		end
+		StaticPopup_Show("EQOL_DELETE_CAST_SPELL", spellName)
 	end)
 	wrapper:AddChild(btn)
 end
