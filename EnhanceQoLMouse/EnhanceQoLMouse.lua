@@ -14,13 +14,12 @@ local AceGUI = addon.AceGUI
 local MaxActuationPoint = 1 -- Minimaler Bewegungsabstand für Trail-Elemente
 local MaxActuationPointSq = MaxActuationPoint * MaxActuationPoint
 local duration = 0.3 -- Lebensdauer der Trail-Elemente in Sekunden
-local durationInv = 1 / duration
 local Density = 0.02 -- Zeitdichte für neue Elemente
 local ElementCap = 28 -- Maximale Anzahl von Trail-Elementen
 local PastCursorX, PastCursorY, PresentCursorX, PresentCursorY = 0, 0, 0, 0
 
-local trailElements = {}
-local activeTrailElements = {}
+local trailPool = {}
+local activeCount = 0
 
 local trailPresets = {
 	[1] = { -- LOW
@@ -55,22 +54,44 @@ local trailPresets = {
 	},
 }
 
+local function createTrailElement()
+	local tex = UIParent:CreateTexture(nil)
+	tex:SetTexture("Interface\\AddOns\\" .. addonName .. "\\Icons\\MouseTrail.tga")
+	tex:SetBlendMode("ADD")
+
+	local ag = tex:CreateAnimationGroup()
+	ag:SetScript("OnFinished", function(self)
+		local t = self:GetParent()
+		t:Hide()
+		trailPool[#trailPool + 1] = t
+		activeCount = activeCount - 1
+	end)
+	local fade = ag:CreateAnimation("Alpha")
+	fade:SetFromAlpha(1)
+	fade:SetToAlpha(0)
+
+	tex.anim = ag
+	tex.fade = fade
+
+	return tex
+end
+
 local function applyPreset(presetName)
 	local preset = trailPresets[presetName]
 	if not preset then return end
 	MaxActuationPoint = preset.MaxActuationPoint
 	MaxActuationPointSq = MaxActuationPoint * MaxActuationPoint
 	duration = preset.duration
-	durationInv = 1 / duration
 	Density = preset.Density
 	ElementCap = preset.ElementCap
 
-	trailElements = {}
-	activeTrailElements = {}
+	trailPool = {}
+	activeCount = 0
 
 	for i = 1, ElementCap do
-		trailElements[i] = UIParent:CreateTexture(nil)
-		trailElements[i]:Hide()
+		local tex = createTrailElement()
+		tex:Hide()
+		trailPool[i] = tex
 	end
 end
 
@@ -96,54 +117,28 @@ local function UpdateMouseTrail(delta)
 	local dy = PresentCursorY - PastCursorY
 	local distanceSq = dx * dx + dy * dy
 
-	-- Trails updaten (Lebensdauer verkürzen, ggf. Element zurück in Pool)
-	for i = #activeTrailElements, 1, -1 do
-		local element = activeTrailElements[i]
-		element.duration = element.duration - delta
-
-		if element.duration <= 0 then
-			element:Hide()
-			activeTrailElements[i] = activeTrailElements[#activeTrailElements]
-			activeTrailElements[#activeTrailElements] = nil
-			trailElements[#trailElements + 1] = element
-		else
-			-- sanftes Ausblenden oder Skalieren
-			local scale = element.duration * durationInv
-			element:SetSize(30 * scale, 30 * scale)
-			-- Position bleibt dieselbe (festgefroren),
-			-- wir könnten aber sogar leicht "nachziehen", wenn gewünscht
-		end
-	end
-
-	-- Check: genug Zeit vergangen (timeAccumulator >= Density) UND Maus weit genug bewegt?
-
+	-- Neues Trail-Element anlegen?
 	if timeAccumulator >= Density and distanceSq >= MaxActuationPointSq then
-		timeAccumulator = 0 -- Zeit-Akku leeren
+		timeAccumulator = 0
 
-		-- Neues Trail-Element
-		if #trailElements > 0 then
-			local element = trailElements[#trailElements]
-			trailElements[#trailElements] = nil
-			activeTrailElements[#activeTrailElements + 1] = element
+		if activeCount < ElementCap and #trailPool > 0 then
+			local element = trailPool[#trailPool]
+			trailPool[#trailPool] = nil
+			activeCount = activeCount + 1
 
-			element.duration = duration
 			local scale = UIParent:GetEffectiveScale()
-			element.x = PresentCursorX / scale
-			element.y = PresentCursorY / scale
+			element:SetPoint("CENTER", UIParent, "BOTTOMLEFT", PresentCursorX / scale, PresentCursorY / scale)
 
-			-- Farbe (z.B. Klassenfarbe)
 			local color = addon.db["mouseTrailColor"]
 			if color then
 				element:SetVertexColor(color.r, color.g, color.b, color.a or 1)
 			else
-				-- Wenn der Nutzer keine Custom-Farbe eingestellt hat, nutze deine Standardfarbe
 				element:SetVertexColor(1, 1, 1, 1)
 			end
 
-			element:SetTexture("Interface\\AddOns\\" .. addonName .. "\\Icons\\MouseTrail.tga")
 			element:SetSize(35, 35)
-			element:SetBlendMode("ADD")
-			element:SetPoint("CENTER", UIParent, "BOTTOMLEFT", element.x, element.y)
+			element.fade:SetDuration(duration)
+			element.anim:Play()
 			element:Show()
 		end
 	end
