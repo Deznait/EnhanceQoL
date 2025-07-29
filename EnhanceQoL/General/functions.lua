@@ -458,14 +458,16 @@ local function updateButtonInfo(itemButton, bag, slot, frameName)
                                                 itemButton.ItemBoundType:SetShadowColor(0, 0, 0, 1)
                                         end
 
-                                        itemButton.ItemBoundType:ClearAllPoints()
-                                        if addon.db["bagIlvlPosition"] == "BOTTOMLEFT" then
-                                                itemButton.ItemBoundType:SetPoint("TOPLEFT", itemButton, "TOPLEFT", 2, -2)
-                                        else
-                                                itemButton.ItemBoundType:SetPoint("BOTTOMLEFT", itemButton, "BOTTOMLEFT", 2, 2)
-                                        end
-					itemButton.ItemBoundType:SetFormattedText(bType)
-					itemButton.ItemBoundType:Show()
+                                       itemButton.ItemBoundType:ClearAllPoints()
+                                       if addon.db["bagIlvlPosition"] == "BOTTOMLEFT" then
+                                               itemButton.ItemBoundType:SetPoint("TOPLEFT", itemButton, "TOPLEFT", 2, -2)
+                                       elseif addon.db["bagIlvlPosition"] == "BOTTOMRIGHT" then
+                                               itemButton.ItemBoundType:SetPoint("TOPRIGHT", itemButton, "TOPRIGHT", -1, -2)
+                                       else
+                                               itemButton.ItemBoundType:SetPoint("BOTTOMLEFT", itemButton, "BOTTOMLEFT", 2, 2)
+                                       end
+                                       itemButton.ItemBoundType:SetFormattedText(bType)
+                                       itemButton.ItemBoundType:Show()
 				elseif itemButton.ItemBoundType then
 					itemButton.ItemBoundType:Hide()
 				end
