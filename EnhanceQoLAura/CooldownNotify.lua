@@ -810,8 +810,8 @@ local function HandleEQOLLink(link, text, button, frame)
 				local encoded = incoming[data]
 				incoming[data] = nil
 				pending[label] = nil
-				local newId = importCategory(encoded)
-				if newId and CN.functions.addCooldownNotifyOptions then CN.functions.addCooldownNotifyOptions(frame or UIParent) end
+                                local newId = importCategory(encoded)
+                                if newId then refreshTree(newId) end
 			end,
 		}
 	StaticPopupDialogs["EQOL_IMPORT_FROM_SHARE"].OnShow = function(self, data)
