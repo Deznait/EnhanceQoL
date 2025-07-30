@@ -4,6 +4,7 @@
 ### ✨ Added
 - **Aura Tracker**
   - Option to *Show GCD* on cooldowns
+  - Option to change the *Spacing* between the auras
 ### 🐛 Fixed
 - Cooldown check in AuraTracker had a missing variable which impacted the performance
 
