@@ -199,9 +199,9 @@ local function ensureAnchor(id)
 end
 
 local function applyLockState()
-	for id, anchor in pairs(anchors) do
-		if not addon.db.cooldownNotifyEnabled[id] then
-			anchor:Hide()
+        for id, anchor in pairs(anchors) do
+                if not addon.db.cooldownNotifyEnabled[id] then
+                        anchor:Hide()
 		elseif addon.db.cooldownNotifyLocked[id] then
 			anchor:RegisterForDrag()
 			anchor:SetMovable(false)
@@ -234,8 +234,29 @@ local function applyLockState()
 				anchor.text:Show()
 			end
 			anchor:Show()
-		end
-	end
+                end
+        end
+end
+
+local function updateEventRegistration()
+       local anyEnabled
+       for _, enabled in pairs(addon.db.cooldownNotifyEnabled or {}) do
+               if enabled then
+                       anyEnabled = true
+                       break
+               end
+       end
+       if anyEnabled then
+               if not DCP:IsEventRegistered("SPELL_UPDATE_COOLDOWN") then
+                       DCP:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+                       DCP:RegisterEvent("PLAYER_LOGIN")
+               end
+       else
+               if DCP:IsEventRegistered("SPELL_UPDATE_COOLDOWN") then
+                       DCP:UnregisterEvent("SPELL_UPDATE_COOLDOWN")
+                       DCP:UnregisterEvent("PLAYER_LOGIN")
+               end
+       end
 end
 
 local function applySize(id)
@@ -357,10 +378,11 @@ local function buildCategoryOptions(container, catId)
 	container:AddChild(group)
 	group:SetFullHeight(true)
 
-	local enableCB = addon.functions.createCheckboxAce(L["EnableCooldownNotify"]:format(cat.name), addon.db.cooldownNotifyEnabled[catId], function(_, _, val)
-		addon.db.cooldownNotifyEnabled[catId] = val
-		applyLockState()
-	end)
+    local enableCB = addon.functions.createCheckboxAce(L["EnableCooldownNotify"]:format(cat.name), addon.db.cooldownNotifyEnabled[catId], function(_, _, val)
+                addon.db.cooldownNotifyEnabled[catId] = val
+                applyLockState()
+                updateEventRegistration()
+        end)
 	group:AddChild(enableCB)
 
 	local lockCB = addon.functions.createCheckboxAce(L["buffTrackerLocked"], addon.db.cooldownNotifyLocked[catId], function(_, _, val)
@@ -489,22 +511,23 @@ local function buildCategoryOptions(container, catId)
 				preferredIndex = 3,
 			}
 		StaticPopupDialogs["EQOL_DELETE_CDN_CATEGORY"].OnShow = function(self) self:SetFrameStrata("FULLSCREEN_DIALOG") end
-		StaticPopupDialogs["EQOL_DELETE_CDN_CATEGORY"].OnAccept = function()
-			addon.db.cooldownNotifyCategories[catId] = nil
-			addon.db.cooldownNotifyEnabled[catId] = nil
-			addon.db.cooldownNotifyLocked[catId] = nil
-			addon.db.cooldownNotifyOrder[catId] = nil
-			addon.db.cooldownNotifySounds[catId] = nil
-			addon.db.cooldownNotifySoundsEnabled[catId] = nil
-			if anchors[catId] then
-				anchors[catId]:Hide()
-				anchors[catId] = nil
-			end
-			addon.db.cooldownNotifySelectedCategory = next(addon.db.cooldownNotifyCategories)
-			applyLockState()
-			refreshTree(addon.db.cooldownNotifySelectedCategory)
-			container:ReleaseChildren()
-		end
+                StaticPopupDialogs["EQOL_DELETE_CDN_CATEGORY"].OnAccept = function()
+                        addon.db.cooldownNotifyCategories[catId] = nil
+                        addon.db.cooldownNotifyEnabled[catId] = nil
+                        addon.db.cooldownNotifyLocked[catId] = nil
+                        addon.db.cooldownNotifyOrder[catId] = nil
+                        addon.db.cooldownNotifySounds[catId] = nil
+                        addon.db.cooldownNotifySoundsEnabled[catId] = nil
+                        if anchors[catId] then
+                                anchors[catId]:Hide()
+                                anchors[catId] = nil
+                        end
+                        addon.db.cooldownNotifySelectedCategory = next(addon.db.cooldownNotifyCategories)
+                        applyLockState()
+                        updateEventRegistration()
+                        refreshTree(addon.db.cooldownNotifySelectedCategory)
+                        container:ReleaseChildren()
+                end
 		StaticPopup_Show("EQOL_DELETE_CDN_CATEGORY", catName)
 	end)
 	group:AddChild(delBtn)
@@ -591,12 +614,13 @@ function CN.functions.addCooldownNotifyOptions(container)
 			addon.db.cooldownNotifyEnabled[newId] = true
 			addon.db.cooldownNotifyLocked[newId] = false
 			addon.db.cooldownNotifySounds[newId] = {}
-			addon.db.cooldownNotifySoundsEnabled[newId] = {}
-			ensureAnchor(newId)
-			applyLockState()
-			refreshTree(newId)
-			return
-		elseif value == "IMPORT_CATEGORY" then
+                        addon.db.cooldownNotifySoundsEnabled[newId] = {}
+                        ensureAnchor(newId)
+                        applyLockState()
+                        updateEventRegistration()
+                        refreshTree(newId)
+                        return
+                elseif value == "IMPORT_CATEGORY" then
 			StaticPopupDialogs["EQOL_IMPORT_CATEGORY"] = StaticPopupDialogs["EQOL_IMPORT_CATEGORY"]
 				or {
 					text = L["ImportCategory"],
@@ -700,10 +724,11 @@ function importCategory(encoded)
 	addon.db.cooldownNotifyLocked[newId] = false
 	addon.db.cooldownNotifyOrder[newId] = data.order or {}
 	addon.db.cooldownNotifySounds[newId] = data.sounds or {}
-	addon.db.cooldownNotifySoundsEnabled[newId] = data.soundsEnabled or {}
-	ensureAnchor(newId)
-	applyLockState()
-	return newId
+        addon.db.cooldownNotifySoundsEnabled[newId] = data.soundsEnabled or {}
+        ensureAnchor(newId)
+        applyLockState()
+        updateEventRegistration()
+        return newId
 end
 
 local COMM_PREFIX = "EQOLCDNSHARE"
@@ -824,9 +849,7 @@ end
 
 AceComm:RegisterComm(COMM_PREFIX, OnComm)
 
--- register events
-DCP:RegisterEvent("SPELL_UPDATE_COOLDOWN")
-DCP:RegisterEvent("PLAYER_LOGIN")
+updateEventRegistration()
 
 for id in pairs(addon.db.cooldownNotifyCategories or {}) do
 	ensureAnchor(id)
