@@ -261,6 +261,7 @@ local function updateActiveTalentText()
     end
     local activeID = C_ClassTalents.GetActiveConfigID()
     local name = GetConfigName(activeID)
+    activeBuildFrame.text:SetFont(addon.variables.defaultFont, addon.db["talentReminderActiveBuildSize"], "OUTLINE")
     activeBuildFrame.text:SetText(string.format("Talentbuild: %s", name))
     restoreActiveBuildPosition()
     activeBuildFrame:Show()

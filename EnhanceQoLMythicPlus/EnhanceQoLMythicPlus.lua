@@ -1156,14 +1156,30 @@ local function addTalentFrame(container)
                 })
         end
 
-	for _, cbData in ipairs(data) do
-		local uFunc = function(self, _, value) addon.db[cbData.var] = value end
-		if cbData.func then uFunc = cbData.func end
-		local desc
-		if cbData.desc then desc = cbData.desc end
-		local cbElement = addon.functions.createCheckboxAce(cbData.text, addon.db[cbData.var], uFunc, desc)
-		groupCore:AddChild(cbElement)
-	end
+        for _, cbData in ipairs(data) do
+                local uFunc = function(self, _, value) addon.db[cbData.var] = value end
+                if cbData.func then uFunc = cbData.func end
+                local desc
+                if cbData.desc then desc = cbData.desc end
+                local cbElement = addon.functions.createCheckboxAce(cbData.text, addon.db[cbData.var], uFunc, desc)
+                groupCore:AddChild(cbElement)
+        end
+
+        if addon.db["talentReminderEnabled"] then
+                local sliderSize = addon.functions.createSliderAce(
+                        L["talentReminderActiveBuildTextSize"] .. ": " .. addon.db["talentReminderActiveBuildSize"],
+                        addon.db["talentReminderActiveBuildSize"],
+                        6,
+                        64,
+                        1,
+                        function(self, _, value2)
+                                addon.db["talentReminderActiveBuildSize"] = value2
+                                addon.MythicPlus.functions.updateActiveTalentText()
+                                self:SetLabel(L["talentReminderActiveBuildTextSize"] .. ": " .. value2)
+                        end
+                )
+                groupCore:AddChild(sliderSize)
+        end
 
 	if addon.db["talentReminderEnabled"] then
 		local groupTalent = addon.functions.createContainer("TabGroup", "Flow")
