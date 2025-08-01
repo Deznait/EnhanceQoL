@@ -23,8 +23,34 @@ local activeKeyIndex = {}
 local activeSourceIndex = {}
 local altToBase = {}
 local spellToCat = {} -- [spellID] = { [catId]=true, ... }
+
+local function resolveSpellCats(spellId)
+        local base = spellId
+        local cats = spellToCat[base]
+        if not cats then
+                base = altToBase[spellId]
+                if base then cats = spellToCat[base] end
+        end
+        return base or spellId, cats
+end
 local updateEventRegistration
 local ReleaseAllBars
+local actTank
+
+local function setActTank()
+	if UnitGroupRolesAssigned("player") == "TANK" then
+		actTank = "player"
+		return
+	end
+	for i = 1, 4 do
+		local unit = "party" .. i
+		if UnitGroupRolesAssigned(unit) == "TANK" then
+			actTank = unit
+			return
+		end
+	end
+	actTank = nil
+end
 
 local roleNames = {
 	TANK = INLINE_TANK_ICON .. " " .. TANK,
@@ -1018,14 +1044,18 @@ CastTracker.functions.UpdateActiveBars = UpdateActiveBars
 
 local function HandleCLEU()
 	local _, subevent, _, sourceGUID, _, sourceFlags, _, destGUID, _, _, _, spellId = CombatLogGetCurrentEventInfo()
-	local baseSpell = altToBase[spellId] or spellId
-	if subevent == "SPELL_CAST_START" then
-		local cats = spellToCat[baseSpell]
-		if not cats then return end
+        local baseSpell, cats = resolveSpellCats(spellId)
+        if subevent == "SPELL_CAST_START" then
+                if not cats then return end
 		local castTime
 		local unit = GetUnitFromGUID(sourceGUID)
+		if not unit then return end
 		local threat = UnitThreatSituation("player", unit)
+		if (not threat or threat == 0) and UnitGroupRolesAssigned("player") ~= "TANK" then
+			if actTank then threat = UnitThreatSituation(actTank, unit) end
+		end
 		if not threat or threat == 0 then return end
+
 		if unit then
 			_, castTime = getCastInfo(unit)
 			local tgt = unit .. "target"
@@ -1057,12 +1087,14 @@ end
 
 local function HandleUnitChannelStart(unit, castGUID, spellId)
 	local threat = UnitThreatSituation("player", unit)
+	if (not threat or threat == 0) and UnitGroupRolesAssigned("player") ~= "TANK" then
+		if actTank then threat = UnitThreatSituation(actTank, unit) end
+	end
 	if not threat or threat == 0 then return end
-	local sourceGUID = UnitGUID(unit)
-	if not sourceGUID then return end
-	local baseSpell = altToBase[spellId] or spellId
-	local cats = spellToCat[baseSpell]
-	if not cats then return end
+        local sourceGUID = UnitGUID(unit)
+        if not sourceGUID then return end
+        local baseSpell, cats = resolveSpellCats(spellId)
+        if not cats then return end
 	local _, castTime = getCastInfo(unit)
 	castTime = castTime or 0
 	local key = sourceGUID .. ":" .. baseSpell
@@ -1075,9 +1107,9 @@ local function HandleUnitChannelStart(unit, castGUID, spellId)
 end
 
 local function HandleUnitChannelStop(unit, castGUID, spellId)
-	local sourceGUID = UnitGUID(unit)
-	if not sourceGUID then return end
-	local baseSpell = altToBase[spellId] or spellId
+        local sourceGUID = UnitGUID(unit)
+        if not sourceGUID then return end
+        local baseSpell = resolveSpellCats(spellId)
 	local key = sourceGUID .. ":" .. baseSpell
 	local byCat = activeKeyIndex[key]
 	if byCat then
@@ -1088,9 +1120,9 @@ local function HandleUnitChannelStop(unit, castGUID, spellId)
 end
 
 local function HandleUnitSpellcastStop(unit, castGUID, spellId)
-	local sourceGUID = UnitGUID(unit)
-	if not sourceGUID then return end
-	local baseSpell = altToBase[spellId] or spellId
+        local sourceGUID = UnitGUID(unit)
+        if not sourceGUID then return end
+        local baseSpell = resolveSpellCats(spellId)
 	local key = sourceGUID .. ":" .. baseSpell
 	local byCat = activeKeyIndex[key]
 	if byCat then
@@ -1115,6 +1147,8 @@ updateEventRegistration = function()
 		if not eventFrame:IsEventRegistered("UNIT_SPELLCAST_CHANNEL_STOP") then eventFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_STOP") end
 		if not eventFrame:IsEventRegistered("UNIT_SPELLCAST_STOP") then eventFrame:RegisterEvent("UNIT_SPELLCAST_STOP") end
 		if not eventFrame:IsEventRegistered("UNIT_SPELLCAST_INTERRUPTED") then eventFrame:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED") end
+		if not eventFrame:IsEventRegistered("GROUP_ROSTER_UPDATE") then eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE") end
+		if not eventFrame:IsEventRegistered("PLAYER_ROLES_ASSIGNED") then eventFrame:RegisterEvent("PLAYER_ROLES_ASSIGNED") end
 	else
 		eventFrame:UnregisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
 		eventFrame:UnregisterEvent("UNIT_SPELLCAST_CHANNEL_START")
@@ -1143,15 +1177,21 @@ function CastTracker.functions.Refresh()
 			HandleUnitChannelStop(...)
 		elseif event == "UNIT_SPELLCAST_STOP" or event == "UNIT_SPELLCAST_INTERRUPTED" then
 			HandleUnitSpellcastStop(...)
+		elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" then
+			setActTank()
 		elseif event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED" then
 			applyLockState()
+			setActTank()
 		end
 	end)
 	eventFrame:RegisterEvent("PLAYER_LOGIN")
 	eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 	eventFrame:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
+	eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
+	eventFrame:RegisterEvent("PLAYER_ROLES_ASSIGNED")
 	updateEventRegistration()
 	applyLockState()
+	setActTank()
 end
 
 function CastTracker.functions.addCastTrackerOptions(container)
