@@ -1948,7 +1948,7 @@ function addon.Aura.functions.buildBuffOptions(container, catId, buffId)
 
 	local label = AceGUI:Create("Label")
 	local buffText = buff.name or ""
-	if buff.trackType ~= "ITEM" then buffText = buffText .. " (" .. buffId .. ")" end
+	if buff.trackType ~= "ITEM" and buff.trackType ~= "ENCHANT" then buffText = buffText .. " (" .. buffId .. ")" end
 	label:SetText(buffText)
 	wrapper:AddChild(label)
 
