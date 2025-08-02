@@ -2359,13 +2359,6 @@ local function addMiscFrame(container, d)
 			desc = L["confirmSocketReplaceDesc"],
 			callback = function(self, _, value) addon.db["confirmSocketReplace"] = value end,
 		},
-		{
-			parent = "",
-			var = "confirmAddSocket",
-			type = "CheckBox",
-			desc = L["confirmAddSocketDesc"],
-			callback = function(self, _, value) addon.db["confirmAddSocket"] = value end,
-		},
 
 		{
 			parent = "",
@@ -3312,7 +3305,6 @@ local function initMisc()
 	addon.functions.InitDBValue("deleteItemFillDialog", false)
 	addon.functions.InitDBValue("confirmReplaceEnchant", false)
 	addon.functions.InitDBValue("confirmSocketReplace", false)
-	addon.functions.InitDBValue("confirmAddSocket", false)
 	addon.functions.InitDBValue("hideRaidTools", false)
 	addon.functions.InitDBValue("autoRepair", false)
 	addon.functions.InitDBValue("sellAllJunk", false)
@@ -3346,12 +3338,10 @@ local function initMisc()
 						if order and order.npcCustomerCreatureID and order.npcCustomerCreatureID > 0 then self.button1:Click() end
 					elseif addon.db["confirmTimerRemovalTrade"] and self.which == "CONFIRM_MERCHANT_TRADE_TIMER_REMOVAL" and self.button1 then
 						self.button1:Click()
-					elseif addon.db["confirmReplaceEnchant"] and self.which == "REPLACE_ENCHANT" and self.button1 then
-						self.button1:Click()
-					elseif addon.db["confirmSocketReplace"] and self.which == "CONFIRM_ACCEPT_SOCKETS" and self.button1 then
-						self.button1:Click()
-					elseif addon.db["confirmAddSocket"] and self.which == "SPELL_CONFIRMATION_PROMPT" and self.button1 then
-						self.button1:Click()
+					elseif addon.db["confirmReplaceEnchant"] and self.which == "REPLACE_ENCHANT" and self.numButtons > 0 and self.GetButton then
+						self:GetButton(1):Click()
+					elseif addon.db["confirmSocketReplace"] and self.which == "CONFIRM_ACCEPT_SOCKETS" and self.numButtons > 0 and self.GetButton then
+						self:GetButton(1):Click()
 					end
 				end
 			end)

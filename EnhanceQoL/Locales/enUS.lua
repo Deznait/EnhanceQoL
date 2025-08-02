@@ -86,8 +86,6 @@ L["confirmReplaceEnchant"] = "Automatically accept Enchant Replacement"
 L["confirmReplaceEnchantDesc"] = "Skips the confirmation dialog when replacing an enchant"
 L["confirmSocketReplace"] = "Automatically accept Socket replacement"
 L["confirmSocketReplaceDesc"] = "Skips the confirmation dialog when replacing sockets"
-L["confirmAddSocket"] = "Automatically accept adding sockets to your items"
-L["confirmAddSocketDesc"] = "Skips the confirmation dialog when adding sockets to items"
 
 L["General"] = "General"
 L["Character"] = "Character"
