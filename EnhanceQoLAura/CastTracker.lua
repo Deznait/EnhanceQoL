@@ -792,6 +792,9 @@ local function buildSpellOptions(container, catId, spellId)
 		wrapper:AddChild(dropSound)
 	end
 
+	local cbOnMe = addon.functions.createCheckboxAce(L["castTrackerOnlyOnMe"], spell.onlyOnMe, function(_, _, val) spell.onlyOnMe = val end)
+	wrapper:AddChild(cbOnMe)
+	
 	local cbText = addon.functions.createCheckboxAce(L["castTrackerShowCustomText"], spell.customTextEnabled, function(_, _, val)
 		spell.customTextEnabled = val
 		container:ReleaseChildren()
@@ -799,8 +802,6 @@ local function buildSpellOptions(container, catId, spellId)
 	end)
 	wrapper:AddChild(cbText)
 
-	local cbOnMe = addon.functions.createCheckboxAce(L["castTrackerOnlyOnMe"], spell.onlyOnMe, function(_, _, val) spell.onlyOnMe = val end)
-	wrapper:AddChild(cbOnMe)
 
 	if spell.customTextEnabled then
 		local txtEdit = addon.functions.createEditboxAce(L["castTrackerCustomText"], spell.customText or "", function(self, _, text)

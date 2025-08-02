@@ -2,50 +2,140 @@
 # It generates speech audio files for each entry.
 # Default Speed: 150
 # Default Pitch -30
+
+# Numbers
+1;180;"[[pbas -60]]"
+2;180;"[[pbas -60]]"
+3;180;"[[pbas -60]]"
+4;180;"[[pbas -60]]"
+5;180;"[[pbas -60]]"
+6;180;"[[pbas -60]]"
+7;180;"[[pbas -60]]"
+8;180;"[[pbas -60]]"
+9;180;"[[pbas -60]]"
+10;180;"[[pbas -60]]"
+First;180;"[[pbas -60]]"
+Second;180;"[[pbas -60]]"
+Third;180;"[[pbas -60]]"
+Fourth;180;"[[pbas -60]]"
+Fifth;180;"[[pbas -60]]"
+
+# Raid Marker
+Star;180;"[[pbas -60]]";;;|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_1:16|t
+Circle;180;"[[pbas -30]]";;;|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_2:16|t
+Diamond;180;"[[pbas -30]]";;;|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_3:16|t
+Triangle;180;"[[pbas -30]]";;;|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_4:16|t
+Moon;180;"[[pbas -30]]";;;|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_5:16|t
+Square;180;"[[pbas -60]]";;;|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_6:16|t
+Cross;180;"[[pbas -30]]";;;|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_7:16|t
+Skull;180;"[[pbas -30]]";;;|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_8:16|t
+
+# Voices
 Adds
 Add
+Affix;190;"[[pbas -40]]"
 AoE;190;"[[pbas -60]]"
 Assist;180
 Avoid;180
+Back;190;"[[pbas -40]]"
+Backup;190;"[[pbas -40]]"
 Bait;180
+Beam;190;"[[pbas -40]]"
 Bleed;180
+Blue;190;"[[pbas -40]]"
+Bommbs;160;"[[pbas -40]]";Bombs
+Boss;180;"[[pbas -60]]"
+Break;180;"[[pbas -60]]"
+Buff;180;"[[pbas -60]]"
 CC;220
-Charge;180
+Chain;180;"[[pbas -60]]"
+Charge;180;"[[pbas -60]]"
+Check;180;"[[pbas -60]]"
 Clear
+Collect;180;"[[pbas -60]]"
 Dance
-Deebuff;;;Debuff
+Deebuff;180;"[[pbas -60]]";Debuff
 Deecurse;180;;Decurse
 Defensive;180;"[[pbas -20]]"
-Dispell;185
+Dispell;185;"[[pbas -60]]"
+Dodge;180;"[[pbas -60]]"
 Dot
+Don't;180;"[[pbas -60]]"
 Don't move;;;Don't move
 Drop
 Enrage;170;"[[pbas -60]]"
 Enter
+Exit;180;"[[pbas -60]]"
+External;180;"[[pbas -60]]"
+Fear;180;"[[pbas -60]]"
 Feet
 Fixate;180
 Focus
 Frontal
+Gate;180;"[[pbas -60]]"
+Gather;180;"[[pbas -60]]"
+Green;180;"[[pbas -60]]"
+Go;180;"[[pbas -60]]"
+Grip;180;"[[pbas -60]]"
 Hide
 Immunity;180
+In;180;"[[pbas -60]]"
 Intermission;180
 Interrupt;170;"[[pbas -60]]"
 Invis
+Invisibility;180;"[[pbas -60]]"
 Jump
+Kick;180;"[[pbas -30]]"
+Kite;180;"[[pbas -60]]"
 Knock
+Last;180;"[[pbas -60]]"
+Leap;180;"[[pbas -60]]"
+Left;180;"[[pbas -60]]"
+Line;180;"[[pbas -60]]"
+Line of Sight;180;"[[pbas -60]]";Line of Sight
+Link;180;"[[pbas -60]]"
+Linked;180;"[[pbas -60]]"
+LoS;180;"[[pbas -60]]"
 Move;170;"[[pbas -60]]"
+Next;180;"[[pbas -30]]"
+Nuke;180;"[[pbas -60]]"
+Orange;180;"[[pbas -60]]"
+Out;180;"[[pbas -60]]"
+Overlap;180;"[[pbas -60]]"
+Poison;160;"[[pbas -60]]"
+Pot;180;"[[pbas -60]]"
 Pull
+Purple;180;"[[pbas -60]]"
+Push;140;"[[pbas -30]]"
+Ready Check;180;"[[pbas -60]]";Ready Check
+Red;180;"[[pbas -60]]"
 Reflect
+Refresh;180;"[[pbas -60]]"
+Right;180;"[[pbas -60]]"
 Root
+Shield;180;"[[pbas -60]]"
 Soak;200;"[[pbas -60]]"
 Soon
+Spawn;180;"[[pbas -60]]"
+Split;180;"[[pbas -60]]"
 Spread;170;"[[pbas -60]]"
 Stack;170;"[[pbas -60]]"
+Stay;180;"[[pbas -60]]"
+Stop;180;"[[pbas -60]]"
 Stopcast;200;"[[pbas -60]]"
+Swap;180;"[[pbas -60]]"
+Switch;180;"[[pbas -60]]"
 Stun
 Targeted;200;"[[pbas -60]]"
+Tount;180;"[[pbas -60]]";Taunt
+Transission;180;"[[pbas -60]]"
+Trinket;180;"[[pbas -60]]"
 Turn;160;"[[pbas -60]]"
 Use
+Volley;180;"[[pbas -60]]"
+Wave;180;"[[pbas -60]]"
+Winds;180;"[[pbas -60]]"
+Yellow;180;"[[pbas -60]]"
 # Abilities
 
 # DK
@@ -56,29 +146,82 @@ Darkness;170;"[[pbas -30]]";;|T1305154:16|t
 
 # Druid
 Barkskin;190;"[[pbas -60]]";;|T572025:16|t
-Ironbark;190;"[[pbas -60]]";;|T463283:16|t
+Ironbark;190;"[[pbas -60]]";;|T572025:16|t
+Incarnation;180;"[[pbas -60]]";;|T571586:16|t
+Innervate;180;"[[pbas -60]]";;|T136048:16|t
+Rage of the Sleeper;190;"[[pbas -20]]";Rage of the Sleeper;|T1129695:16|t
 Roar;190;"[[pbas -20]]";;|T463283:16|t
+Trangility;190;"[[pbas -30]]";Tranquility;|T136107:16|t
 
 # Evoker
+Rescue;190;"[[pbas -60]]";Rescue;|T4622460:16|t
+Rewind;190;"[[pbas -60]]";Rewind;|T4622474:16|t
+Spatial Paradox;180;"[[pbas -60]]";Spatial Paradox;|T5199645:16|t
 Time Dilation;180;"[[pbas -60]]";Time Dilation;|T4622478:16|t
+Time Spiral;190;"[[pbas -40]]";Time Spiral;|T4622479:16|t
+Zephyr;180;"[[pbas -60]]";;|T4630449:16|t
+
+# Hunter
+Misdirection;170;"[[pbas -60]]";;|T132180:16|t
+
+# Mage
+Spellsteal;180;"[[pbas -60]]";Spellsteal;|T135729:16|t
+Slow Fall;180;"[[pbas -60]]";Slow Fall;|T135992:16|t
 
 # Monk
 Chi-ji;170;"[[pbas -30]]";Chi-Ji;|T877514:16|t
 Cocoon;190;"[[pbas -60]]";;|T627485:16|t
+Revival;190;"[[pbas -60]]";;|T1020466:16|t
+Tigers Lust;190;"[[pbas -40]]";Tiger's Lust;|T651727:16|t
 
 # Paladin
+Aura Mastery;180;"[[pbas -60]]";Aura Mastery;|T135872:16|t
 Autumn;180;"[[pbas -40]]";;|T3636843:16|t
+Freedom;180;"[[pbas -30]]";;|T135968:16|t
 Devotion Aura;180;"[[pbas -30]]";Devotion Aura;|T135893:16|t
+Lay on Hands;180;"[[pbas -60]]";Lay on Hands;|T135928:16|t
+Protection;170;"[[pbas -30]]";;|T135964:16|t
+Spellwoarding;200;"[[pbas -60]]";Spellwarding;|T135880:16|t
 Sac;180;"[[pbas -60]]";;|T135966:16|t
+Spring;180;"[[pbas -40]]";;|T3636844:16|t
+Summer;180;"[[pbas -40]]";;|T3636845:16|t
+Weinter;180;"[[pbas -30]]";Winter;|T3636846:16|t
 
 # Priest
 Barrier;170;"[[pbas -30]]";;|T253400:16|t
+Divine Hymn;170;"[[pbas -60]]";Divine Hymn;|T237540:16|t
 Guardian Spirit;180;"[[pbas -40]]";Guardian Spirit;|T237542:16|t
+P I;200;"[[pbas -60]]";PI;|T135939:16|t
+Power Infusion;190;"[[pbas -60]]";Power Infusion;|T135939:16|t
+PS;200;"[[pbas -40]]";;|T135936:16|t
+Pain Suppression;190;"[[pbas -60]]";Pain Suppression;|T135936:16|t
+
+# Rogue
+Shroud;180;"[[pbas -30]]";;|T635350:16|t
+Tricks;190;"[[pbas -60]]";;|T236283:16|t
 
 # Shaman
 Ascendence;180;"[[pbas -40]]";;|T135791:16|t
+Healing Tide;200;"[[pbas -60]]";Healing Tide;|T538569:16|t
+Spirit Link;180;"[[pbas -60]]";Spirit Link;|T237586:16|t
+SLT;200;"[[pbas -30]]";;|T237586:16|t
+Water Walking;180;"[[pbas -60]]";Water Walking;|T135863:16|t
+Windrrush;180;"[[pbas -60]]";Windrush;|T538576:16|t
+
+# Warlock
+Healthstones;180;"[[pbas -60]]";;|T538745:16|t
+SS;180;"[[pbas -40]]";;|T136210:16|t
+Soulstone;180;"[[pbas -60]]";;|T136210:16|t
+Summonstone;180;"[[pbas -60]]";;|T136223:16|t
+
+
+# Warrior
+Rallying Cry;190;"[[pbas -60]]";Rallying Cry;|T132351:16|t
 
 # Racials
 
-#Dwarf
+# Dwarf
 Stoneform;180;"[[pbas -30]]";Stoneform;|T136225:16|t
+
+# Nightelf
+Shadomeld;170;"[[pbas -60]]";Shadowmeld;|T132089:16|t

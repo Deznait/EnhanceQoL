@@ -558,7 +558,7 @@ function addon.functions.IsPatchLive(key) return GetServerTime() >= addon.variab
 addon.variables.shouldEnchanted = { [15] = true, [5] = true, [9] = true, [7] = true, [8] = true, [11] = true, [12] = true, [16] = true, [17] = true }
 addon.variables.patchInformations = {
 	horrificVisions = addon.functions.PatchTS(2025, 5, 20, 21, 6),
-	whispersOfKaresh = addon.functions.PatchTS(2025, 8, 12, 13, 6),
+	whispersOfKaresh = addon.functions.PatchTS(2025, 8, 5, 6, 6),
 }
 
 addon.variables.shouldEnchantedChecks = {

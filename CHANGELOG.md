@@ -1,23 +1,24 @@
 # Changelog
 
-## [3.37.0] – 2025-07-30
+## [4.0.0] – 2025-08-02
 ### ✨ Added
+- **EnhanceQoL Shared Media**
+  - New sub-module with **180 +** voice lines and sounds, usable via LibSharedMedia.
 - **Cooldown Notify**
   - Pops up a small alert when an ability is ready.
-  - Works in *blacklist* mode (track everything except excluded spells) or *whitelist* mode (track only selected spells).
+  - Works in **blacklist** mode (track everything except excluded spells) or **whitelist** mode (track only selected spells).
   - Can play a custom sound when the spell comes off cooldown.
 - **Aura Tracker**
-  - New *Spacing* setting to adjust the gap between icons.
+  - New **Spacing** setting to adjust the gap between icons.
   - Now tracks on-use **trinket cooldowns**.
 - **Talent Reminder – Build Info**
   - Displays the name of the currently active talent build.
-  - Option to show the text only **outside instances**, only **inside 5-man/Delves**, or only **in raids**.
-- **New Soundfile**
+  - Option to show the text **only outside instances**, **only in 5-man/Delves**, or **only in raids**.
 ### 🐛 Fixed
 - Catalyst charges were not shown correctly near the end of the season.
-- Missing variable check in the Aura Tracker cooldown logic caused unnecessary CPU usage; fixed.
-- Frame Strata of Buffs was to high
-- Casttracker now only handles mobs infight with me
+- Missing variable check in Aura Tracker cooldown logic caused unnecessary CPU usage — fixed.
+- Frame strata of buffs was **too** high.
+- Cast Tracker now only handles mobs currently **in combat** with the player.
 
 ---
 
