@@ -16,7 +16,6 @@ end
 
 local function buildMacroString(item)
 	local resetType = "combat"
-	local itemsString = ""
 	if item == nil then
 		return "#showtooltip"
 	else
