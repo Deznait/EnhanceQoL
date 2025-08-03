@@ -20,6 +20,9 @@ local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_DrinkMacro")
 
 -- Enable or disable the food reminder frame
 addon.functions.InitDBValue("mageFoodReminder", false)
+local defaultPos = { point = "TOP", x = 0, y = -100 }
+addon.functions.InitDBValue("mageFoodReminderPos", { point = defaultPos.point, x = defaultPos.x, y = defaultPos.y })
+addon.functions.InitDBValue("mageFoodReminderScale", 1)
 
 local brButton
 local defaultButtonSize = 60
@@ -42,6 +45,26 @@ local function removeBRFrame()
 		brButton:ClearAllPoints()
 		brButton = nil
 	end
+end
+
+local function applyButtonSettings()
+	if not brButton then return end
+
+	brButton:SetMovable(true)
+	brButton:EnableMouse(true)
+	brButton:RegisterForDrag("LeftButton")
+
+	brButton:SetScript("OnDragStart", brButton.StartMoving)
+	brButton:SetScript("OnDragStop", function(self)
+		self:StopMovingOrSizing()
+		local point, _, _, xOfs, yOfs = self:GetPoint()
+		addon.db["mageFoodReminderPos"] = { point = point, x = xOfs, y = yOfs }
+	end)
+
+	local pos = addon.db["mageFoodReminderPos"]
+	brButton:ClearAllPoints()
+	brButton:SetPoint(pos.point, UIParent, pos.point, pos.x, pos.y)
+	brButton:SetScale(addon.db["mageFoodReminderScale"] or 1)
 end
 
 local function createLeaveFrame()
@@ -79,6 +102,7 @@ local function createLeaveFrame()
 
 	jumpGroup:SetLooping("BOUNCE")
 	jumpGroup:Play()
+	applyButtonSettings()
 end
 
 local function createBRFrame()
@@ -132,6 +156,7 @@ local function createBRFrame()
 
 	jumpGroup:SetLooping("BOUNCE")
 	jumpGroup:Play()
+	applyButtonSettings()
 end
 
 local healerRole

@@ -146,6 +146,26 @@ local function addDrinkFrame(container)
 		end
 	)
 	groupCore:AddChild(sliderManaMinimum)
+
+	local sliderReminderSize = addon.functions.createSliderAce(
+		L["mageFoodReminderSize"] .. ": " .. addon.db["mageFoodReminderScale"],
+		addon.db["mageFoodReminderScale"],
+		0.5,
+		2,
+		0.05,
+		function(self, _, value2)
+			addon.db["mageFoodReminderScale"] = value2
+			addon.Drinks.functions.updateRole()
+			self:SetLabel(L["mageFoodReminderSize"] .. ": " .. value2)
+		end
+	)
+	groupCore:AddChild(sliderReminderSize)
+
+	local resetReminderPos = addon.functions.createButtonAce(L["mageFoodReminderReset"], 150, function()
+		addon.db["mageFoodReminderPos"] = { point = "TOP", x = 0, y = -100 }
+		addon.Drinks.functions.updateRole()
+	end)
+	groupCore:AddChild(resetReminderPos)
 end
 
 function addon.Drinks.functions.treeCallback(container, group)
