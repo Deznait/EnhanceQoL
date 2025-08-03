@@ -2111,41 +2111,43 @@ function addon.Aura.functions.buildBuffOptions(container, catId, buffId)
 			txtEdit:SetRelativeWidth(0.6)
 			wrapper:AddChild(txtEdit)
 
-			local cbMult = addon.functions.createCheckboxAce(L["buffTrackerCustomTextMultiply"], buff.customTextUseStacks, function(_, _, val)
-				buff.customTextUseStacks = val
-				container:ReleaseChildren()
-				addon.Aura.functions.buildBuffOptions(container, catId, buffId)
-				scanBuffs()
-			end)
-			wrapper:AddChild(cbMult)
-
-			if buff.customTextUseStacks then
-				local info = AceGUI:Create("Label")
-				info:SetText(L["buffTrackerCustomTextInfo"] or "")
-				info:SetFullWidth(true)
-				info:SetFont(addon.variables.defaultFont, 10, "OUTLINE")
-				wrapper:AddChild(info)
-				wrapper:AddChild(addon.functions.createSpacerAce())
-				local baseEdit = addon.functions.createEditboxAce(L["buffTrackerCustomTextBase"], tostring(buff.customTextBase or 1), function(self, _, text)
-					local num = tonumber(text)
-					if num then buff.customTextBase = num end
+			if buff.trackType ~= "ENCHANT" then
+				local cbMult = addon.functions.createCheckboxAce(L["buffTrackerCustomTextMultiply"], buff.customTextUseStacks, function(_, _, val)
+					buff.customTextUseStacks = val
+					container:ReleaseChildren()
+					addon.Aura.functions.buildBuffOptions(container, catId, buffId)
 					scanBuffs()
 				end)
-				baseEdit:SetRelativeWidth(0.3)
-				wrapper:AddChild(baseEdit)
+				wrapper:AddChild(cbMult)
 
-				local minEdit = addon.functions.createEditboxAce(L["buffTrackerCustomTextMin"], tostring(buff.customTextMin or 0), function(self, _, text)
-					local num = tonumber(text)
-					if num then
-						buff.customTextMin = num
-					else
-						buff.customTextMin = 0
-					end
-					scanBuffs()
-				end)
-				minEdit:SetRelativeWidth(0.3)
-				wrapper:AddChild(minEdit)
-				wrapper:AddChild(addon.functions.createSpacerAce())
+				if buff.customTextUseStacks then
+					local info = AceGUI:Create("Label")
+					info:SetText(L["buffTrackerCustomTextInfo"] or "")
+					info:SetFullWidth(true)
+					info:SetFont(addon.variables.defaultFont, 10, "OUTLINE")
+					wrapper:AddChild(info)
+					wrapper:AddChild(addon.functions.createSpacerAce())
+					local baseEdit = addon.functions.createEditboxAce(L["buffTrackerCustomTextBase"], tostring(buff.customTextBase or 1), function(self, _, text)
+						local num = tonumber(text)
+						if num then buff.customTextBase = num end
+						scanBuffs()
+					end)
+					baseEdit:SetRelativeWidth(0.3)
+					wrapper:AddChild(baseEdit)
+
+					local minEdit = addon.functions.createEditboxAce(L["buffTrackerCustomTextMin"], tostring(buff.customTextMin or 0), function(self, _, text)
+						local num = tonumber(text)
+						if num then
+							buff.customTextMin = num
+						else
+							buff.customTextMin = 0
+						end
+						scanBuffs()
+					end)
+					minEdit:SetRelativeWidth(0.3)
+					wrapper:AddChild(minEdit)
+					wrapper:AddChild(addon.functions.createSpacerAce())
+				end
 			end
 		end
 
@@ -2188,7 +2190,10 @@ function addon.Aura.functions.buildBuffOptions(container, catId, buffId)
 				else
 					local row = addon.functions.createContainer("SimpleGroup", "Flow")
 					row:SetFullWidth(true)
-					local typeDrop = addon.functions.createDropdownAce(nil, { missing = L["ConditionMissing"], stack = L["ConditionStacks"], time = L["ConditionTime"] }, nil, function(_, _, val)
+					local typeDropOptions = { missing = L["ConditionMissing"], time = L["ConditionTime"] }
+					if buff.trackType ~= "ENCHANT" then typeDropOptions["stack"] = L["ConditionStacks"] end
+
+					local typeDrop = addon.functions.createDropdownAce(nil, typeDropOptions, nil, function(_, _, val)
 						child.type = val
 						if val ~= "missing" and (child.value == nil or type(child.value) ~= "number") then
 							child.value = 0
