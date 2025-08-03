@@ -9,6 +9,7 @@ end
 
 addon.Drinks.drinkList = { -- Special Food
 	{ key = "MarinatedMaggots", id = 226811, requiredLevel = 75, mana = 2700000, isBuffFood = false },
+	{ key = "ConjureRefreshment", id = 190336, requiredLevel = 5, mana = 0, isSpell = true }, -- set mana to zero, because we update it anyway
 	{ key = "CandyBar", id = 20390, requiredLevel = 1, mana = 18000, isBuffFood = false }, -- We don't know the right amount on level 41 it's 18000
 	{ key = "CandyCorn", id = 20389, requiredLevel = 1, mana = 18000, isBuffFood = false }, -- We don't know the right amount on level 41 it's 18000
 	{ key = "ConjuredManaBun", id = 113509, requiredLevel = 40, mana = 0, isMageFood = true, isEarthenFood = true }, -- set mana to zero, because we update it anyway
@@ -590,14 +591,17 @@ function addon.functions.updateAllowedDrinks()
 
 		local req = drink.requiredLevel
 		local dMana = drink.isMageFood and mana or drink.mana
-		if req <= playerLevel and (dMana >= minManaValue or (allowRecuperate and drink.id == 1231411)) then
+		if
+			req <= playerLevel
+			and (dMana >= minManaValue or (allowRecuperate and drink.id == 1231411 and addon.variables.unitClass ~= "MAGE") or (drink.id == 190336 and addon.variables.unitClass == "MAGE"))
+		then
 			if
 				not (drink.isBuffFood and ignoreBuff)
 				and not (isEarthen and not drink.isEarthenFood)
 				and not (drink.earthenOnly and not isEarthen)
 				and not (drink.earthenOnly and drink.isGem and ignoreGems)
-                                -- TODO 11.2: migrate IsSpellKnown to C_SpellBook.IsSpellInSpellBook
-                                and not (drink.isSpell and not IsSpellKnown(drink.id))
+				-- TODO 11.2: migrate IsSpellKnown to C_SpellBook.IsSpellInSpellBook
+				and not (drink.isSpell and not IsSpellKnown(drink.id))
 			then
 				if drink.isMageFood and preferMage then
 					tinsert(filtered, 1, newItem(drink.id, drink.desc, drink.isSpell))

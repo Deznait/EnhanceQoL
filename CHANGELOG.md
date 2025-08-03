@@ -25,6 +25,8 @@
 ### 🔄 Changed
 - **Gem Helper**
   - Cleaner gem display per socket.
+- **Drink Macro**
+  - Added *Conjure Refreshment* as a fallback for mages to cast it
 ### 🐛 Fixed
 - Catalyst charges sometimes disappeared near season end.
 - Missing variable in Aura Tracker cooldown logic caused extra CPU load.
