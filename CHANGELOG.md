@@ -24,6 +24,7 @@
   - Option to show **spell icon ID**.
 - **Drink Macro**
   - Hold Alt to move the *Food reminder*
+  - Option to change the Size of the *Food reminder*
 ### 🔄 Changed
 - **Gem Helper**
   - Cleaner gem display per socket.
