@@ -14,6 +14,7 @@ local isRecraftTbl = { false, true } -- erst normale, dann Recrafts
 
 local SCAN_DELAY = 0.3
 local pendingScan
+local scanRunning
 
 local function isAHBuyable(itemID)
 	if not itemID then return false end
@@ -79,23 +80,32 @@ local function BuildShoppingList()
 end
 
 local function Rescan()
+	if scanRunning then return end
+	scanRunning = true
 	pendingScan = nil
-	if not IsResting() then return end
+	if not IsResting() then
+		scanRunning = false
+		return
+	end
 	BuildShoppingList()
+	scanRunning = false
 end
 
 local function ScheduleRescan()
-	if pendingScan then return end
+	if pendingScan or scanRunning then return end
 	pendingScan = C_Timer.NewTimer(SCAN_DELAY, Rescan)
 end
 
 local f = CreateFrame("Frame")
 f:RegisterEvent("TRACKED_RECIPE_UPDATE") -- parameter 1: ID of recipe - parameter 2: tracked true/false
 f:RegisterEvent("BAG_UPDATE_DELAYED") -- verzögerter Scan, um Event-Flut zu vermeiden
+f:RegisterEvent("CRAFTINGORDERS_ORDER_PLACEMENT_RESPONSE") -- arg1: error code, 0 on success
 
-f:SetScript("OnEvent", function(_, event)
+f:SetScript("OnEvent", function(_, event, arg1)
 	if event == "BAG_UPDATE_DELAYED" then
 		ScheduleRescan()
+	elseif event == "CRAFTINGORDERS_ORDER_PLACEMENT_RESPONSE" then
+		if arg1 == 0 and not scanRunning then Rescan() end
 	else
 		Rescan()
 	end
