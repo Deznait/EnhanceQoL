@@ -164,20 +164,20 @@ local function ScheduleRescan()
 end
 
 local mapQuality = {
-        [0] = Enum.AuctionHouseFilter.PoorQuality,
-        [1] = Enum.AuctionHouseFilter.CommonQuality,
-        [2] = Enum.AuctionHouseFilter.UncommonQuality,
-        [3] = Enum.AuctionHouseFilter.RareQuality,
-        [4] = Enum.AuctionHouseFilter.EpicQuality,
-        [5] = Enum.AuctionHouseFilter.LegendaryQuality,
-        [6] = Enum.AuctionHouseFilter.ArtifactQuality,
-        [7] = Enum.AuctionHouseFilter.LegendaryCraftedItemOnly,
+	[0] = Enum.AuctionHouseFilter.PoorQuality,
+	[1] = Enum.AuctionHouseFilter.CommonQuality,
+	[2] = Enum.AuctionHouseFilter.UncommonQuality,
+	[3] = Enum.AuctionHouseFilter.RareQuality,
+	[4] = Enum.AuctionHouseFilter.EpicQuality,
+	[5] = Enum.AuctionHouseFilter.LegendaryQuality,
+	[6] = Enum.AuctionHouseFilter.ArtifactQuality,
+	[7] = Enum.AuctionHouseFilter.LegendaryCraftedItemOnly,
 }
 
 -- Only handle generic Auction House errors relevant to commodity purchases.
 local purchaseErrorCodes = {
-        [Enum.AuctionHouseError.NotEnoughMoney] = true,
-        [Enum.AuctionHouseError.ItemNotFound] = true,
+	[Enum.AuctionHouseError.NotEnoughMoney] = true,
+	[Enum.AuctionHouseError.ItemNotFound] = true,
 }
 
 -- Shows a small confirmation window for a pending commodity purchase.
@@ -187,50 +187,47 @@ local function ShowPurchasePopup(item, buyWidget)
 	if pendingPurchase then return end -- do not allow multiple parallel purchases
 	buyWidget:SetDisabled(true)
 
-	local popup = AceGUI:Create("Window")
-	popup:SetTitle(L["vendorCraftShopperConfirmPurchase"])
-	popup:SetWidth(280)
-	popup:SetHeight(150)
-	popup:SetLayout("List")
-	popup:EnableResize(false)
-	popup.frame:SetFrameStrata("TOOLTIP")
+	local popup = CreateFrame("Frame", nil, UIParent, "BasicFrameTemplateWithInset")
+	popup:SetSize(280, 150)
+	popup:SetFrameStrata("TOOLTIP")
+	popup:EnableMouse(true)
+	popup:SetMovable(true)
+	popup:RegisterForDrag("LeftButton")
+	popup:SetScript("OnDragStart", popup.StartMoving)
+	popup:SetScript("OnDragStop", popup.StopMovingOrSizing)
 
-	local normalFont, _, normalFlags = GameFontNormal:GetFont()
-	local text = AceGUI:Create("Label")
-	text:SetFullWidth(true)
+	popup.title = popup:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	popup.title:SetPoint("CENTER", popup.TitleBg, "CENTER")
+	popup.title:SetText(L["vendorCraftShopperConfirmPurchase"])
+
+	local text = popup:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	text:SetPoint("TOP", 0, -40)
 	text:SetJustifyH("CENTER")
-	text:SetFont(normalFont, 16, normalFlags)
 	text:SetText(L["vendorCraftShopperWaitingForPrice"])
-	popup:AddChild(text)
 	popup.text = text
 
-	local timerLabel = AceGUI:Create("Label")
-	timerLabel:SetFullWidth(true)
+	local timerLabel = popup:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	timerLabel:SetPoint("TOP", text, "BOTTOM", 0, -10)
 	timerLabel:SetJustifyH("CENTER")
-	timerLabel:SetFont(normalFont, 16, normalFlags)
-	popup:AddChild(timerLabel)
 	popup.timerLabel = timerLabel
 
-	local btnGroup = AceGUI:Create("SimpleGroup")
-	btnGroup:SetFullWidth(true)
-	btnGroup:SetLayout("Flow")
-	popup:AddChild(btnGroup)
-
-	local buyBtn = AceGUI:Create("Button")
+	local buyBtn = CreateFrame("Button", nil, popup, "UIPanelButtonTemplate")
+	buyBtn:SetSize(120, 24)
+	buyBtn:SetPoint("BOTTOMLEFT", 10, 10)
 	buyBtn:SetText(L["vendorCraftShopperBuyNow"])
-	buyBtn:SetRelativeWidth(0.5)
-	buyBtn:SetDisabled(true)
-	btnGroup:AddChild(buyBtn)
+	buyBtn:Disable()
 	popup.buyBtn = buyBtn
 
-	local cancelBtn = AceGUI:Create("Button")
+	local cancelBtn = CreateFrame("Button", nil, popup, "UIPanelButtonTemplate")
+	cancelBtn:SetSize(120, 24)
+	cancelBtn:SetPoint("BOTTOMRIGHT", -10, 10)
 	cancelBtn:SetText(L["vendorCraftShopperCancel"])
-	cancelBtn:SetRelativeWidth(0.5)
-	btnGroup:AddChild(cancelBtn)
 	popup.cancelBtn = cancelBtn
 
-	local spinner = CreateFrame("Frame", nil, popup.frame, "LoadingSpinnerTemplate")
-	spinner:SetPoint("TOP", popup.frame, "TOP", 0, -25)
+	popup.CloseButton:SetScript("OnClick", function() cancelBtn:Click() end)
+
+	local spinner = CreateFrame("Frame", nil, popup, "LoadingSpinnerTemplate")
+	spinner:SetPoint("TOP", 0, -25)
 	spinner:SetSize(24, 24)
 	spinner:Show()
 	popup.spinner = spinner
@@ -240,31 +237,29 @@ local function ShowPurchasePopup(item, buyWidget)
 	popup.ticker = C_Timer.NewTicker(1, function()
 		popup.remaining = popup.remaining - 1
 		if popup.remaining <= 0 then
-			cancelBtn:Fire("OnClick")
+			cancelBtn:Click()
 		else
 			timerLabel:SetText(L["vendorCraftShopperTimeRemaining"]:format(popup.remaining))
 		end
 	end)
 
-	buyBtn:SetCallback("OnClick", function()
+	buyBtn:SetScript("OnClick", function()
 		f:RegisterEvent("COMMODITY_PURCHASE_SUCCEEDED")
 		C_AuctionHouse.ConfirmCommoditiesPurchase(item.itemID, item.missing)
 		if popup.ticker then popup.ticker:Cancel() end
-		popup.frame:Hide()
-		AceGUI:Release(popup)
+		popup:Hide()
 		pendingPurchase = nil
 		buyWidget:SetDisabled(false)
 	end)
 
-	cancelBtn:SetCallback("OnClick", function()
+	cancelBtn:SetScript("OnClick", function()
 		C_AuctionHouse.CancelCommoditiesPurchase(item.itemID)
 		if popup.ticker then popup.ticker:Cancel() end
-		popup.frame:Hide()
+		popup:Hide()
 		f:UnregisterEvent("COMMODITY_PRICE_UPDATED")
 		f:UnregisterEvent("COMMODITY_PURCHASE_FAILED")
 		f:UnregisterEvent("COMMODITY_PURCHASE_SUCCEEDED")
 		f:UnregisterEvent("AUCTION_HOUSE_SHOW_ERROR")
-		AceGUI:Release(popup)
 		pendingPurchase = nil
 		buyWidget:SetDisabled(false)
 	end)
@@ -285,15 +280,19 @@ local function UpdatePurchasePopup(pricePer, total)
 	local playerMoney = GetMoney()
 	if playerMoney < total then
 		pendingPurchase.popup.text:SetText(L["vendorCraftShopperMissingGold"]:format(GetMoneyString(total - playerMoney)))
-		pendingPurchase.popup.buyBtn.frame:Hide()
+		pendingPurchase.popup.buyBtn:Hide()
 		pendingPurchase.popup.cancelBtn:SetText(CLOSE)
-		pendingPurchase.popup.cancelBtn:SetRelativeWidth(1)
+		pendingPurchase.popup.cancelBtn:ClearAllPoints()
+		pendingPurchase.popup.cancelBtn:SetPoint("BOTTOM", 0, 10)
 	else
 		pendingPurchase.popup.text:SetText(("%s x%d\n%s"):format(pendingPurchase.item.name, pendingPurchase.item.missing, GetMoneyString(total)))
-		pendingPurchase.popup.buyBtn:SetDisabled(false)
-		pendingPurchase.popup.buyBtn.frame:Show()
+		pendingPurchase.popup.buyBtn:Show()
+		pendingPurchase.popup.buyBtn:Enable()
+		pendingPurchase.popup.buyBtn:ClearAllPoints()
+		pendingPurchase.popup.buyBtn:SetPoint("BOTTOMLEFT", 10, 10)
 		pendingPurchase.popup.cancelBtn:SetText(L["vendorCraftShopperCancel"])
-		pendingPurchase.popup.cancelBtn:SetRelativeWidth(0.5)
+		pendingPurchase.popup.cancelBtn:ClearAllPoints()
+		pendingPurchase.popup.cancelBtn:SetPoint("BOTTOMRIGHT", -10, 10)
 	end
 end
 
@@ -561,20 +560,22 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2)
 			f:UnregisterEvent("COMMODITY_PURCHASE_SUCCEEDED")
 			f:UnregisterEvent("AUCTION_HOUSE_SHOW_ERROR")
 		end
-       elseif event == "COMMODITY_PRICE_UPDATED" then
-               UpdatePurchasePopup(arg1, arg2)
-       elseif event == "COMMODITY_PURCHASE_FAILED" or (event == "AUCTION_HOUSE_SHOW_ERROR" and purchaseErrorCodes[arg1]) then
-               if pendingPurchase then
-                       f:UnregisterEvent("COMMODITY_PRICE_UPDATED")
-                       f:UnregisterEvent("COMMODITY_PURCHASE_FAILED")
-                       f:UnregisterEvent("COMMODITY_PURCHASE_SUCCEEDED")
-                       f:UnregisterEvent("AUCTION_HOUSE_SHOW_ERROR")
+	elseif event == "COMMODITY_PRICE_UPDATED" then
+		UpdatePurchasePopup(arg1, arg2)
+	elseif event == "COMMODITY_PURCHASE_FAILED" or (event == "AUCTION_HOUSE_SHOW_ERROR" and purchaseErrorCodes[arg1]) then
+		if pendingPurchase then
+			f:UnregisterEvent("COMMODITY_PRICE_UPDATED")
+			f:UnregisterEvent("COMMODITY_PURCHASE_FAILED")
+			f:UnregisterEvent("COMMODITY_PURCHASE_SUCCEEDED")
+			f:UnregisterEvent("AUCTION_HOUSE_SHOW_ERROR")
 			if pendingPurchase.popup.ticker then pendingPurchase.popup.ticker:Cancel() end
 			if pendingPurchase.popup.spinner then pendingPurchase.popup.spinner:Hide() end
 			pendingPurchase.popup.text:SetText(L["vendorCraftShopperPurchaseFailed"])
 			pendingPurchase.popup.timerLabel:SetText("")
-			pendingPurchase.popup.buyBtn.frame:Hide()
+			pendingPurchase.popup.buyBtn:Hide()
 			pendingPurchase.popup.cancelBtn:SetText(OKAY)
+			pendingPurchase.popup.cancelBtn:ClearAllPoints()
+			pendingPurchase.popup.cancelBtn:SetPoint("BOTTOM", 0, 10)
 			pendingPurchase.buyWidget:SetDisabled(false)
 		end
 	elseif event == "COMMODITY_PURCHASE_SUCCEEDED" then
