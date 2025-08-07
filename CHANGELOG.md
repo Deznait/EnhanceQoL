@@ -4,8 +4,10 @@
 
 ### 🐛 Fixed
 
-- Missing Hearthstone **P.O.S.T. Master's Express Hearthstone**
-- Missing Hearthstone **Cosmic Hearthstone**
+- Drag-and-drop in **Cast Tracker** / **Aura Tracker** no longer clears the assigned sounds.
+- **P.O.S.T. Master’s Express Hearthstone** was missing from the hearthstone list.
+- **Cosmic Hearthstone** was missing from the hearthstone list.
+- Party-leader icon now disappears correctly after leaving the group.
 
 ---
 
