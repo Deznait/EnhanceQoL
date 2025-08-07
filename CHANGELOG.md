@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.1.1] – 2025-08-06
+
+### 🐛 Fixed
+
+- Overlapping elements when **Mythic+ Rating** and **Dungeon Teleport** is enableb
+
+---
+
 ## [4.1.0] – 2025-08-06
 
 ### ✨ Added

@@ -19,6 +19,8 @@ local selectedMapId
 local faction = select(2, UnitFactionGroup("player"))
 local checkCooldown
 
+local minFrameSize = 0
+
 addon.functions.InitDBValue("teleportFavorites", {})
 
 local GetItemCooldown = C_Item.GetItemCooldown
@@ -133,6 +135,7 @@ local parentFrame = PVEFrame
 local doAfterCombat = false
 
 local function SafeSetSize(frame, width, height)
+	if not frame then return end
 	if InCombatLockdown() then
 		doAfterCombat = true
 	else
@@ -154,7 +157,8 @@ local title = frameAnchor:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge"
 title:SetPoint("TOP", 0, -10)
 local mSeasonTitle = MYTHIC_DUNGEON_SEASON
 title:SetFormattedText(string.gsub(mSeasonTitle, "%s*%b()", ""))
-SafeSetSize(frameAnchor, title:GetStringWidth() + 20, 170)
+minFrameSize = max(title:GetStringWidth() + 20, 205)
+SafeSetSize(frameAnchor, minFrameSize, 205)
 
 -- Compendium
 local frameAnchorCompendium = CreateFrame("Frame", "DungeonTeleportFrameCompendium", parentFrame, "BackdropTemplate")
@@ -233,7 +237,7 @@ local function CreatePortalButtonsWithCooldown(frame, spells)
 	local totalButtons = #sortedSpells
 	local buttonsPerRow = math.ceil(totalButtons / 2)
 	local totalButtonWidth = (buttonSize * buttonsPerRow) + (spacing * (buttonsPerRow - 1))
-	local frameWidth = math.max(totalButtonWidth + 40, title:GetStringWidth() + 20)
+	local frameWidth = math.max(totalButtonWidth + 40, title:GetStringWidth() + 20, minFrameSize)
 	local initialSpacing = math.max(0, (frameWidth - totalButtonWidth) / 2)
 
 	-- Dynamische Höhe
@@ -745,7 +749,8 @@ local function CreateRioScore()
 		titleScore:SetFormattedText(DUNGEON_SCORE)
 		titleScore:SetPoint("TOP", 0, -10)
 
-		SafeSetSize(frameAnchorScore, max(titleScore:GetStringWidth() + 20, 200), 170)
+		minFrameSize = max(titleScore:GetStringWidth() + 20, title:GetStringWidth() + 20, 205, minFrameSize)
+		SafeSetSize(frameAnchorScore, minFrameSize, 170)
 		if addon.db["teleportFrame"] then
 			frameAnchorScore:SetPoint("TOPLEFT", DungeonTeleportFrame, "BOTTOMLEFT", 0, 0)
 		elseif nil ~= RaiderIO_ProfileTooltip then
@@ -754,7 +759,7 @@ local function CreateRioScore()
 		else
 			frameAnchorScore:SetPoint("TOPLEFT", parentFrame, "TOPRIGHT", 0, 0)
 		end
-		SafeSetSize(frameAnchor, max(title:GetStringWidth() + 20, 205), 170)
+		SafeSetSize(frameAnchor, minFrameSize, 170)
 
 		local ratingInfo = {}
 
@@ -843,8 +848,9 @@ local function CreateRioScore()
 			end
 
 			local _, _, _, _, lp = lastElement:GetPoint()
-			SafeSetSize(frameAnchorScore, max(nWidth + 20, 205), max(lp * -1 + 30, 170))
-			SafeSetSize(frameAnchor, max(title:GetStringWidth() + 20, nWidth + 20, 205), 170)
+			minFrameSize = max(nWidth + 20, 205, title:GetStringWidth() + 20, minFrameSize)
+			SafeSetSize(frameAnchorScore, minFrameSize, max(lp * -1 + 30, 170))
+			SafeSetSize(frameAnchor, minFrameSize, 170)
 		end
 	end
 end
