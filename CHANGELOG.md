@@ -3,20 +3,19 @@
 ## [4.2.0] – 2025-08-07
 
 ### ✨ Added
-- **CooldownNotfiy** now tracks Trinkets
-- Option to hide zone change text
+- **Cooldown Notify** can now track on-use **trinket** cooldowns.
+- Option to hide zone-change text.
 
 ### 🔄 Changed
-- Performance improvements in **Aura Tracker**
-- Performance improvements in **Cast Tracker**
-- Performance improvements in **Mouse Trail**
+- Performance improvements in **Aura Tracker**.
+- Performance improvements in **Cast Tracker**.
+- Performance improvements in **Mouse Trail**.
 
 ### 🐛 Fixed
-
 - Drag-and-drop in **Cast Tracker** / **Aura Tracker** no longer clears the assigned sounds.
 - **P.O.S.T. Master’s Express Hearthstone** was missing from the hearthstone list.
 - **Cosmic Hearthstone** was missing from the hearthstone list.
-- Party-leader icon now disappears correctly after leaving the group.
+- Party leader icon now disappears correctly after leaving the group.
 
 ---
 
