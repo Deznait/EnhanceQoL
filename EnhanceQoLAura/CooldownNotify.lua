@@ -275,6 +275,18 @@ local function applyLockState()
 	end
 end
 
+-- Throttle trinket cooldown checks to coalesce rapid events
+local trinketUpdatePending = false
+local function scheduleTrinketUpdate()
+	if trinketUpdatePending then return end
+	trinketUpdatePending = true
+	C_Timer.After(0.10, function()
+		trinketUpdatePending = false
+		CN:SPELL_UPDATE_COOLDOWN(-13)
+		CN:SPELL_UPDATE_COOLDOWN(-14)
+	end)
+end
+
 local function updateEventRegistration()
 	local anyEnabled
 	for _, enabled in pairs(addon.db.cooldownNotifyEnabled or {}) do
@@ -288,12 +300,16 @@ local function updateEventRegistration()
 			DCP:RegisterEvent("SPELL_UPDATE_COOLDOWN")
 			DCP:RegisterEvent("PLAYER_LOGIN")
 			DCP:RegisterEvent("SPELLS_CHANGED")
+			DCP:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+			DCP:RegisterEvent("BAG_UPDATE_COOLDOWN")
 		end
 	else
 		if DCP:IsEventRegistered("SPELL_UPDATE_COOLDOWN") then
 			DCP:UnregisterEvent("SPELL_UPDATE_COOLDOWN")
 			DCP:UnregisterEvent("PLAYER_LOGIN")
 			DCP:UnregisterEvent("SPELLS_CHANGED")
+			DCP:UnregisterEvent("PLAYER_EQUIPMENT_CHANGED")
+			DCP:UnregisterEvent("BAG_UPDATE_COOLDOWN")
 		end
 	end
 end
@@ -409,6 +425,12 @@ function CN:PLAYER_LOGIN()
 end
 
 function CN:SPELLS_CHANGED() BuildPlayerSpellList() end
+
+function CN:PLAYER_EQUIPMENT_CHANGED(slot)
+	if slot == 13 or slot == 14 then scheduleTrinketUpdate() end
+end
+
+function CN:BAG_UPDATE_COOLDOWN() scheduleTrinketUpdate() end
 
 CN.frame = DCP
 
