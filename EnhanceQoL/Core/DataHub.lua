@@ -8,6 +8,8 @@ local driver = CreateFrame("Frame")
 DataHub.streams = {}
 DataHub.eventMap = {}
 DataHub.polling = {}
+DataHub.eventsByStream = {}
+DataHub.throttleTimers = {}
 
 local tinsert = table.insert
 local tremove = table.remove
@@ -72,13 +74,14 @@ function DataHub:RegisterStream(name, opts)
 		snapshot = {},
 		pool = {},
 		subscribers = {},
-		events = {},
 		update = opts and opts.update,
 		throttle = opts and opts.throttle or 0.1,
+		throttleKey = opts and opts.throttleKey or name,
 		interval = opts and opts.interval,
 		elapsed = 0,
 	}
 	self.streams[name] = stream
+	self.eventsByStream[name] = {}
 
 	if opts and opts.events then
 		for _, event in ipairs(opts.events) do
@@ -99,8 +102,12 @@ function DataHub:UnregisterStream(name)
 	local stream = self.streams[name]
 	if not stream then return end
 
-	for event in pairs(stream.events) do
-		self:UnregisterEvent(stream, event)
+	local events = self.eventsByStream[name]
+	if events then
+		for event in pairs(events) do
+			self:UnregisterEvent(stream, event)
+		end
+		self.eventsByStream[name] = nil
 	end
 
 	self.polling[name] = nil
@@ -111,14 +118,15 @@ function DataHub:UnregisterStream(name)
 end
 
 function DataHub:RegisterEvent(stream, event)
-	stream.events[event] = true
+	self.eventsByStream[stream.name][event] = true
 	self.eventMap[event] = self.eventMap[event] or {}
 	self.eventMap[event][stream] = true
 	eventFrame:RegisterEvent(event)
 end
 
 function DataHub:UnregisterEvent(stream, event)
-	stream.events[event] = nil
+	local events = self.eventsByStream[stream.name]
+	if events then events[event] = nil end
 	local map = self.eventMap[event]
 	if map then
 		map[stream] = nil
@@ -129,11 +137,14 @@ function DataHub:UnregisterEvent(stream, event)
 	end
 end
 
-function DataHub:RequestUpdate(name)
+function DataHub:RequestUpdate(name, throttleKey)
 	local stream = type(name) == "table" and name or self.streams[name]
-	if not stream or stream.pending then return end
+	if not stream then return end
+	local key = throttleKey or stream.throttleKey or stream.name
+	if self.throttleTimers[key] then return end
 	stream.pending = true
-	C_Timer.After(stream.throttle, function()
+	self.throttleTimers[key] = C_Timer.NewTimer(stream.throttle, function()
+		self.throttleTimers[key] = nil
 		stream.pending = nil
 		runUpdate(stream)
 	end)
