@@ -120,13 +120,12 @@ function DataHub:RegisterStream(name, opts)
 			opts.update = function(stream)
 				local ctx = {
 					acquireRow = function() return acquireRow(stream) end,
+					rows = stream.snapshot,
 					now = GetTime(),
 				}
-				local ok, out = pcall(provider.collect, ctx)
-				if ok and out and out.rows then
-					-- Use the provider's row set (rows are acquired from this stream's pool)
-					stream.snapshot = out.rows
-				else
+				local ok = pcall(provider.collect, ctx)
+				stream.snapshot = ctx.rows
+				if not ok then
 					-- keep empty snapshot if collect failed
 					stream.snapshot = stream.snapshot or {}
 				end

@@ -11,7 +11,7 @@ EnhanceQoL includes a **DataPanel** system backed by a DataHub to share informat
 - `title` – human readable name shown to users.
 - `columns` – list of column definitions (each with at least a `key` and `title`).
 - `poll` – number of seconds between calls to `collect`.
-- `collect` – function that populates rows for the snapshot.
+- `collect` – function that populates `ctx.rows` for the snapshot (returns nothing).
 
 Optional fields:
 
@@ -34,7 +34,7 @@ EnhanceQoL.DataHub.RegisterStream(provider)
 
 1. Copy `Streams/Template.lua` to a new file inside the `Streams/` directory and rename it.
 2. Fill in the required fields with values appropriate for your data.
-3. Implement the `collect` function to gather data and populate rows.
+3. Implement the `collect` function to gather data and populate `ctx.rows` using `ctx.acquireRow`.
 4. Optionally add `filter`, `actions`, or `settings`.
 5. Register the provider using `EnhanceQoL.DataHub.RegisterStream` during addon startup.
 

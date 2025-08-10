@@ -15,7 +15,7 @@ local provider = {
 	},
 	poll = 60,
 	collect = function(ctx)
-		local rows = {}
+		local rows = ctx.rows
 		for i = 1, GetNumFactions() do
 			local name, _, standingID, barMin, barMax, barValue, _, _, isHeader = GetFactionInfo(i)
 			if name and not isHeader then
@@ -25,10 +25,9 @@ local provider = {
 				local pct = 0
 				if barMax > barMin then pct = floor((barValue - barMin) / (barMax - barMin) * 100) end
 				row.percent = pct
-				table.insert(rows, row)
+				rows[#rows + 1] = row
 			end
 		end
-		return { rows = rows }
 	end,
 }
 

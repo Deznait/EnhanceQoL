@@ -15,7 +15,7 @@ local provider = {
 	},
 	poll = 30,
 	collect = function(ctx)
-		local rows = {}
+		local rows = ctx.rows
 		for i = 1, GetNumFriends() do
 			local info = GetFriendInfoByIndex(i)
 			if info and info.name then
@@ -35,10 +35,9 @@ local provider = {
 					status = "Offline"
 				end
 				row.status = status
-				table.insert(rows, row)
+				rows[#rows + 1] = row
 			end
 		end
-		return { rows = rows }
 	end,
 }
 

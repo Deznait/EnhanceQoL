@@ -12,14 +12,14 @@ local provider = {
 		{ key = "name", title = "Name" }, -- column showing a name
 		{ key = "value", title = "Value" }, -- column showing a value
 	},
-	events = { -- required: register events that trigger updates
-		PLAYER_ENTERING_WORLD = function(stream)
-			local rows = {
-				{ name = "Example", value = 42 },
-			}
-			EnhanceQoL.DataHub.Publish(stream, rows)
-		end,
-	},
+	poll = 30, -- required: seconds between collect calls
+	collect = function(ctx) -- required: gather data and populate ctx.rows
+		local rows = ctx.rows
+		local row = ctx.acquireRow()
+		row.name = "Example"
+		row.value = 42
+		rows[#rows + 1] = row
+	end,
 	filter = function(row) -- optional: return false to drop a row
 		return true
 	end,
