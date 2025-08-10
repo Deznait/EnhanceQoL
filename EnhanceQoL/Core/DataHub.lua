@@ -67,14 +67,16 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
 	end
 end)
 
+local function driverUpdate()
+	local now = GetTime()
+	for _, stream in pairs(DataHub.polling) do
+		if not stream.nextPoll or now >= stream.nextPoll then DataHub:RequestUpdate(stream.name) end
+	end
+end
+
 function DataHub:UpdateDriver()
 	if next(self.polling) then
-		driver:SetScript("OnUpdate", function()
-			local now = GetTime()
-			for _, stream in pairs(DataHub.polling) do
-				if not stream.nextPoll or now >= stream.nextPoll then DataHub:RequestUpdate(stream.name) end
-			end
-		end)
+		driver:SetScript("OnUpdate", driverUpdate)
 	else
 		driver:SetScript("OnUpdate", nil)
 	end
