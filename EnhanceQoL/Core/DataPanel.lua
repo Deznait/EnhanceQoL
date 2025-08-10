@@ -250,30 +250,6 @@ function DataPanel.Delete(id)
 	if addon.db and addon.db.dataPanels then addon.db.dataPanels[id] = nil end
 end
 
-function DataPanel.SlashHandler(msg)
-	local cmd, rest = msg:match("^(%S*)%s*(.-)$")
-	if cmd == "create" then
-		local id, w, h = rest:match("^(%S+)%s*(%d*)%s*(%d*)")
-		if id then
-			local panel = DataPanel.Create(id)
-			if w ~= "" and h ~= "" then panel.frame:SetSize(tonumber(w), tonumber(h)) end
-		end
-	elseif cmd == "add" then
-		local id, stream = rest:match("^(%S+)%s+(%S+)$")
-		if id and stream then
-			local panel = DataPanel.Create(id)
-			panel:AddStream(stream)
-		end
-	elseif cmd == "remove" then
-		local id, stream = rest:match("^(%S+)%s+(%S+)$")
-		if id and stream and panels[id] then panels[id]:RemoveStream(stream) end
-	else
-		print("/eqolpanel create <id> [width] [height]")
-		print("/eqolpanel add <id> <stream>")
-		print("/eqolpanel remove <id> <stream>")
-	end
-end
-
 local initFrame = CreateFrame("Frame")
 initFrame:RegisterEvent("PLAYER_LOGIN")
 initFrame:SetScript("OnEvent", function(self)

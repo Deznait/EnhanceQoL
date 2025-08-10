@@ -3009,6 +3009,7 @@ local function buildDatapanelFrame(container)
 		end)
 		groupPanel:AddChild(removeStream)
 	end
+	scroll:DoLayout()
 end
 
 local function updateBankButtonInfo()
@@ -5633,6 +5634,3 @@ end
 
 registerEvents(frameLoad)
 frameLoad:SetScript("OnEvent", eventHandler)
-
-SLASH_EQOLPANEL1 = "/eqolpanel"
-SlashCmdList.EQOLPANEL = function(msg) EnhanceQoL.DataPanel.SlashHandler(msg or "") end
