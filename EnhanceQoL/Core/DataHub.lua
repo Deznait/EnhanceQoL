@@ -5,9 +5,7 @@ local DataHub = addon.DataHub
 DataHub.Debug = DataHub.Debug or false
 
 local function debugPrint(...)
-        if DataHub.Debug then
-                print("[DataHub]", ...)
-        end
+	if DataHub.Debug then print("[DataHub]", ...) end
 end
 
 local eventFrame = CreateFrame("Frame")
@@ -19,14 +17,14 @@ DataHub.polling = {}
 DataHub.eventsByStream = {}
 DataHub.throttleTimers = {}
 
-local tinsert = table.insert
-local tremove = table.remove
 local ipairs = ipairs
 local pairs = pairs
 local GetTime = GetTime
 
 local function acquireRow(stream)
-	local row = tremove(stream.pool)
+	local pool = stream.pool
+	local row = pool[#pool]
+	pool[#pool] = nil
 	if row then
 		wipe(row)
 	else
@@ -44,16 +42,16 @@ local function releaseRows(stream)
 end
 
 local function runUpdate(stream)
-        debugPrint("runUpdate", stream.name)
-        releaseRows(stream)
-        if stream.update then stream.update(stream) end
-        if stream.interval and stream.interval > 0 then stream.nextPoll = GetTime() + stream.interval end
-        if stream.subscribers then
-                debugPrint("publish", stream.name)
-                for cb in pairs(stream.subscribers) do
-                        pcall(cb, stream.snapshot, stream.name)
-                end
-        end
+	debugPrint("runUpdate", stream.name)
+	releaseRows(stream)
+	if stream.update then stream.update(stream) end
+	if stream.interval and stream.interval > 0 then stream.nextPoll = GetTime() + stream.interval end
+	if stream.subscribers then
+		debugPrint("publish", stream.name)
+		for cb in pairs(stream.subscribers) do
+			pcall(cb, stream.snapshot, stream.name)
+		end
+	end
 end
 
 eventFrame:SetScript("OnEvent", function(_, event, ...)
@@ -232,20 +230,20 @@ function DataHub:RequestUpdate(name, throttleKey)
 end
 
 function DataHub:Publish(name, payload)
-        local stream = type(name) == "table" and name or self.streams[name]
-        if not stream or not stream.subscribers then return end
-        local key = stream.throttleKey or stream.name
-        local timer = self.throttleTimers[key]
-        if timer then
-                timer:Cancel()
-                self.throttleTimers[key] = nil
-        end
-        stream.pending = nil
-        stream.snapshot = payload
-        debugPrint("publish", stream.name)
-        for cb in pairs(stream.subscribers) do
-                pcall(cb, payload, stream.name)
-        end
+	local stream = type(name) == "table" and name or self.streams[name]
+	if not stream or not stream.subscribers then return end
+	local key = stream.throttleKey or stream.name
+	local timer = self.throttleTimers[key]
+	if timer then
+		timer:Cancel()
+		self.throttleTimers[key] = nil
+	end
+	stream.pending = nil
+	stream.snapshot = payload
+	debugPrint("publish", stream.name)
+	for cb in pairs(stream.subscribers) do
+		pcall(cb, payload, stream.name)
+	end
 end
 
 function DataHub:AcquireRow(name)
@@ -260,14 +258,14 @@ function DataHub:GetSnapshot(name)
 end
 
 function DataHub:Subscribe(name, callback)
-        debugPrint("subscribe", name)
-        local stream = self.streams[name]
-        if not stream or type(callback) ~= "function" then return end
-        stream.subscribers = stream.subscribers or {}
-        local isFirst = not next(stream.subscribers)
-        stream.subscribers[callback] = true
-        if isFirst and stream.interval and stream.interval > 0 then
-                self.polling[name] = stream
+	debugPrint("subscribe", name)
+	local stream = self.streams[name]
+	if not stream or type(callback) ~= "function" then return end
+	stream.subscribers = stream.subscribers or {}
+	local isFirst = not next(stream.subscribers)
+	stream.subscribers[callback] = true
+	if isFirst and stream.interval and stream.interval > 0 then
+		self.polling[name] = stream
 		self:UpdateDriver()
 	end
 	self:RequestUpdate(name)
