@@ -229,4 +229,23 @@ function DataPanel.SlashHandler(msg)
 	end
 end
 
+local initFrame = CreateFrame("Frame")
+initFrame:RegisterEvent("PLAYER_LOGIN")
+initFrame:SetScript("OnEvent", function(self)
+	addon.db = addon.db or {}
+	local panelsDB = addon.db.dataPanels or {}
+	addon.db.dataPanels = panelsDB
+
+	for id, info in pairs(panelsDB) do
+		local panel = DataPanel.Create(id)
+		if info.streams then
+			for _, streamName in ipairs(info.streams) do
+				panel:AddStream(streamName)
+			end
+		end
+	end
+
+	self:UnregisterEvent("PLAYER_LOGIN")
+end)
+
 return DataPanel
