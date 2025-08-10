@@ -849,7 +849,7 @@ local function setIlvlText(element, slot)
 	end
 end
 
-local function IsIndestructible(link)
+function addon.functions.IsIndestructible(link)
 	local itemParts = { strsplit(":", link) }
 	for i = 13, #itemParts do
 		local bonusID = tonumber(itemParts[i])
@@ -869,7 +869,7 @@ local function calculateDurability()
 			eItem:ContinueOnItemLoad(function()
 				local link = eItem:GetItemLink()
 				if link then
-					if IsIndestructible(link) == false then
+					if addon.functions.IsIndestructible(link) == false then
 						local current, maximum = GetInventoryItemDurability(key)
 						if nil ~= current then
 							local fDur = tonumber(string.format("%." .. 0 .. "f", current * 100 / maximum))
