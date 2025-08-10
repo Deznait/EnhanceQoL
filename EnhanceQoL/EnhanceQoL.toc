@@ -44,6 +44,7 @@ Sounds\sounds.lua
 General\functions.lua
 Core\DataHub.lua
 Core\DataHubUI.lua
+Core\Streams\Streams.xml
 EnhanceQoL.lua
 Submodules\GemHelper.lua
 Submodules\ChatIM\UI.lua

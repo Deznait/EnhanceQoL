@@ -69,24 +69,77 @@ function DataHub:UpdateDriver()
 end
 
 function DataHub:RegisterStream(name, opts)
-	if self.streams[name] then return self.streams[name] end
+	-- Be tolerant: allow either (name, opts) **or** a provider table (dot/colon safe)
+	local hub = DataHub
+	local provider
+
+	-- Case A: called as DataHub.RegisterStream(provider)
+	if type(name) == "table" and opts == nil then
+		provider = name
+		name = provider.id or provider.name or provider.title
+		opts = {}
+	end
+	-- Case B: accidentally called with dot so that 'self' is actually the provider
+	if type(self) == "table" and self ~= hub and self.id and name == nil and opts == nil then
+		provider = self
+		name = provider.id or provider.name or provider.title
+		opts = {}
+	end
+
+	assert(name, "RegisterStream: missing stream name (or provider.id)")
+	opts = opts or {}
+
+	-- Map provider fields (poll/collect) to hub opts/update
+	if provider then
+		-- poll mapping
+		local p = provider.poll
+		if type(p) == "number" then
+			opts.interval = opts.interval or p
+		elseif type(p) == "table" then
+			opts.interval    = opts.interval    or p.interval
+			opts.events      = opts.events      or p.events
+			opts.throttleKey = opts.throttleKey or p.throttleKey
+			opts.throttle    = opts.throttle    or p.throttleDelay or p.delay
+		end
+		-- wrap collect into update if present
+		if not opts.update and type(provider.collect) == "function" then
+			opts.update = function(stream)
+				local ctx = {
+					acquireRow = function() return acquireRow(stream) end,
+					now = GetTime(),
+				}
+				local ok, out = pcall(provider.collect, ctx)
+				if ok and out and out.rows then
+					-- Use the provider's row set (rows are acquired from this stream's pool)
+					stream.snapshot = out.rows
+				else
+					-- keep empty snapshot if collect failed
+					stream.snapshot = stream.snapshot or {}
+				end
+			end
+		end
+	end
+
+	-- Create/return stream
+	if hub.streams[name] then return hub.streams[name] end
 	local stream = {
 		name = name,
 		snapshot = {},
 		pool = {},
 		subscribers = {},
 		update = opts and opts.update,
-		throttle = opts and opts.throttle or 0.1,
-		throttleKey = opts and opts.throttleKey or name,
+		throttle = (opts and opts.throttle) or 0.1,
+		throttleKey = (opts and opts.throttleKey) or name,
 		interval = opts and opts.interval,
 		nextPoll = GetTime(),
+		meta = provider, -- keep original provider for UI/metadata
 	}
-	self.streams[name] = stream
-	self.eventsByStream[name] = {}
+	hub.streams[name] = stream
+	hub.eventsByStream[name] = {}
 
 	if opts and opts.events then
 		for _, event in ipairs(opts.events) do
-			self:RegisterEvent(stream, event)
+			hub:RegisterEvent(stream, event)
 		end
 	end
 
