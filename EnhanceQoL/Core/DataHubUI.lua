@@ -106,7 +106,7 @@ function UI:RefreshTabs()
 	end)
 	for i, name in ipairs(names) do
 		local stream = DataHub.streams[name]
-		local tab = CreateFrame("Button", self.frame:GetName() .. "Tab" .. i, self.frame, "TabButtonTemplate")
+		local tab = CreateFrame("Button", self.frame:GetName() .. "Tab" .. i, self.frame, "PanelTabButtonTemplate")
 		tab:SetText(stream.title or name)
 		tab:SetID(i)
 		tab.streamName = name
