@@ -45,9 +45,10 @@ end
 
 local function releasePlayers(players)
 	local pool = cm.playerPool
-	for guid, player in pairs(players) do
+	for guid in pairs(players) do
+		local player = players[guid]
 		wipe(player)
-		table.insert(pool, player)
+		pool[#pool + 1] = player
 		players[guid] = nil
 	end
 end
