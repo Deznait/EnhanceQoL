@@ -16,7 +16,7 @@ local function ensureDB()
 	db.hideIcon = db.hideIcon or false
 end
 local function RestorePosition(frame)
-	if db.point and db.x and addon.db.y then
+	if db.point and db.x and db.y then
 		frame:ClearAllPoints()
 		frame:SetPoint(db.point, UIParent, db.point, db.x, db.y)
 	end
@@ -29,7 +29,7 @@ local function createAceWindow()
 		return
 	end
 	ensureDB()
-	local frame = AceGUI:Create("Frame")
+	local frame = AceGUI:Create("Window")
 	aceWindow = frame.frame
 	frame:SetTitle(GAMEMENU_OPTIONS)
 	frame:SetWidth(300)
@@ -93,12 +93,12 @@ local function GetCurrentTalents(stream)
 	local prefix = db.prefix ~= "" and (db.prefix .. " ") or ""
 	local icon = ""
 	if not db.hideIcon then
-		local size = db.fontSize or 14
-		icon = ("|TInterface\\Minimap\\Tracking\\Target:%d:%d:0:0|t "):format(size, size)
+		local size = db and db.fontSize or 14
+		icon = ("|TInterface\\Addons\\EnhanceQoL\\Icons\\Talents:%d:%d:0:0|t "):format(size, size)
 	end
 	stream.snapshot.text = icon .. prefix .. name
 	stream.snapshot.fontSize = db.fontSize
-	stream.snapshot.tooltip = L["Right-Click for options"]
+	if not stream.snapshot.tooltip then stream.snapshot.tooltip = L["Right-Click for options"] end
 end
 
 provider = {

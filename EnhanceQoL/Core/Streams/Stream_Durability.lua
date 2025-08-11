@@ -1,5 +1,61 @@
 -- luacheck: globals EnhanceQoL INVSLOT_HEAD INVSLOT_SHOULDER INVSLOT_CHEST INVSLOT_WAIST INVSLOT_LEGS INVSLOT_FEET INVSLOT_WRIST INVSLOT_HAND INVSLOT_BACK INVSLOT_MAINHAND INVSLOT_OFFHAND HEADSLOT SHOULDERSLOT CHESTSLOT WAISTSLOT LEGSLOT FEETSLOT WRISTSLOT HANDSSLOT BACKSLOT MAINHANDSLOT SECONDARYHANDSLOT
 local addonName, addon = ...
+
+local L = addon.L
+
+local AceGUI = addon.AceGUI
+local db
+local stream
+
+local function ensureDB()
+	addon.db.datapanel = addon.db.datapanel or {}
+	addon.db.datapanel.durability = addon.db.datapanel.durability or {}
+	db = addon.db.datapanel.durability
+	db.fontSize = db.fontSize or 13
+end
+
+local function RestorePosition(frame)
+	if db.point and db.x and db.y then
+		frame:ClearAllPoints()
+		frame:SetPoint(db.point, UIParent, db.point, db.x, db.y)
+	end
+end
+
+local aceWindow
+local function createAceWindow()
+	if aceWindow then
+		aceWindow:Show()
+		return
+	end
+	ensureDB()
+	local frame = AceGUI:Create("Window")
+	aceWindow = frame.frame
+	frame:SetTitle(GAMEMENU_OPTIONS)
+	frame:SetWidth(300)
+	frame:SetHeight(200)
+	frame:SetLayout("List")
+
+	frame.frame:SetScript("OnShow", function(self) RestorePosition(self) end)
+	frame.frame:SetScript("OnHide", function(self)
+		local point, _, _, xOfs, yOfs = self:GetPoint()
+		db.point = point
+		db.x = xOfs
+		db.y = yOfs
+	end)
+
+	local fontSize = AceGUI:Create("Slider")
+	fontSize:SetLabel("Font size")
+	fontSize:SetSliderValues(8, 32, 1)
+	fontSize:SetValue(db.fontSize)
+	fontSize:SetCallback("OnValueChanged", function(_, _, val)
+		db.fontSize = val
+		addon.DataHub:RequestUpdate(stream)
+	end)
+	frame:AddChild(fontSize)
+
+	frame.frame:Show()
+end
+
 local floor = math.floor
 local GetInventoryItemDurability = GetInventoryItemDurability
 
@@ -36,10 +92,10 @@ end
 
 -- Feste Reihenfolge für den Tooltip (anpassen, wenn du willst)
 local slotOrder = { 1, 2, 3, 15, 5, 9, 10, 6, 7, 8, 11, 12, 13, 14, 16, 17 } -- Head, Neck, Shoulder, Cloak, ...
-
+local lines = {}
 local function calculateDurability(stream)
 	local maxDur, currentDura, critDura = 0, 0, 0
-	local lines = {}
+	wipe(lines)
 
 	for _, slot in ipairs(slotOrder) do
 		local name = itemSlots[slot]
@@ -49,7 +105,7 @@ local function calculateDurability(stream)
 			maxDur = maxDur + max
 			currentDura = currentDura + cur
 			if fDur < 50 then critDura = critDura + 1 end
-			lines[#lines + 1] = string.format("%s: |cff%s%d|r%%", name, getPercentColor(fDur), fDur)
+			lines[#lines + 1] = { slot = name, dur = string.format("|cff%s%d%%|r", getPercentColor(fDur), fDur) }
 		end
 	end
 
@@ -59,13 +115,12 @@ local function calculateDurability(stream)
 
 	local durValue = (currentDura / maxDur) * 100
 	local color = getPercentColor(durValue)
-	local tooltipData = table.concat(lines, "\n")
 
 	local critDuraText = ""
 	if critDura > 0 then critDuraText = "|cffff0000" .. critDura .. "|r " .. ITEMS .. " < 50%" end
 
+	stream.snapshot.fontSize = db and db.fontSize or 13
 	stream.snapshot.text = ("|T136241:16|t |cff%s%.0f|r%% %s"):format(color, durValue, critDuraText)
-	stream.snapshot.tooltip = tooltipData
 end
 
 local provider = {
@@ -86,8 +141,32 @@ local provider = {
 		end,
 		PLAYER_LOGIN = function(stream) addon.DataHub:RequestUpdate(stream) end,
 	},
+	OnMouseEnter = function(b)
+		local tip = GameTooltip
+		tip:ClearLines()
+		tip:SetOwner(b, "ANCHOR_TOPLEFT")
+		for _, v in ipairs(lines) do
+			local r, g, b = NORMAL_FONT_COLOR:GetRGB()
+			tip:AddDoubleLine(v.slot, v.dur, r, g, b)
+		end
+		tip:AddLine(L["Right-Click for options"])
+		tip:Show()
+
+		local name = tip:GetName()
+		local left1 = _G[name .. "TextLeft1"]
+		local right1 = _G[name .. "TextRight1"]
+		if left1 then
+			left1:SetFontObject(GameTooltipText)
+			local r, g, b = NORMAL_FONT_COLOR:GetRGB()
+			left1:SetTextColor(r, g, b)
+		end
+		if right1 then right1:SetFontObject(GameTooltipText) end
+	end,
+	OnClick = function(_, btn)
+		if btn == "RightButton" then createAceWindow() end
+	end,
 }
 
-EnhanceQoL.DataHub.RegisterStream(provider)
+stream = EnhanceQoL.DataHub.RegisterStream(provider)
 
 return provider

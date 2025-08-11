@@ -5,14 +5,14 @@ local L = addon.L
 local AceGUI = addon.AceGUI
 local db
 local stream
-local provider
 
 local function ensureDB()
 	addon.db.datapanel = addon.db.datapanel or {}
-	addon.db.datapanel.gold = addon.db.datapanel.gold or {}
-	db = addon.db.datapanel.gold
+	addon.db.datapanel.difficulty = addon.db.datapanel.difficulty or {}
+	db = addon.db.datapanel.difficulty
 	db.fontSize = db.fontSize or 14
 end
+
 local function RestorePosition(frame)
 	if db.point and db.x and db.y then
 		frame:ClearAllPoints()
@@ -55,35 +55,46 @@ local function createAceWindow()
 	frame.frame:Show()
 end
 
-local floor = math.floor
-local GetMoney = GetMoney
+local I_DUNGEON = "|TInterface\\Addons\\EnhanceQoL\\Icons\\Dungeon:%d:%d:0:0|t"
+local I_RAID = "|TInterface\\Addons\\EnhanceQoL\\Icons\\Raid:14:14:0:0|t"
 
-local COPPER_PER_GOLD = 10000
-
-local function formatGoldString(copper)
-	local g = floor(copper / COPPER_PER_GOLD)
-	local s = floor((copper % COPPER_PER_GOLD) / 100)
-	local c = copper % 100
-	local gText = (BreakUpLargeNumbers and BreakUpLargeNumbers(g)) or tostring(g)
-	return gText, s, c
+local function getShortLabel(difficultyID)
+	if difficultyID == 1 or difficultyID == 3 or difficultyID == 4 or difficultyID == 14 or difficultyID == 33 or difficultyID == 150 then
+		return "NM"
+	elseif difficultyID == 2 or difficultyID == 5 or difficultyID == 6 or difficultyID == 15 or difficultyID == 205 or difficultyID == 230 then
+		return "HC"
+	elseif difficultyID == 16 or difficultyID == 23 then
+		return "M"
+	elseif difficultyID == 8 then
+		return "M+"
+	elseif difficultyID == 7 or difficultyID == 17 or difficultyID == 151 then
+		return "LFR"
+	elseif difficultyID == 24 then
+		return "TW"
+	end
+	return "NM"
 end
 
-local function checkMoney(stream)
-	local money = GetMoney() or 0
-	local gText, s, c = formatGoldString(money)
-	local size = db and db.fontSize or 12
+local function checkDifficulty(stream)
+	local dg = getShortLabel(GetDungeonDifficultyID())
+	local raid = getShortLabel(GetRaidDifficultyID())
+
+	local size = db and db.fontSize or 14
+	local iconD = (I_DUNGEON):format(size, size)
+	local iconR = (I_RAID):format(size, size)
 	stream.snapshot.fontSize = size
-	stream.snapshot.text = ("|TInterface\\MoneyFrame\\UI-GoldIcon:%d:%d:0:0|t %s"):format(size, size, gText)
+
+	stream.snapshot.text = I_DUNGEON .. " " .. dg .. " " .. I_RAID .. " " .. raid
 	if not stream.snapshot.tooltip then stream.snapshot.tooltip = L["Right-Click for options"] end
 end
 
 local provider = {
-	id = "gold",
+	id = "difficulty",
 	version = 1,
-	title = WORLD_QUEST_REWARD_FILTERS_GOLD,
-	update = checkMoney,
+	title = LFG_LIST_DIFFICULTY,
+	update = checkDifficulty,
 	events = {
-		PLAYER_MONEY = function(stream) addon.DataHub:RequestUpdate(stream) end,
+		PLAYER_DIFFICULTY_CHANGED = function(stream) addon.DataHub:RequestUpdate(stream) end,
 		PLAYER_LOGIN = function(stream) addon.DataHub:RequestUpdate(stream) end,
 	},
 	OnClick = function(_, btn)

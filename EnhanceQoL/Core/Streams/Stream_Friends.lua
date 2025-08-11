@@ -1,13 +1,70 @@
 -- luacheck: globals EnhanceQoL C_FriendList
 local addonName, addon = ...
+
+local L = addon.L
+
+local AceGUI = addon.AceGUI
+local db
+local stream
+
+local function ensureDB()
+	addon.db.datapanel = addon.db.datapanel or {}
+	addon.db.datapanel.friends = addon.db.datapanel.friends or {}
+	db = addon.db.datapanel.friends
+	db.fontSize = db.fontSize or 13
+end
+
+local function RestorePosition(frame)
+	if db.point and db.x and db.y then
+		frame:ClearAllPoints()
+		frame:SetPoint(db.point, UIParent, db.point, db.x, db.y)
+	end
+end
+
+local aceWindow
+local function createAceWindow()
+	if aceWindow then
+		aceWindow:Show()
+		return
+	end
+	ensureDB()
+	local frame = AceGUI:Create("Window")
+	aceWindow = frame.frame
+	frame:SetTitle(GAMEMENU_OPTIONS)
+	frame:SetWidth(300)
+	frame:SetHeight(200)
+	frame:SetLayout("List")
+
+	frame.frame:SetScript("OnShow", function(self) RestorePosition(self) end)
+	frame.frame:SetScript("OnHide", function(self)
+		local point, _, _, xOfs, yOfs = self:GetPoint()
+		db.point = point
+		db.x = xOfs
+		db.y = yOfs
+	end)
+
+	local fontSize = AceGUI:Create("Slider")
+	fontSize:SetLabel("Font size")
+	fontSize:SetSliderValues(8, 32, 1)
+	fontSize:SetValue(db.fontSize)
+	fontSize:SetCallback("OnValueChanged", function(_, _, val)
+		db.fontSize = val
+		addon.DataHub:RequestUpdate(stream)
+	end)
+	frame:AddChild(fontSize)
+
+	frame.frame:Show()
+end
+
 local GetNumFriends = C_FriendList.GetNumFriends
 local GetFriendInfoByIndex = C_FriendList.GetFriendInfoByIndex
 
 local myGuid = UnitGUID("player")
 
+local tooltipData = {}
 local function getFriends(stream)
 	local numFriendsOnline = 0
-	local tooltipData = {}
+	wipe(tooltipData)
 	local gMember = GetNumGuildMembers()
 	if gMember then
 		for i = 1, gMember do
@@ -41,9 +98,8 @@ local function getFriends(stream)
 			table.insert(tooltipData, unit)
 		end
 	end
+	stream.snapshot.fontSize = db and db.fontSize or 13
 	stream.snapshot.text = numFriendsOnline .. " " .. FRIENDS
-	stream.snapshot.tooltip = table.concat(tooltipData, "\n")
-	-- stream.snapshot.OnClick = function() ToggleCharacter("PaperDollFrame") end
 end
 
 local provider = {
@@ -57,8 +113,32 @@ local provider = {
 		BN_FRIEND_ACCOUNT_OFFLINE = function(stream) addon.DataHub:RequestUpdate(stream) end,
 		FRIENDLIST_UPDATE = function(stream) addon.DataHub:RequestUpdate(stream) end,
 	},
+	OnClick = function(_, btn)
+		if btn == "RightButton" then createAceWindow() end
+	end,
+	OnMouseEnter = function(b)
+		local tip = GameTooltip
+		tip:ClearLines()
+		tip:SetOwner(b, "ANCHOR_TOPLEFT")
+		for _, v in ipairs(tooltipData) do
+			local r, g, b = NORMAL_FONT_COLOR:GetRGB()
+			tip:AddDoubleLine(v.slot, v.dur, r, g, b)
+		end
+		tip:AddLine(L["Right-Click for options"])
+		tip:Show()
+
+		local name = tip:GetName()
+		local left1 = _G[name .. "TextLeft1"]
+		local right1 = _G[name .. "TextRight1"]
+		if left1 then
+			left1:SetFontObject(GameTooltipText)
+			local r, g, b = NORMAL_FONT_COLOR:GetRGB()
+			left1:SetTextColor(r, g, b)
+		end
+		if right1 then right1:SetFontObject(GameTooltipText) end
+	end,
 }
 
-EnhanceQoL.DataHub.RegisterStream(provider)
+stream = EnhanceQoL.DataHub.RegisterStream(provider)
 
 return provider
