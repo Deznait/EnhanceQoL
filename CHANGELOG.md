@@ -1,11 +1,24 @@
 # Changelog
 
-## [4.2.1] – 2025-08-07
+## [4.3.0] – 2025-08-07
 
 ### ✨ Added
 
-- Introduced the DataPanel system; use `/eqolpanel` to configure panels.
+- Introduced the DataPanel system backed by a DataHub for sharing module data.
 - Documentation for creating external streams.
+
+### 📊 Built-In Streams
+
+- **Difficulty** – displays the current encounter or instance difficulty.
+- **Durability** – tracks average durability of equipped items.
+- **Friends** – shows the number of online friends.
+- **Gold** – monitors character and account-wide gold totals.
+- **Stats** – summarises key player stats.
+- **Talent Build** – shows the active talent loadout.
+
+### ❌ Removed
+
+- Deprecated `/eqolpanel` slash command; panels are configured through the main interface.
 
 ---
 

@@ -14,7 +14,6 @@ Every feature can be switched off; footprint is negligible.
 | <code>/eqol lag</code> |List gossip IDs of the current NPC dialog        |
 | <code>/eqol aag &lt;id&gt;</code> |Auto-pick a gossip option (chosen via <code>/eqol lag</code>) |
 | <code>/eqol rag &lt;id&gt;</code> |Remove an auto-picked gossip ID                  |
-| <code>/eqolpanel</code> |Configure and manage DataPanels                     |
 
 ***
 
@@ -95,7 +94,7 @@ Fully configurable per context (combat, dungeon, friendly/enemy): items, item co
 
 # DataPanels & Streams
 
-Use <code>/eqolpanel</code> to configure panels and view data from registered streams.
+DataPanels display information supplied by registered streams and can be configured through the in-game interface.
 
 ### Creating external streams
 
@@ -103,7 +102,7 @@ Use <code>/eqolpanel</code> to configure panels and view data from registered st
 2. Fill in the required provider fields and implement <code>collect</code>.
 3. Register the stream with <code>EnhanceQoL.DataHub.RegisterStream</code> during addon load.
 4. Optionally add filters, actions or settings.
-5. Add the stream to a DataPanel using <code>/eqolpanel add &lt;panel&gt; &lt;stream&gt;</code>.
+5. Add the stream to a DataPanel through the DataPanel configuration interface.
 
 For more details, see [docs/Streams.md](docs/Streams.md).
 

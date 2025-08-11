@@ -39,4 +39,4 @@ EnhanceQoL.DataHub.RegisterStream(provider)
 4. Optionally add `filter`, `actions`, `settings`, or `OnClick`.
 5. Register the provider using `EnhanceQoL.DataHub.RegisterStream` during addon startup.
 
-Once registered, the DataHub will invoke `collect` at the interval defined by `poll` and distribute snapshot updates to any subscribers. Streams may then be added to panels with `/eqolpanel add <panel> <stream>`.
+Once registered, the DataHub will invoke `collect` at the interval defined by `poll` and distribute snapshot updates to any subscribers. Streams can then be added to panels through the DataPanel interface.
