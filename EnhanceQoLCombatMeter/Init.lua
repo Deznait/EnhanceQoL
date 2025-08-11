@@ -1,5 +1,6 @@
 local parentAddonName = "EnhanceQoL"
 local addonName, addon = ...
+-- luacheck: globals GENERAL SlashCmdList
 if _G[parentAddonName] then
 	addon = _G[parentAddonName]
 else
@@ -9,6 +10,50 @@ end
 addon.CombatMeter = {}
 addon.CombatMeter.functions = {}
 addon.LCombatMeter = {}
+
+local AceGUI = addon.AceGUI
+local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_CombatMeter")
+
+addon.variables.statusTable.groups["combatmeter"] = true
+addon.functions.addToTree(nil, {
+	value = "combatmeter",
+	text = L["Combat Meter"],
+	children = {
+		{ value = "general", text = GENERAL },
+	},
+})
+
+local function addGeneralFrame(container)
+	local wrapper = addon.functions.createContainer("SimpleGroup", "Flow")
+	container:AddChild(wrapper)
+
+	local groupCore = addon.functions.createContainer("InlineGroup", "List")
+	wrapper:AddChild(groupCore)
+
+	local cbEnabled = addon.functions.createCheckboxAce(L["Enabled"], addon.db["combatMeterEnabled"], function(self, _, value)
+		addon.db["combatMeterEnabled"] = value
+		addon.CombatMeter.functions.toggle(value)
+	end)
+	groupCore:AddChild(cbEnabled)
+
+	local sliderRate = addon.functions.createSliderAce(L["Update Rate"] .. ": " .. addon.db["combatMeterUpdateRate"], addon.db["combatMeterUpdateRate"], 0.05, 1, 0.05, function(self, _, val)
+		addon.db["combatMeterUpdateRate"] = val
+		addon.CombatMeter.functions.setUpdateRate(val)
+		self:SetLabel(L["Update Rate"] .. ": " .. string.format("%.2f", val))
+	end)
+	groupCore:AddChild(sliderRate)
+
+	local btnReset = addon.functions.createButtonAce(L["Reset"], nil, function()
+		if SlashCmdList and SlashCmdList["EQOLCM"] then SlashCmdList["EQOLCM"]("reset") end
+		if addon.CombatMeter.functions.UpdateBars then addon.CombatMeter.functions.UpdateBars() end
+	end)
+	groupCore:AddChild(btnReset)
+end
+
+function addon.CombatMeter.functions.treeCallback(container, group)
+	container:ReleaseChildren()
+	if group == "combatmeter\001general" then addGeneralFrame(container) end
+end
 
 addon.functions.InitDBValue("combatMeterEnabled", false)
 addon.functions.InitDBValue("combatMeterHistory", {})

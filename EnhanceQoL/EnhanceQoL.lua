@@ -4829,6 +4829,8 @@ local function CreateUI()
 			addon.SharedMedia.functions.treeCallback(container, group)
 		elseif string.match(group, "^mouse") then
 			addon.Mouse.functions.treeCallback(container, group)
+		elseif string.match(group, "^combatmeter") then
+			addon.CombatMeter.functions.treeCallback(container, group)
 		elseif string.match(group, "^move") then
 			addon.LayoutTools.functions.treeCallback(container, group)
 		end
@@ -5299,6 +5301,7 @@ local eventHandlers = {
 			loadSubAddon("EnhanceQoLSound")
 			loadSubAddon("EnhanceQoLMouse")
 			loadSubAddon("EnhanceQoLMythicPlus")
+			loadSubAddon("EnhanceQoLCombatMeter")
 			loadSubAddon("EnhanceQoLDrinkMacro")
 			loadSubAddon("EnhanceQoLTooltip")
 			loadSubAddon("EnhanceQoLVendor")

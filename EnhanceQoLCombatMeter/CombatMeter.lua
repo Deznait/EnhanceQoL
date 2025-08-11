@@ -81,11 +81,39 @@ local function handleEvent(self, event, ...)
 end
 
 frame:SetScript("OnEvent", handleEvent)
-frame:RegisterEvent("PLAYER_REGEN_DISABLED")
-frame:RegisterEvent("PLAYER_REGEN_ENABLED")
-frame:RegisterEvent("ENCOUNTER_START")
-frame:RegisterEvent("ENCOUNTER_END")
-frame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+
+function addon.CombatMeter.functions.toggle(enabled)
+	if enabled then
+		frame:RegisterEvent("PLAYER_REGEN_DISABLED")
+		frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+		frame:RegisterEvent("ENCOUNTER_START")
+		frame:RegisterEvent("ENCOUNTER_END")
+		frame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+		if addon.CombatMeter.uiFrame then
+			addon.CombatMeter.uiFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+			addon.CombatMeter.uiFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+			addon.CombatMeter.uiFrame:RegisterEvent("ENCOUNTER_START")
+			addon.CombatMeter.uiFrame:RegisterEvent("ENCOUNTER_END")
+		end
+	else
+		frame:UnregisterAllEvents()
+		addon.CombatMeter.inCombat = false
+		addon.CombatMeter.fightDuration = 0
+		addon.CombatMeter.overallDuration = 0
+		releasePlayers(addon.CombatMeter.players)
+		releasePlayers(addon.CombatMeter.overallPlayers)
+		if addon.CombatMeter.uiFrame then
+			addon.CombatMeter.uiFrame:UnregisterAllEvents()
+			addon.CombatMeter.uiFrame:Hide()
+		end
+		if addon.CombatMeter.ticker then
+			addon.CombatMeter.ticker:Cancel()
+			addon.CombatMeter.ticker = nil
+		end
+	end
+end
+
+addon.CombatMeter.functions.toggle(addon.db["combatMeterEnabled"])
 
 SLASH_EQOLCM1 = "/eqolcm"
 SlashCmdList["EQOLCM"] = function(msg)

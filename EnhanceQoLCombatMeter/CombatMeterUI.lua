@@ -146,20 +146,30 @@ local function UpdateBars()
 	frame:SetHeight(16 + #list * barHeight)
 end
 
-frame:RegisterEvent("PLAYER_REGEN_DISABLED")
-frame:RegisterEvent("PLAYER_REGEN_ENABLED")
-frame:RegisterEvent("ENCOUNTER_START")
-frame:RegisterEvent("ENCOUNTER_END")
+addon.CombatMeter.functions.UpdateBars = UpdateBars
+
 frame:SetScript("OnEvent", function(self, event)
 	if event == "PLAYER_REGEN_DISABLED" or event == "ENCOUNTER_START" then
 		if ticker then ticker:Cancel() end
 		ticker = C_Timer.NewTicker(config["combatMeterUpdateRate"], UpdateBars)
+		addon.CombatMeter.ticker = ticker
 		C_Timer.After(0, UpdateBars)
 	else
 		if ticker then
 			ticker:Cancel()
 			ticker = nil
+			addon.CombatMeter.ticker = nil
 		end
 		C_Timer.After(0, UpdateBars)
 	end
 end)
+
+function addon.CombatMeter.functions.setUpdateRate(rate)
+	if ticker then
+		ticker:Cancel()
+		ticker = C_Timer.NewTicker(rate, UpdateBars)
+		addon.CombatMeter.ticker = ticker
+	end
+end
+
+addon.CombatMeter.functions.toggle(addon.db["combatMeterEnabled"])
