@@ -79,7 +79,68 @@ local missAbsorbIdx = {
 	DAMAGE_SPLIT_MISSED = { 4, 5 },
 }
 
-local function handleEvent(self, event, ...)
+local function handleCLEU(timestamp, subevent, hideCaster, sourceGUID, sourceName, sourceFlags, sourceRaidFlags, destGUID, destName, destFlags, destRaidFlags, ...)
+	local argc = select("#", ...)
+	local missIdx = missAbsorbIdx[subevent]
+	if not (dmgIdx[subevent] or healIdx[subevent] or missIdx or subevent == "SPELL_ABSORBED") then return end
+
+	local idx = dmgIdx[subevent]
+	if idx then
+		if not sourceGUID or band(sourceFlags or 0, groupMask) == 0 then return end
+		local amount = select(idx, ...)
+		if not amount or amount <= 0 then return end
+		local player = acquirePlayer(cm.players, sourceGUID, sourceName)
+		local overall = acquirePlayer(cm.overallPlayers, sourceGUID, sourceName)
+		player.damage = player.damage + amount
+		overall.damage = overall.damage + amount
+		return
+	end
+
+	local hidx = healIdx[subevent]
+	if hidx then
+		if not sourceGUID or band(sourceFlags or 0, groupMask) == 0 then return end
+		local amount = (select(hidx[1], ...) or 0) - (select(hidx[2], ...) or 0)
+		if not amount or amount <= 0 then return end
+		local player = acquirePlayer(cm.players, sourceGUID, sourceName)
+		local overall = acquirePlayer(cm.overallPlayers, sourceGUID, sourceName)
+		player.healing = player.healing + amount
+		overall.healing = overall.healing + amount
+		return
+	end
+
+	if missIdx then
+		local missType = select(missIdx[1], ...)
+		if missType ~= "ABSORB" then return end
+		if not destGUID or band(destFlags or 0, groupMask) == 0 then return end
+		local amount = select(missIdx[2], ...)
+		if not amount or amount <= 0 then return end
+		local absorberGUID = lastAbsorbSourceByDest[destGUID]
+		if not absorberGUID then return end
+		local p = acquirePlayer(cm.players, absorberGUID)
+		local o = acquirePlayer(cm.overallPlayers, absorberGUID)
+		p.healing = p.healing + amount
+		o.healing = o.healing + amount
+		return
+	end
+
+	if subevent == "SPELL_ABSORBED" then
+		local absorberGUID, absorberName, absorberFlags, absorbedAmount
+		if argc >= 10 then
+			absorberGUID, absorberName, absorberFlags, _, _, _, _, absorbedAmount = select(4, ...)
+		else
+			absorberGUID, absorberName, absorberFlags, _, _, _, _, absorbedAmount = select(argc - 7, ...)
+		end
+		if not absorberGUID or type(absorberFlags) ~= "number" or band(absorberFlags, groupMask) == 0 then return end
+		lastAbsorbSourceByDest[destGUID] = absorberGUID
+		if not absorbedAmount or absorbedAmount <= 0 then return end
+		local p = acquirePlayer(cm.players, absorberGUID, absorberName)
+		local o = acquirePlayer(cm.overallPlayers, absorberGUID, absorberName)
+		p.healing = p.healing + absorbedAmount
+		o.healing = o.healing + absorbedAmount
+	end
+end
+
+local function handleEvent(self, event)
 	if event == "PLAYER_REGEN_DISABLED" or event == "ENCOUNTER_START" then
 		cm.inCombat = true
 		cm.fightStartTime = GetTime()
@@ -107,73 +168,7 @@ local function handleEvent(self, event, ...)
 		end
 	elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
 		if not cm.inCombat then return end
-		local a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25 = CombatLogGetCurrentEventInfo()
-		local subevent = a2
-		local sourceGUID = a4
-		local sourceName = a5
-		local sourceFlags = a6
-		local destGUID = a8
-		local destFlags = a10
-		local missIdx = missAbsorbIdx[subevent]
-		if not (dmgIdx[subevent] or healIdx[subevent] or missIdx or subevent == "SPELL_ABSORBED") then return end
-
-		local idx = dmgIdx[subevent]
-		if idx then
-			if not sourceGUID or band(sourceFlags or 0, groupMask) == 0 then return end
-			local amount = select(idx, a12, a13, a14, a15, a16, a17, a18, a19, a20)
-			if not amount or amount <= 0 then return end
-			local player = acquirePlayer(cm.players, sourceGUID, sourceName)
-			local overall = acquirePlayer(cm.overallPlayers, sourceGUID, sourceName)
-			player.damage = player.damage + amount
-			overall.damage = overall.damage + amount
-			return
-		end
-
-		local hidx = healIdx[subevent]
-		if hidx then
-			if not sourceGUID or band(sourceFlags or 0, groupMask) == 0 then return end
-			local amount = (select(hidx[1], a12, a13, a14, a15, a16, a17, a18, a19, a20) or 0) - (select(hidx[2], a12, a13, a14, a15, a16, a17, a18, a19, a20) or 0)
-			if not amount or amount <= 0 then return end
-			local player = acquirePlayer(cm.players, sourceGUID, sourceName)
-			local overall = acquirePlayer(cm.overallPlayers, sourceGUID, sourceName)
-			player.healing = player.healing + amount
-			overall.healing = overall.healing + amount
-			return
-		end
-
-		if missIdx then
-			local missType = select(missIdx[1], a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25)
-			if missType ~= "ABSORB" then return end
-			if not destGUID or band(destFlags or 0, groupMask) == 0 then return end
-			local amount = select(missIdx[2], a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25)
-			if not amount or amount <= 0 then return end
-			local absorberGUID = lastAbsorbSourceByDest[destGUID]
-			if not absorberGUID then return end
-			local p = acquirePlayer(cm.players, absorberGUID)
-			local o = acquirePlayer(cm.overallPlayers, absorberGUID)
-			p.healing = p.healing + amount
-			o.healing = o.healing + amount
-			return
-		end
-
-		if subevent == "SPELL_ABSORBED" then
-			-- Count absorbed damage as effective healing for the absorber (shield caster).
-			-- SPELL_ABSORBED has variable arg layouts; the last 8 fields are stable:
-			-- absorberGUID, absorberName, absorberFlags, absorberRaidFlags,
-			-- absorbingSpellID, absorbingSpellName, absorbingSpellSchool, absorbedAmount
-			local n = select("#", a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25)
-			local absorberGUID = select(n - 7, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25)
-			local absorberName = select(n - 6, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25)
-			local absorberFlags = select(n - 5, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25)
-			if not absorberGUID or band(absorberFlags or 0, groupMask) == 0 then return end
-                        local amount = select(n, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25)
-                        lastAbsorbSourceByDest[destGUID] = absorberGUID
-                        if not amount or amount <= 0 then return end
-                        local p = acquirePlayer(cm.players, absorberGUID, absorberName)
-                        local o = acquirePlayer(cm.overallPlayers, absorberGUID, absorberName)
-                        p.healing = p.healing + amount
-                        o.healing = o.healing + amount
-		end
+		handleCLEU(CombatLogGetCurrentEventInfo())
 	end
 end
 
