@@ -173,6 +173,7 @@ function addon.CombatMeter.functions.toggle(enabled)
 			addon.CombatMeter.uiFrame:UnregisterAllEvents()
 			addon.CombatMeter.uiFrame:Hide()
 		end
+		if addon.CombatMeter.functions and addon.CombatMeter.functions.hideAllFrames then addon.CombatMeter.functions.hideAllFrames() end
 		if addon.CombatMeter.ticker then
 			addon.CombatMeter.ticker:Cancel()
 			addon.CombatMeter.ticker = nil

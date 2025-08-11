@@ -478,5 +478,14 @@ local function rebuildGroups()
 end
 addon.CombatMeter.functions.rebuildGroups = rebuildGroups
 
+local function hideAllFrames()
+	for _, frame in ipairs(groupFrames) do
+		frame:Hide()
+	end
+	wipe(specIcons)
+	wipe(pendingInspect)
+end
+addon.CombatMeter.functions.hideAllFrames = hideAllFrames
+
 rebuildGroups()
 addon.CombatMeter.functions.toggle(addon.db["combatMeterEnabled"])
