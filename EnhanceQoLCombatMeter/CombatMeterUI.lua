@@ -9,7 +9,7 @@ end
 local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_CombatMeter")
 
 local config = addon.db
-local barHeight = 20
+local barHeight = 30
 local specIcons = {}
 local groupFrames = {}
 local ticker
@@ -28,15 +28,38 @@ local function abbreviateName(name)
 	return name
 end
 
-local function abbreviateNumber(num)
-	num = math.floor(num or 0)
-	if num >= 1000000 then
-		return string.format("%.1fm", num / 1000000):gsub("%.0m", "m")
-	elseif num >= 1000 then
-		return string.format("%.1fk", num / 1000):gsub("%.0k", "k")
+local function abbreviateNumber(n, decimals, trimZeros)
+	decimals = decimals or 2
+	n = tonumber(n) or 0
+	local sign = n < 0 and "-" or ""
+	n = math.abs(n)
+
+	local val, suf
+	if n >= 1e9 then
+		val, suf = n / 1e9, "b"
+	elseif n >= 1e6 then
+		val, suf = n / 1e6, "m"
+	elseif n >= 1e3 then
+		val, suf = n / 1e3, "k"
 	else
-		return tostring(num)
+		return sign .. tostring(math.floor(n + 0.5))
 	end
+
+	local pow = 10 ^ decimals
+	val = math.floor(val * pow + 0.5) / pow
+
+	-- Carry: 999.995k -> 1.00m, etc.
+	if val >= 1000 and suf ~= "b" then
+		val = val / 1000
+		suf = (suf == "k") and "m" or "b"
+		val = math.floor(val * pow + 0.5) / pow
+	end
+
+	local s = string.format("%." .. decimals .. "f", val)
+	if trimZeros then
+		s = s:gsub("(%..-)0+$", "%1"):gsub("%.$", "") -- .00 -> "", .50 -> .5
+	end
+	return sign .. s .. suf
 end
 
 local function createGroupFrame(groupConfig)
@@ -177,6 +200,7 @@ local function createGroupFrame(groupConfig)
 			bar:SetStatusBarColor(color.r, color.g, color.b)
 
 			local unit = groupUnits[p.guid]
+			print(unit)
 			local icon = specIcons[p.guid]
 			if not icon and unit then
 				local specID = GetInspectSpecialization(unit)
@@ -189,9 +213,11 @@ local function createGroupFrame(groupConfig)
 
 			bar.name:SetText(abbreviateName(p.name))
 			if (self.metric == "dps" or self.metric == "hps") and p.total then
-				local rate = abbreviateNumber(p.value)
+				local decimals = 0
+				if p.value > 1000000 then decimals = 2 end
+				local rate = abbreviateNumber(p.value, decimals)
 				local total = abbreviateNumber(p.total)
-				bar.value:SetText(rate .. " (" .. total .. ")")
+				bar.value:SetText(total .. "     " .. rate)
 			else
 				bar.value:SetText(abbreviateNumber(p.value))
 			end
