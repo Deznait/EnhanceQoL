@@ -233,7 +233,7 @@ local function createGroupFrame(groupConfig)
 			bar.name:SetTextColor(1, 1, 1)
 			bar.value:SetTextColor(1, 1, 1)
 			bar.total:SetTextColor(1, 1, 1)
-			bar.rate.SetTextColor = bar.value.SetTextColor -- keep API parity if needed
+			bar.rate:SetTextColor(1, 1, 1)
 
 			local size = config["combatMeterFontSize"]
 			local outline = getOutlineFlags()
