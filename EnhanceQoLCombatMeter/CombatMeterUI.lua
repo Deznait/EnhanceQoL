@@ -26,7 +26,49 @@ local tickerRate = config["combatMeterUpdateRate"] or 0.3
 local lastMaxValue = 0
 local EPSILON = 0.01
 local tinsert, tsort = table.insert, table.sort
-local historyMenu = CreateFrame("Frame", addonName .. "CMHistoryMenu", UIParent, "UIDropDownMenuTemplate")
+
+-- Modern menu API (Dragonflight+/11.x). Falls back to EasyMenu where available (Classic).
+local function OpenHistoryMenu(owner)
+	local hist = addon.db["combatMeterHistory"] or {}
+	if MenuUtil and MenuUtil.CreateContextMenu then
+		MenuUtil.CreateContextMenu(owner, function(_, root)
+			if #hist == 0 then
+				root:CreateTitle(L["No History"] or "No History")
+				return
+			end
+			for i = #hist, 1, -1 do
+				local fight = hist[i]
+				local text = string.format("%d. %ds", i, math.floor((fight and fight.duration) or 0))
+				local idx = i -- capture loop variable for the closure
+				root:CreateButton(text, function()
+					if addon.CombatMeter and addon.CombatMeter.functions and addon.CombatMeter.functions.loadHistory then addon.CombatMeter.functions.loadHistory(idx) end
+				end)
+			end
+		end)
+	elseif _G.EasyMenu then
+		local menu = {}
+		if #hist == 0 then
+			menu[1] = { text = (L["No History"] or "No History"), notCheckable = true, isTitle = true }
+		else
+			for i = #hist, 1, -1 do
+				local fight = hist[i]
+				local text = string.format("%d. %ds", i, math.floor((fight and fight.duration) or 0))
+				local idx = i
+				menu[#menu + 1] = {
+					text = text,
+					notCheckable = true,
+					func = function()
+						if addon.CombatMeter and addon.CombatMeter.functions and addon.CombatMeter.functions.loadHistory then addon.CombatMeter.functions.loadHistory(idx) end
+					end,
+				}
+			end
+		end
+		local dropdown = _G[addonName .. "CMHistoryMenu"] or CreateFrame("Frame", addonName .. "CMHistoryMenu", UIParent, "UIDropDownMenuTemplate")
+		_G.EasyMenu(menu, dropdown, owner, 0, 0, "MENU")
+	else
+		print("No compatible menu API available.")
+	end
+end
 
 local POW10 = { [0] = 1 }
 for i = 1, 6 do
@@ -208,6 +250,48 @@ local function abbreviateNumber(n, decimals, trimZeros)
 	return sign .. s .. suf
 end
 
+-- Modern menu API (Dragonflight+/11.x). Falls back to EasyMenu where available (Classic).
+local function OpenHistoryMenu(owner)
+	local hist = addon.db["combatMeterHistory"] or {}
+	if MenuUtil and MenuUtil.CreateContextMenu then
+		MenuUtil.CreateContextMenu(owner, function(_, root)
+			if #hist == 0 then
+				root:CreateTitle(L["No History"] or "No History")
+				return
+			end
+			for i = #hist, 1, -1 do
+				local fight = hist[i]
+				local text = string.format("%d. %ds", i, math.floor((fight and fight.duration) or 0))
+				local idx = i -- capture loop variable for the closure
+				root:CreateButton(text, function()
+					if addon.CombatMeter and addon.CombatMeter.functions and addon.CombatMeter.functions.loadHistory then addon.CombatMeter.functions.loadHistory(idx) end
+				end)
+			end
+		end)
+	elseif _G.EasyMenu then
+		local menu = {}
+		if #hist == 0 then
+			menu[1] = { text = (L["No History"] or "No History"), notCheckable = true, isTitle = true }
+		else
+			for i = #hist, 1, -1 do
+				local fight = hist[i]
+				local text = string.format("%d. %ds", i, math.floor((fight and fight.duration) or 0))
+				local idx = i
+				menu[#menu + 1] = {
+					text = text,
+					notCheckable = true,
+					func = function()
+						if addon.CombatMeter and addon.CombatMeter.functions and addon.CombatMeter.functions.loadHistory then addon.CombatMeter.functions.loadHistory(idx) end
+					end,
+				}
+			end
+		end
+		local dropdown = _G[addonName .. "CMHistoryMenu"] or CreateFrame("Frame", addonName .. "CMHistoryMenu", UIParent, "UIDropDownMenuTemplate")
+		_G.EasyMenu(menu, dropdown, owner, 0, 0, "MENU")
+	else
+		print("No compatible menu API available.")
+	end
+end
 local function createGroupFrame(groupConfig)
 	local barHeight = groupConfig.barHeight or DEFAULT_BAR_HEIGHT
 	local barWidth = groupConfig.barWidth or DEFAULT_BAR_WIDTH
@@ -319,21 +403,7 @@ local function createGroupFrame(groupConfig)
 	historyButton:SetSize(16, 16)
 	historyButton:SetPoint("RIGHT", resetButton, "LEFT", -2, 0)
 	historyButton:SetText("H")
-	historyButton:SetScript("OnClick", function(self)
-		local hist = addon.db["combatMeterHistory"] or {}
-		local menu = {}
-		for i = #hist, 1, -1 do
-			local fight = hist[i]
-			local text = string.format("%d. %ds", i, math.floor(fight.duration or 0))
-			menu[#menu + 1] = {
-				text = text,
-				notCheckable = true,
-				func = function() addon.CombatMeter.functions.loadHistory(i) end,
-			}
-		end
-		if #menu == 0 then menu[1] = { text = "No History", notCheckable = true, isTitle = true } end
-		_G.EasyMenu(menu, historyMenu, self, 0, 0, "MENU")
-	end)
+	historyButton:SetScript("OnClick", function(self) OpenHistoryMenu(self) end)
 
 	dragHandle.text = dragHandle:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 	dragHandle.text:SetPoint("LEFT", dragHandle, "LEFT", 2, 0)
