@@ -110,10 +110,6 @@ local dmgIdx = {
 	DAMAGE_SPLIT = 4,
 	ENVIRONMENTAL_DAMAGE = 2,
 }
-local healIdx = {
-	SPELL_HEAL = { 4, 5 },
-	SPELL_PERIODIC_HEAL = { 4, 5 },
-}
 
 local function handleEvent(self, event)
 	if event == "PLAYER_REGEN_DISABLED" or event == "ENCOUNTER_START" then
@@ -156,7 +152,7 @@ local function handleEvent(self, event)
 		elseif sub == "UNIT_DIED" or sub == "UNIT_DESTROYED" then
 			if destGUID then petOwner[destGUID] = nil end
 			return
-		elseif not (dmgIdx[sub] or healIdx[sub] or sub == "SPELL_ABSORBED") then
+		elseif not (dmgIdx[sub] or sub == "SPELL_HEAL" or sub == "SPELL_PERIODIC_HEAL" or sub == "SPELL_ABSORBED") then
 			-- Note: We intentionally ignore *_MISSED ABSORB to avoid double-counting with SPELL_ABSORBED (matches Details behavior)
 			return
 		end
@@ -177,11 +173,9 @@ local function handleEvent(self, event)
 			return
 		end
 
-		local h = healIdx[subevent]
-		if h then
+		if subevent == "SPELL_HEAL" or subevent == "SPELL_PERIODIC_HEAL" then
 			if not sourceGUID or band(sourceFlags or 0, groupMask) == 0 then return end
-			local amount = ((h[1] == 4 and a15) or (h[1] == 5 and a16) or (h[1] == 6 and a17) or (h[1] == 7 and a18) or (h[1] == 8 and a19) or (h[1] == 9 and a20) or 0)
-				- ((h[2] == 4 and a15) or (h[2] == 5 and a16) or (h[2] == 6 and a17) or (h[2] == 7 and a18) or (h[2] == 8 and a19) or (h[2] == 9 and a20) or 0)
+			local amount = (a15 or 0) - (a16 or 0)
 			if amount <= 0 then return end
 			local ownerGUID, ownerName = resolveOwner(sourceGUID, sourceName, sourceFlags)
 			local player = acquirePlayer(cm.players, ownerGUID, ownerName)
