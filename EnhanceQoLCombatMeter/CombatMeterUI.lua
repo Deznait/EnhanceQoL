@@ -21,6 +21,8 @@ local shortNameCache = {}
 local ticker
 local tinsert, tsort = table.insert, table.sort
 
+local function sortByValueDesc(a, b) return a.value > b.value end
+
 local function scheduleInspectRetry(guid, unit)
 	C_Timer.After(1, function()
 		if pendingInspect[guid] and CanInspect(unit) then NotifyInspect(unit) end
@@ -320,7 +322,7 @@ local function createGroupFrame(groupConfig)
 			end
 			list = top
 		else
-			tsort(list, function(a, b) return a.value > b.value end)
+			tsort(list, sortByValueDesc)
 		end
 		local playerGUID = UnitGUID("player")
 		if groupConfig.alwaysShowSelf then
