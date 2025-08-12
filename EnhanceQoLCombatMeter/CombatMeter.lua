@@ -33,14 +33,14 @@ local function resolveOwner(srcGUID, srcName, srcFlags)
 		local owner = petOwner[srcGUID]
 		if owner then
 			if not ownerNameCache[owner] then
-				local oname = GetPlayerInfoByGUID(owner)
+				local oname = select(6, GetPlayerInfoByGUID(owner))
 				if oname then ownerNameCache[owner] = oname end
 			end
 			return owner, (ownerNameCache[owner] or srcName)
 		end
 	end
 	if srcGUID and not ownerNameCache[srcGUID] then
-		local sname = GetPlayerInfoByGUID(srcGUID)
+		local sname = select(6, GetPlayerInfoByGUID(srcGUID))
 		if sname then ownerNameCache[srcGUID] = sname end
 	end
 	return srcGUID, (ownerNameCache[srcGUID] or srcName)
