@@ -1,5 +1,6 @@
 -- luacheck: globals DefaultCompactUnitFrameSetup CompactUnitFrame_UpdateAuras CompactUnitFrame_UpdateName UnitTokenFromGUID C_Bank
 -- luacheck: globals Menu GameTooltip_SetTitle GameTooltip_AddNormalLine EnhanceQoL
+-- luacheck: globals GenericTraitUI_LoadUI GenericTraitFrame
 local addonName, addon = ...
 
 local LDB = LibStub("LibDataBroker-1.1")
@@ -2105,6 +2106,15 @@ local function addCharacterFrame(container)
 				else
 					addon.general.durabilityIconFrame:Hide()
 				end
+			end,
+		},
+		{
+			parent = INFO,
+			var = "showCloakUpgradeButton",
+			type = "CheckBox",
+			callback = function(self, _, value)
+				addon.db["showCloakUpgradeButton"] = value
+				if addon.functions.updateCloakUpgradeButton then addon.functions.updateCloakUpgradeButton() end
 			end,
 		},
 		{
@@ -4563,6 +4573,7 @@ local function initCharacter()
 	addon.functions.InitDBValue("showGemsTooltipOnCharframe", false)
 	addon.functions.InitDBValue("showEnchantOnCharframe", false)
 	addon.functions.InitDBValue("showCatalystChargesOnCharframe", false)
+	addon.functions.InitDBValue("showCloakUpgradeButton", false)
 	addon.functions.InitDBValue("bagFilterFrameData", {})
 
 	hooksecurefunc(ContainerFrameCombinedBags, "UpdateItems", addon.functions.updateBags)
@@ -4598,6 +4609,43 @@ local function initCharacter()
 	addon.general.durabilityIconFrame.count:SetFont(addon.variables.defaultFont, 12, "OUTLINE")
 
 	if addon.db["showDurabilityOnCharframe"] == false then addon.general.durabilityIconFrame:Hide() end
+
+	addon.general.cloakUpgradeFrame = CreateFrame("Button", nil, PaperDollFrame, "BackdropTemplate")
+	addon.general.cloakUpgradeFrame:SetSize(32, 32)
+	addon.general.cloakUpgradeFrame:SetPoint("LEFT", addon.general.durabilityIconFrame, "RIGHT", 4, 0)
+
+	addon.general.cloakUpgradeFrame.icon = addon.general.cloakUpgradeFrame:CreateTexture(nil, "OVERLAY")
+	addon.general.cloakUpgradeFrame.icon:SetSize(32, 32)
+	addon.general.cloakUpgradeFrame.icon:SetPoint("CENTER", addon.general.cloakUpgradeFrame, "CENTER")
+	addon.general.cloakUpgradeFrame.icon:SetTexture(addon.variables.cloakUpgradeIcon)
+
+	addon.general.cloakUpgradeFrame:SetScript("OnClick", function()
+		GenericTraitUI_LoadUI()
+		GenericTraitFrame:SetSystemID(29)
+		GenericTraitFrame:SetTreeID(1115)
+		ToggleFrame(GenericTraitFrame)
+	end)
+	addon.general.cloakUpgradeFrame:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:SetText(L["cloakUpgradeTooltip"] or "Upgrade skills")
+		GameTooltip:Show()
+	end)
+	addon.general.cloakUpgradeFrame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+	local function updateCloakUpgradeButton()
+		if PaperDollFrame and PaperDollFrame:IsShown() then
+			if addon.db["showCloakUpgradeButton"] and IsEquippedItem(235499) then
+				addon.general.cloakUpgradeFrame:Show()
+			else
+				addon.general.cloakUpgradeFrame:Hide()
+			end
+		end
+	end
+	addon.functions.updateCloakUpgradeButton = updateCloakUpgradeButton
+	local cloakEventFrame = CreateFrame("Frame")
+	cloakEventFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+	cloakEventFrame:SetScript("OnEvent", updateCloakUpgradeButton)
+	cloakEventFrame:Hide()
 
 	for key, value in pairs(addon.variables.itemSlots) do
 		-- Hintergrund für das Item-Level
@@ -4655,7 +4703,10 @@ local function initCharacter()
 		end
 	end
 
-	PaperDollFrame:HookScript("OnShow", function(self) setCharFrame() end)
+	PaperDollFrame:HookScript("OnShow", function(self)
+		setCharFrame()
+		addon.functions.updateCloakUpgradeButton()
+	end)
 
 	if OrderHallCommandBar then
 		OrderHallCommandBar:HookScript("OnShow", function(self)

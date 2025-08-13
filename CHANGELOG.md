@@ -4,30 +4,36 @@
 
 ### ✨ Added
 
-- Introduced the DataPanel system backed by a DataHub for sharing module data.
-  - Create your own movable DataPanels and add data streams for more information.
-  - Right-click a data stream to access additional options.
-- **Combat Meter** – track combat statistics with highly customizable bar groups.
-  - Module is ultra lightweight with 99% <1ms even in 40ppl raids and minimal RAM usage
-  - Disabled by default; enable via **Options → Combat Meter**.
-  - Supports metrics for **DPS**, **overall damage**, **healing per fight**, and **overall healing**.
-  - Each group lets you choose bar width/height, max bars, and whether to always show yourself.
-  - Optional **Pre-Pull Capture** window includes casts made just before combat starts.
-  - Bars offer texture/overlay choices, rounded corners, and adjustable update rate & font size.
+- Introduced the **DataPanel** system powered by a **DataHub** for sharing module data.
+  - Create fully movable DataPanels and attach multiple data streams for real-time information.
+  - Right-click any data stream for quick access to additional options.
+- **Reshii Wraps Talent Frame** button option
+  - Enable in _Character Frame_ settings to show an icon that instantly opens Reshii Wraps Talents for upgrades.
 
-### 📊 Built-in data streams
+### 🆕 New Module: Combat Meter
 
-- **Difficulty** – displays the current instance or raid difficulty.
-- **Durability** – tracks average equipment durability.
-  - Mouseover to see a per-slot breakdown.
+- **Combat Meter** – track detailed combat statistics with fully customizable bar groups.
+  - Disabled by default – enable via **Options → Combat Meter**.
+  - Supports metrics for **DPS**, **Overall Damage**, **Healing per Fight**, and **Overall Healing**.
+  - Per-group customization: bar width, height, max bars, and an “Always Show Self” option.
+  - Optional **Pre-Pull Capture** window includes casts and actions just before combat starts.
+  - Bars support texture & overlay selection, rounded corners, adjustable update rate, and font size.
+  - Ultra lightweight – in most cases uses well under 1 ms per update, even in full 40-player raids at a 0.05 s update rate.
+
+### 📊 Built-in Data Streams
+
+- **Difficulty** – shows current instance or raid difficulty.
+- **Durability** – displays average equipment durability.
+  - Mouseover for a detailed per-slot breakdown.
+
 - **Friends** – shows the number of online friends.
-- **Gold** – monitors character gold.
-- **Stats** – summarizes key player stats.
-- **Talent Build** – shows the active talent loadout.
+- **Gold** – tracks current character gold.
+- **Stats** – summarizes key player statistics.
+- **Talent Build** – displays the active talent loadout.
 
 ### 🐛 Fixed
 
-- Dungeon Rating missed Streets and Gambit
+- Fixed: Dungeon Rating now includes **Streets of Wonder** and **So’leah’s Gambit**.
 
 ---
 
