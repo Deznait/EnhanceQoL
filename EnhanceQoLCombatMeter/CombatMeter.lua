@@ -33,6 +33,8 @@ local petOwner = cm.petOwner or {}
 cm.petOwner = petOwner
 local ownerPets = cm.ownerPets or {}
 cm.ownerPets = ownerPets
+local ownerMainPet = cm.ownerMainPet or {}
+cm.ownerMainPet = ownerMainPet
 local ownerNameCache = cm.ownerNameCache or {}
 cm.ownerNameCache = ownerNameCache
 local unitAffiliation = cm.unitAffiliation or {}
@@ -94,53 +96,61 @@ local function releasePlayers(players)
 end
 
 local function fullRebuildPetOwners()
-	wipe(petOwner)
-	wipe(ownerPets)
 	local activeGUIDs = {}
 	local groupGUIDs = {}
+
+	local function handleUnit(unit)
+		local owner = UnitGUID(unit)
+		if not owner then return end
+		groupGUIDs[owner] = true
+		activeGUIDs[owner] = true
+		local newMain = UnitGUID(unit .. "pet")
+		local oldMain = ownerMainPet[owner]
+		if oldMain and oldMain ~= newMain then
+			petOwner[oldMain] = nil
+			local pets = ownerPets[owner]
+			if pets then
+				pets[oldMain] = nil
+				if not next(pets) then ownerPets[owner] = nil end
+			end
+		end
+		if newMain then
+			petOwner[newMain] = owner
+			ownerPets[owner] = ownerPets[owner] or {}
+			ownerPets[owner][newMain] = true
+			ownerMainPet[owner] = newMain
+			activeGUIDs[newMain] = true
+		else
+			ownerMainPet[owner] = nil
+		end
+	end
+
 	if IsInRaid() then
 		for i = 1, GetNumGroupMembers() do
-			local owner = UnitGUID("raid" .. i)
-			local pguid = UnitGUID("raid" .. i .. "pet")
-			if owner then
-				activeGUIDs[owner] = true
-				groupGUIDs[owner] = true
-			end
-			if owner and pguid then
-				petOwner[pguid] = owner
-				ownerPets[owner] = ownerPets[owner] or {}
-				ownerPets[owner][pguid] = true
-				activeGUIDs[pguid] = true
-			end
+			handleUnit("raid" .. i)
 		end
 	else
 		for i = 1, GetNumGroupMembers() do
-			local owner = UnitGUID("party" .. i)
-			local pguid = UnitGUID("party" .. i .. "pet")
-			if owner then
-				activeGUIDs[owner] = true
-				groupGUIDs[owner] = true
-			end
-			if owner and pguid then
-				petOwner[pguid] = owner
-				ownerPets[owner] = ownerPets[owner] or {}
-				ownerPets[owner][pguid] = true
-				activeGUIDs[pguid] = true
-			end
+			handleUnit("party" .. i)
 		end
 	end
-	local me = UnitGUID("player")
-	local mypet = UnitGUID("pet")
-	if me then
-		activeGUIDs[me] = true
-		groupGUIDs[me] = true
+
+	handleUnit("player")
+
+	for owner, pets in pairs(ownerPets) do
+		if groupGUIDs[owner] then
+			for pguid in pairs(pets) do
+				activeGUIDs[pguid] = true
+			end
+		else
+			for pguid in pairs(pets) do
+				petOwner[pguid] = nil
+			end
+			ownerPets[owner] = nil
+			ownerMainPet[owner] = nil
+		end
 	end
-	if me and mypet then
-		petOwner[mypet] = me
-		ownerPets[me] = ownerPets[me] or {}
-		ownerPets[me][mypet] = true
-		activeGUIDs[mypet] = true
-	end
+
 	cm.groupGUIDs = groupGUIDs
 	for guid in pairs(ownerNameCache) do
 		if not activeGUIDs[guid] then ownerNameCache[guid] = nil end
@@ -154,21 +164,32 @@ local function updatePetOwner(unit)
 	if not unit then return end
 	local owner = UnitGUID(unit)
 	if not owner then return end
+	local newMain = UnitGUID(unit .. "pet")
 	local pets = ownerPets[owner]
-	if pets then
-		for pguid in pairs(pets) do
-			petOwner[pguid] = nil
+	local oldMain = ownerMainPet[owner]
+	if oldMain and oldMain ~= newMain then
+		petOwner[oldMain] = nil
+		if pets then
+			pets[oldMain] = nil
+			if not next(pets) then
+				ownerPets[owner] = nil
+				pets = nil
+			end
 		end
-		wipe(pets)
 	end
-	local pguid = UnitGUID(unit .. "pet")
-	if pguid then
-		petOwner[pguid] = owner
+	if newMain then
+		petOwner[newMain] = owner
 		pets = pets or {}
-		pets[pguid] = true
+		pets[newMain] = true
 		ownerPets[owner] = pets
+		ownerMainPet[owner] = newMain
 	else
-		ownerPets[owner] = nil
+		ownerMainPet[owner] = nil
+		if pets and next(pets) then
+			ownerPets[owner] = pets
+		else
+			ownerPets[owner] = nil
+		end
 	end
 end
 
