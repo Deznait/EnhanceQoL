@@ -231,6 +231,20 @@ local function OpenHistoryMenu(owner)
 		end
 	end)
 end
+
+-- Opens a metric selection menu for a group frame
+local function OpenMetricMenu(owner, frame)
+	MenuUtil.CreateContextMenu(owner, function(_, root)
+		for metric, name in pairs(metricNames) do
+			root:CreateButton(name, function()
+				frame.metric = metric
+				frame.groupConfig.type = metric
+				if frame.dragHandle and frame.dragHandle.text then frame.dragHandle.text:SetText(metricNames[metric]) end
+				if addon.CombatMeter and addon.CombatMeter.functions and addon.CombatMeter.functions.UpdateBars then addon.CombatMeter.functions.UpdateBars() end
+			end)
+		end
+	end)
+end
 local function createGroupFrame(groupConfig)
 	local barHeight = groupConfig.barHeight or DEFAULT_BAR_HEIGHT
 	local barWidth = groupConfig.barWidth or DEFAULT_BAR_WIDTH
@@ -362,9 +376,24 @@ local function createGroupFrame(groupConfig)
 
 	historyButton:SetScript("OnClick", function(self) OpenHistoryMenu(self) end)
 
+	local metricButton = CreateFrame("Button", nil, dragHandle)
+	metricButton:SetSize(16, 16)
+	metricButton:SetPoint("RIGHT", historyButton, "LEFT", -2, 0)
+
+	metricButton.icon = metricButton:CreateTexture(nil, "ARTWORK")
+	metricButton.icon:SetAllPoints(metricButton)
+	metricButton.icon:SetTexture(TEXTURE_PATH .. "eqol_metric_64.tga")
+
+	local mhl = metricButton:CreateTexture(nil, "HIGHLIGHT")
+	mhl:SetAllPoints(metricButton)
+	mhl:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
+	mhl:SetBlendMode("ADD")
+
+	metricButton:SetScript("OnClick", function(self) OpenMetricMenu(self, frame) end)
+
 	dragHandle.text = dragHandle:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 	dragHandle.text:SetPoint("LEFT", dragHandle, "LEFT", 2, 0)
-	dragHandle.text:SetPoint("RIGHT", historyButton, "LEFT", -2, 0)
+	dragHandle.text:SetPoint("RIGHT", metricButton, "LEFT", -2, 0)
 	dragHandle.text:SetJustifyH("CENTER")
 	dragHandle.text:SetText(metricNames[groupConfig.type] or L["Combat Meter"])
 	frame.dragHandle = dragHandle
@@ -537,40 +566,40 @@ local function createGroupFrame(groupConfig)
 				local name = UnitName("player")
 				local value, total
 				local class
-                               if self.metric == "damageOverall" or self.metric == "healingOverall" then
-                                        local p = addon.CombatMeter.overallPlayers[playerGUID]
-                                        if p and p.time and p.time > 0 then
-                                                total = (self.metric == "damageOverall") and (p.damage or 0) or (p.healing or 0)
-                                                value = total / p.time
-                                                class = p.class
-                                        end
-                                else
-                                        local duration
-                                        if addon.CombatMeter.inCombat then
-                                                duration = GetTime() - addon.CombatMeter.fightStartTime
-                                        else
-                                                duration = addon.CombatMeter.fightDuration
-                                        end
-                                        if duration <= 0 then duration = 1 end
-                                        local data = addon.CombatMeter.players[playerGUID]
-                                        if data then
-                                                if self.metric == "dps" then
-                                                        total = data.damage
-                                                        value = data.damage / duration
-                                                else
-                                                        total = data.healing
-                                                        value = data.healing / duration
-                                                end
-                                                class = data.class
-                                        else
-                                                total = 0
-                                                value = 0
-                                        end
-                                end
-                                if value then
-                                        if value > maxValue then maxValue = value end
-                                        tinsert(list, { guid = playerGUID, name = name, value = value, total = total, class = class })
-                                end
+				if self.metric == "damageOverall" or self.metric == "healingOverall" then
+					local p = addon.CombatMeter.overallPlayers[playerGUID]
+					if p and p.time and p.time > 0 then
+						total = (self.metric == "damageOverall") and (p.damage or 0) or (p.healing or 0)
+						value = total / p.time
+						class = p.class
+					end
+				else
+					local duration
+					if addon.CombatMeter.inCombat then
+						duration = GetTime() - addon.CombatMeter.fightStartTime
+					else
+						duration = addon.CombatMeter.fightDuration
+					end
+					if duration <= 0 then duration = 1 end
+					local data = addon.CombatMeter.players[playerGUID]
+					if data then
+						if self.metric == "dps" then
+							total = data.damage
+							value = data.damage / duration
+						else
+							total = data.healing
+							value = data.healing / duration
+						end
+						class = data.class
+					else
+						total = 0
+						value = 0
+					end
+				end
+				if value then
+					if value > maxValue then maxValue = value end
+					tinsert(list, { guid = playerGUID, name = name, value = value, total = total, class = class })
+				end
 			end
 			if #list > maxBars then
 				local playerIndex
