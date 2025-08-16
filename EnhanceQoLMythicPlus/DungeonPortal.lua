@@ -153,6 +153,7 @@ frameAnchor:SetBackdropColor(0, 0, 0, 0.8) -- Dunkler Hintergrund mit 80% Transp
 
 frameAnchor:SetMovable(true)
 frameAnchor:EnableMouse(true)
+frameAnchor:SetClampedToScreen(true)
 frameAnchor:RegisterForDrag("LeftButton")
 frameAnchor:SetScript("OnDragStart", function(self)
 	if addon.db.teleportFrameLocked then return end
@@ -230,6 +231,7 @@ frameAnchorCompendium:SetPoint("TOPLEFT", DungeonTeleportFrame, "TOPRIGHT", 0, 0
 frameAnchorCompendium:SetMovable(true)
 frameAnchorCompendium:EnableMouse(true)
 frameAnchorCompendium:RegisterForDrag("LeftButton")
+frameAnchorCompendium:SetClampedToScreen(true)
 frameAnchorCompendium:SetScript("OnDragStart", function(self)
 	if addon.db.teleportCompendiumLocked then return end
 	if not IsShiftKeyDown() then return end
@@ -829,6 +831,14 @@ local function CreateRioScore()
 		gFrameAnchorScore:SetParent(nil)
 		gFrameAnchorScore = nil
 	end
+	if _G["EQOLDungeonScoreFrame"] then
+		_G["EQOLDungeonScoreFrame"]:Hide()
+		_G["EQOLDungeonScoreFrame"]:SetScript("OnUpdate", nil)
+		_G["EQOLDungeonScoreFrame"]:SetScript("OnEvent", nil)
+		_G["EQOLDungeonScoreFrame"]:UnregisterAllEvents()
+		_G["EQOLDungeonScoreFrame"]:SetParent(nil)
+		_G["EQOLDungeonScoreFrame"] = nil
+	end
 	if addon.variables.maxLevel ~= UnitLevel("player") then return end
 
 	if addon.db["groupfinderShowDungeonScoreFrame"] == true then
@@ -845,6 +855,7 @@ local function CreateRioScore()
 
 		frameAnchorScore:SetMovable(true)
 		frameAnchorScore:EnableMouse(true)
+		frameAnchorScore:SetClampedToScreen(true)
 		frameAnchorScore:RegisterForDrag("LeftButton")
 		frameAnchorScore:SetScript("OnDragStart", function(self)
 			if addon.db.dungeonScoreFrameLocked then return end
