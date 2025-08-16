@@ -309,6 +309,7 @@ local function ApplyEQOLFilters(isInitial)
 		end
 	end
 
+	local didRemove = (#toRemove > 0)
 	for i = 1, #toRemove do
 		local r = toRemove[i]
 		dp:Remove(r.elem)
@@ -327,8 +328,8 @@ local function ApplyEQOLFilters(isInitial)
 		titleScore1:Hide()
 	end
 
-	-- Refresh the scrollbox (be tolerant if constants differ)
-	if panel.ScrollBox and panel.ScrollBox.FullUpdate then
+	-- Refresh the scrollbox nur wenn etwas entfernt wurde (be tolerant if constants differ)
+	if didRemove and panel.ScrollBox and panel.ScrollBox.FullUpdate then
 		if ScrollBoxConstants and ScrollBoxConstants.UpdateImmediately then
 			panel.ScrollBox:FullUpdate(ScrollBoxConstants.UpdateImmediately)
 		else
@@ -351,7 +352,7 @@ local function ScheduleFilters(initial)
 	if initial then _lastInitial = true end
 	if _filterScheduled then return end
 	_filterScheduled = true
-	C_Timer.After(0.05, function()
+	C_Timer.After(0, function()
 		_filterScheduled = false
 		ApplyEQOLFilters(_lastInitial)
 		_lastInitial = false
@@ -389,7 +390,7 @@ function addon.MythicPlus.functions.addDungeonFilter()
 			if drop then drop.eqolWrapped = nil end
 		elseif event == "LFG_LIST_APPLICANT_LIST_UPDATED" or event == "LFG_LIST_APPLICATION_STATUS_UPDATED" or event == "LFG_LIST_ENTRY_EXPIRED_TOO_MANY_PLAYERS" then
 			UpdateAppliedCache()
-			ScheduleFilters(true) -- schedule initial pass on application events
+			ScheduleFilters(false) -- filter next frame, aber ohne erneutes 'initial'; reduziert Flackern
 		end
 	end)
 end
