@@ -9,6 +9,11 @@
 ### 🔄 Changed
 
 - LibOpenRaid changed to LibOpenKeystone
+- Refactor Dungeon Filter
+
+### 🐛 Fixed
+
+- Anchor error for Mythic+ Rating
 
 ---
 
