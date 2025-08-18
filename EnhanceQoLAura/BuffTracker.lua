@@ -338,11 +338,19 @@ local function updateInstanceGroup()
 	currentInstanceGroup = difficultyToGroup[diffID]
 end
 
+
+local groupTypeNames = { PARTY = PARTY, RAID = RAID, SOLO = SOLO or "Solo" }
+local groupTypeOrder = { "PARTY", "RAID", "SOLO" }
+local currentGroupType
+
 local function updateGroupType()
-	local new = IsInRaid() and "RAID" or (IsInGroup() and "PARTY" or "SOLO")
-	local changed = new ~= currentGroupType
-	currentGroupType = new
-	return changed
+	if IsInRaid() then
+		currentGroupType = "RAID"
+	elseif IsInGroup() then
+		currentGroupType = "PARTY"
+	else
+		currentGroupType = "SOLO"
+	end
 end
 
 local DebuffBorderColors = {
@@ -391,6 +399,9 @@ local function buffAllowed(buff)
 		local role = UnitGroupRolesAssigned("player")
 		if role == "NONE" then role = addon.variables.unitRole end
 		if not role or not buff.allowedRoles[role] then return false end
+	end
+	if buff.allowedGroupTypes and next(buff.allowedGroupTypes) then
+		if not currentGroupType or not buff.allowedGroupTypes[currentGroupType] then return false end
 	end
 	if buff.allowedInstances and next(buff.allowedInstances) then
 		if not currentInstanceGroup or not buff.allowedInstances[currentInstanceGroup] then return false end
@@ -552,7 +563,6 @@ local function rebuildAltMapping()
 	for catId, cat in pairs(addon.db["buffTrackerCategories"]) do
 		if cat.allowedGroupTypes and next(cat.allowedGroupTypes) then hasGroupTypeFilters = true end
 		for baseId, buff in pairs(cat.buffs or {}) do
-			if buff.allowedGroupTypes and next(buff.allowedGroupTypes) then hasGroupTypeFilters = true end
 			if
 				(not buff.allowedInstances or not next(buff.allowedInstances) or (currentInstanceGroup and buff.allowedInstances[currentInstanceGroup]))
 				and (not buff.allowedGroupTypes or not next(buff.allowedGroupTypes) or (currentGroupType and buff.allowedGroupTypes[currentGroupType]))
@@ -1317,6 +1327,16 @@ eventFrame:SetScript("OnEvent", function(_, event, unit, ...)
 		updateInstanceGroup()
 		updateGroupType()
 		rebuildAltMapping()
+
+		updateGroupType()
+		collectActiveAuras()
+		scanBuffs()
+		return
+	end
+	if event == "GROUP_ROSTER_UPDATE" then
+		updateGroupType()
+		rebuildAltMapping()
+		collectActiveAuras()
 		scanBuffs()
 		return
 	end
@@ -1440,6 +1460,7 @@ eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
+eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
 eventFrame:RegisterEvent("SPELL_UPDATE_CHARGES")
 eventFrame:RegisterEvent("BAG_UPDATE_COOLDOWN")
@@ -1473,6 +1494,7 @@ local function addBuff(catId, id)
 		allowedClasses = {},
 		allowedRoles = {},
 		allowedInstances = {},
+		allowedGroupTypes = {},
 		showStacks = defStacks,
 		showTimerText = defTimer,
 		customTextEnabled = false,
@@ -1525,6 +1547,7 @@ function addon.Aura.functions.addTrinketBuff(catId, slot)
 		allowedClasses = {},
 		allowedRoles = {},
 		allowedInstances = {},
+		allowedGroupTypes = {},
 		showStacks = false,
 		showTimerText = defTimer,
 		customTextEnabled = false,
@@ -1574,6 +1597,7 @@ function addon.Aura.functions.addWeaponEnchantBuff(catId, slot)
 		allowedClasses = {},
 		allowedRoles = {},
 		allowedInstances = {},
+		allowedGroupTypes = {},
 		showStacks = false,
 		showTimerText = defTimer,
 		customTextEnabled = false,
@@ -1675,6 +1699,7 @@ local function sanitiseCategory(cat)
 		if not buff.allowedClasses then buff.allowedClasses = {} end
 		if not buff.allowedRoles then buff.allowedRoles = {} end
 		if not buff.allowedInstances then buff.allowedInstances = {} end
+		if not buff.allowedGroupTypes then buff.allowedGroupTypes = {} end
 		if not buff.conditions then buff.conditions = { join = "AND", conditions = {} } end
 		if buff.showCooldown == nil then buff.showCooldown = false end
 		if buff.showStacks == nil then
@@ -2445,6 +2470,20 @@ function addon.Aura.functions.buildBuffOptions(container, catId, buffId)
 	end
 	instDrop:SetRelativeWidth(0.7)
 	wrapper:AddChild(instDrop)
+	wrapper:AddChild(addon.functions.createSpacerAce())
+
+	local groupDrop = addon.functions.createDropdownAce(L["ShowForGroupType"], groupTypeNames, groupTypeOrder, function(self, event, key, checked)
+		buff.allowedGroupTypes = buff.allowedGroupTypes or {}
+		buff.allowedGroupTypes[key] = checked or nil
+		rebuildAltMapping()
+		scanBuffs()
+	end)
+	groupDrop:SetMultiselect(true)
+	for gt, val in pairs(buff.allowedGroupTypes or {}) do
+		if val then groupDrop:SetItemValue(gt, true) end
+	end
+	groupDrop:SetRelativeWidth(0.7)
+	wrapper:AddChild(groupDrop)
 	wrapper:AddChild(addon.functions.createSpacerAce())
 
 	-- if C_SpellBook.IsSpellInSpellBook(buffId) then

@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.6.0] – 2025-08-18
+
+### ✨ Added
+
+- Options to block: Duel, Party invites and Pet Battle requests
+
+### 🔄 Changed
+
+- LibOpenRaid changed to LibOpenKeystone
+
+---
+
 ## [4.5.0] – 2025-08-16
 
 ### ✨ Added
