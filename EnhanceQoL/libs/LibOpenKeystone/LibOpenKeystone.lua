@@ -103,32 +103,30 @@ local function SendLogged(text, channel)
 	end
 	if ch == "WHISPER" then return end -- keine Whisper-Broadcasts
 
-        -- Preferred: compressed AceComm on our own prefix
-	local AceComm    = LibStub:GetLibrary("AceComm-3.0", true)
+	-- Preferred: compressed AceComm on our own prefix
+	local AceComm = LibStub:GetLibrary("AceComm-3.0", true)
 	local LibDeflate = LibStub:GetLibrary("LibDeflate", true)
 	if AceComm and LibDeflate then
 		local compressed = LibDeflate:CompressDeflate(text, { level = 9 })
-		local encoded    = LibDeflate:EncodeForWoWAddonChannel(compressed)
-                AceComm:SendCommMessage(SEND_PREFIX, encoded, ch, nil, "ALERT")
+		local encoded = LibDeflate:EncodeForWoWAddonChannel(compressed)
+		AceComm:SendCommMessage(SEND_PREFIX, encoded, ch, nil, "ALERT")
 		return
 	end
 
-        -- Fallback: LOGGED-safe
-        if ChatThrottleLib and ChatThrottleLib.SendAddonMessageLogged then
-                local plain = text:gsub("\n", "%%"):gsub(",", ";")
-                local commId = tostring(GetServerTime() + GetTime())
-                plain = plain .. "#" .. commId
-                ChatThrottleLib:SendAddonMessageLogged("NORMAL", SEND_PREFIX_LOGGED, plain, ch)
-                return
-        end
+	-- Fallback: LOGGED-safe
+	if ChatThrottleLib and ChatThrottleLib.SendAddonMessageLogged then
+		local plain = text:gsub("\n", "%%"):gsub(",", ";")
+		local commId = tostring(GetServerTime() + GetTime())
+		plain = plain .. "#" .. commId
+		ChatThrottleLib:SendAddonMessageLogged("NORMAL", SEND_PREFIX_LOGGED, plain, ch)
+		return
+	end
 
 	-- Last resort: plain logged via C_ChatInfo
 	local plain = text:gsub("\n", "%%"):gsub(",", ";")
 	local commId = tostring(GetServerTime() + GetTime())
 	plain = plain .. "#" .. commId
-        if C_ChatInfo and C_ChatInfo.SendAddonMessage then
-                C_ChatInfo.SendAddonMessage(SEND_PREFIX_LOGGED, plain, ch)
-        end
+	if C_ChatInfo and C_ChatInfo.SendAddonMessage then C_ChatInfo.SendAddonMessage(SEND_PREFIX_LOGGED, plain, ch) end
 end
 
 -- Build / parse payloads
@@ -159,16 +157,15 @@ local function ProcessData(sender, channel, data)
 		local tokens = { strsplit(",", data) }
 		local key, mapID, level
 
-		-- A) LOR: K,<mapID>,<level>  (kein Name im Payload)
-		-- B) Alt: K,<name>,<mapID>,<level>
-		if tonumber(tokens[2]) then
-			key = NormalizeKey(sender, sender) -- Sender ist der Spieler
+		-- A) LOR: K,<mapID>,<level>
+		-- B) LOK: K,<mapID>,<level>
+		key = NormalizeKey(sender, sender) -- Sender ist der Spieler
+		if #tokens > 3 then
+			level = tonumber(tokens[2]) or 0
+			mapID = tonumber(tokens[4]) or 0
+		else
 			mapID = tonumber(tokens[2]) or 0
 			level = tonumber(tokens[3]) or 0
-		else
-			key = NormalizeKey(tokens[2], sender)
-			mapID = tonumber(tokens[3]) or 0
-			level = tonumber(tokens[4]) or 0
 		end
 
 		if key and key ~= "" then
@@ -197,7 +194,7 @@ local function HandleCompleteLogged(sender, channel, msg)
 end
 
 local function OnLogged(self, event, prefix, text, channel, sender)
-        if not RECV_PREFIXES_LOGGED[prefix] then return end
+	if not RECV_PREFIXES_LOGGED[prefix] then return end
 	sender = Ambiguate(sender, "none")
 	-- ignore self (short oder full)
 	local meShort = UnitName("player")
@@ -237,9 +234,9 @@ do
 	local LibDeflate = LibStub:GetLibrary("LibDeflate", true)
 	if AceComm and LibDeflate then
 		lib._ace = lib._ace or {}
-                function lib._ace:OnReceiveComm(prefix, text, channel, sender)
-                        if not RECV_PREFIXES[prefix] then return end
-                        sender = Ambiguate(sender, "none")
+		function lib._ace:OnReceiveComm(prefix, text, channel, sender)
+			if not RECV_PREFIXES[prefix] then return end
+			sender = Ambiguate(sender, "none")
 			-- ignore self (short or full)
 			local meShort = UnitName("player")
 			local meFull = FullName("player")
@@ -252,18 +249,18 @@ do
 			if type(data) ~= "string" or #data < 1 then return end
 			ProcessData(sender, channel, data)
 		end
-                AceComm:Embed(lib._ace)
-                for p in pairs(RECV_PREFIXES) do
-                        lib._ace:RegisterComm(p, "OnReceiveComm")
-                end
-        end
+		AceComm:Embed(lib._ace)
+		for p in pairs(RECV_PREFIXES) do
+			lib._ace:RegisterComm(p, "OnReceiveComm")
+		end
+	end
 end
 
 -- Register for logged comms
 if C_ChatInfo then
-        for p in pairs(RECV_PREFIXES_LOGGED) do
-                C_ChatInfo.RegisterAddonMessagePrefix(p)
-        end
+	for p in pairs(RECV_PREFIXES_LOGGED) do
+		C_ChatInfo.RegisterAddonMessagePrefix(p)
+	end
 end
 local f = lib._frame or CreateFrame("Frame")
 lib._frame = f
