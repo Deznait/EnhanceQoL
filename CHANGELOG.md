@@ -4,16 +4,20 @@
 
 ### ✨ Added
 
-- Options to block: Duel, Party invites and Pet Battle requests
+- Options to block duels, party invites, and pet battle requests
 
 ### 🔄 Changed
 
-- LibOpenRaid changed to LibOpenKeystone
-- Refactor Dungeon Filter
+- Switched from LibOpenRaid to LibOpenKeystone
+- Refactored Dungeon Filter
+
+### ❌ Removed
+
+- Hidden counter from Dungeon Filter
 
 ### 🐛 Fixed
 
-- Anchor error for Mythic+ Rating
+- Anchor error with Mythic+ rating
 
 ---
 
