@@ -56,14 +56,20 @@ local function unregisterEnchantBuff(catId, slot)
 	end
 end
 
+local hasGroupTypeFilters = false
+
 for catId, cat in pairs(addon.db["buffTrackerCategories"]) do
+	if not cat.allowedGroupTypes then cat.allowedGroupTypes = {} end
+	if next(cat.allowedGroupTypes) then hasGroupTypeFilters = true end
 	for id, buff in pairs(cat.buffs or {}) do
 		if not buff.trackType then buff.trackType = "BUFF" end
 		if not buff.allowedSpecs then buff.allowedSpecs = {} end
 		if not buff.allowedClasses then buff.allowedClasses = {} end
 		if not buff.allowedRoles then buff.allowedRoles = {} end
+		if not buff.allowedGroupTypes then buff.allowedGroupTypes = {} end
 		if buff.showCooldown == nil then buff.showCooldown = false end
 		if not buff.conditions then buff.conditions = { join = "AND", conditions = {} } end
+		if next(buff.allowedGroupTypes) then hasGroupTypeFilters = true end
 		if buff.trackType == "ITEM" and buff.slot then
 			registerItemBuff(catId, id, buff.slot)
 		elseif buff.trackType == "ENCHANT" and buff.slot then
@@ -324,12 +330,14 @@ for key, info in pairs(instanceDifficultyGroups) do
 end
 
 local currentInstanceGroup
+local currentGroupType
 
 local function updateInstanceGroup()
 	local _, _, diffID = GetInstanceInfo()
 	if nil == diffID then diffID = "" end
 	currentInstanceGroup = difficultyToGroup[diffID]
 end
+
 
 local groupTypeNames = { PARTY = PARTY, RAID = RAID, SOLO = SOLO or "Solo" }
 local groupTypeOrder = { "PARTY", "RAID", "SOLO" }
@@ -354,6 +362,9 @@ local DebuffBorderColors = {
 }
 
 function categoryAllowed(cat)
+	if cat.allowedGroupTypes and next(cat.allowedGroupTypes) then
+		if not currentGroupType or not cat.allowedGroupTypes[currentGroupType] then return false end
+	end
 	if cat.allowedClasses and next(cat.allowedClasses) then
 		if not cat.allowedClasses[addon.variables.unitClass] then return false end
 	end
@@ -372,6 +383,9 @@ function categoryAllowed(cat)
 end
 
 local function buffAllowed(buff)
+	if buff.allowedGroupTypes and next(buff.allowedGroupTypes) then
+		if not currentGroupType or not buff.allowedGroupTypes[currentGroupType] then return false end
+	end
 	if buff.allowedClasses and next(buff.allowedClasses) then
 		if not buff.allowedClasses[addon.variables.unitClass] then return false end
 	end
@@ -545,7 +559,9 @@ local function rebuildAltMapping()
 	wipe(altToBase)
 	wipe(spellToCat)
 	wipe(chargeSpells)
+	hasGroupTypeFilters = false
 	for catId, cat in pairs(addon.db["buffTrackerCategories"]) do
+		if cat.allowedGroupTypes and next(cat.allowedGroupTypes) then hasGroupTypeFilters = true end
 		for baseId, buff in pairs(cat.buffs or {}) do
 			if
 				(not buff.allowedInstances or not next(buff.allowedInstances) or (currentInstanceGroup and buff.allowedInstances[currentInstanceGroup]))
@@ -1295,31 +1311,23 @@ local function scanBuffs()
 	firstScan = false
 end
 
-local function collectActiveAuras()
-	for _, filter in ipairs({ "HELPFUL", "HARMFUL" }) do
-		local i = 1
-		local aura = C_UnitAuras.GetAuraDataByIndex("player", i, filter)
-		while aura do
-			local base = altToBase[aura.spellId] or aura.spellId
-			auraInstanceMap[aura.auraInstanceID] = { buffId = base }
-			for catId in pairs(spellToCat[base] or {}) do
-				local key = catId .. ":" .. base
-				buffInstances[key] = aura.auraInstanceID
-			end
-			i = i + 1
-			aura = C_UnitAuras.GetAuraDataByIndex("player", i, filter)
-		end
-	end
-end
-
 addon.Aura.buffAnchors = anchors
 addon.Aura.scanBuffs = scanBuffs
 
 local eventFrame = CreateFrame("Frame")
 eventFrame:SetScript("OnEvent", function(_, event, unit, ...)
+	if event == "GROUP_ROSTER_UPDATE" then
+		if hasGroupTypeFilters and updateGroupType() then
+			rebuildAltMapping()
+			scanBuffs()
+		end
+		return
+	end
 	if event == "CHALLENGE_MODE_START" then
-		currentInstanceGroup = difficultyToGroup[8]
+		updateInstanceGroup()
+		updateGroupType()
 		rebuildAltMapping()
+
 		updateGroupType()
 		collectActiveAuras()
 		scanBuffs()
@@ -1347,7 +1355,6 @@ eventFrame:SetScript("OnEvent", function(_, event, unit, ...)
 				updateInstanceGroup()
 				updateGroupType()
 				rebuildAltMapping()
-				collectActiveAuras()
 				scanBuffs()
 			end)
 			return
@@ -1449,6 +1456,7 @@ eventFrame:SetScript("OnEvent", function(_, event, unit, ...)
 end)
 eventFrame:RegisterUnitEvent("UNIT_AURA", "player")
 eventFrame:RegisterEvent("CHALLENGE_MODE_START")
+eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")

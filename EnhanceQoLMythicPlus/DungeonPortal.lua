@@ -1410,7 +1410,7 @@ GameTooltip:HookScript("OnShow", function(self)
 			CreateRioScore()
 			local offsetX = 0
 			if nil ~= RaiderIO_ProfileTooltip then offsetX = RaiderIO_ProfileTooltip:GetSize() end
-			if gFrameAnchorScore then gFrameAnchorScore:SetPoint("TOPLEFT", GameTooltip, "TOPRIGHT", offsetX, 0) end
+			if gFrameAnchorScore and addon.db["dungeonScoreFrameLocked"] then gFrameAnchorScore:SetPoint("TOPLEFT", GameTooltip, "TOPRIGHT", offsetX, 0) end
 
 			if addon.db["teleportFrame"] then frameAnchor:SetAlpha(0) end
 			if addon.db["teleportsEnableCompendium"] then frameAnchorCompendium:SetAlpha(0) end
