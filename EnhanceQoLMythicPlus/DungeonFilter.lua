@@ -189,22 +189,31 @@ local function FilterResults(panel)
 		panel.results = results
 		panel.totalResults = #results
 		LFGListSearchPanel_UpdateResults(panel)
-		return
-	end
-	local selectedID = (type(LFGListSearchPanel_GetSelectedResult) == "function" and LFGListSearchPanel_GetSelectedResult(panel)) or panel.selectedResultID or panel.selectedResult
-	local results = select(2, C_LFGList.GetSearchResults())
-	local filtered = {}
-	for _, resultID in ipairs(results) do
-		if appliedLookup[resultID] or (selectedID and resultID == selectedID) then
-			table.insert(filtered, resultID)
-		else
-			local info = C_LFGList.GetSearchResultInfo(resultID)
-			if info and EntryPassesFilter(info) then table.insert(filtered, resultID) end
+	else
+		local selectedID = (type(LFGListSearchPanel_GetSelectedResult) == "function" and LFGListSearchPanel_GetSelectedResult(panel)) or panel.selectedResultID or panel.selectedResult
+		local results = select(2, C_LFGList.GetSearchResults())
+		local filtered = {}
+		for _, resultID in ipairs(results) do
+			if appliedLookup[resultID] or (selectedID and resultID == selectedID) then
+				table.insert(filtered, resultID)
+			else
+				local info = C_LFGList.GetSearchResultInfo(resultID)
+				if info and EntryPassesFilter(info) then table.insert(filtered, resultID) end
+			end
 		end
+		panel.results = filtered
+		panel.totalResults = #filtered
+		LFGListSearchPanel_UpdateResults(panel)
 	end
-	panel.results = filtered
-	panel.totalResults = #filtered
-	LFGListSearchPanel_UpdateResults(panel)
+	if panel.ScrollBox and panel.ScrollBox.ScrollBar then
+		panel.ScrollBox.ScrollBar:SetValue(0)
+		if panel.ScrollBox.ScrollToBegin then panel.ScrollBox:ScrollToBegin() end
+	end
+	if panel.ResultsText then
+		panel.ResultsText:SetFormattedText(LFG_LIST_RESULTS_FOUND, panel.totalResults)
+	elseif panel.resultsText then
+		panel.resultsText:SetFormattedText(LFG_LIST_RESULTS_FOUND, panel.totalResults)
+	end
 end
 
 RefreshVisibleEntries = function()
