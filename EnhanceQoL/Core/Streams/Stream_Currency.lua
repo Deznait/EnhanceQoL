@@ -5,6 +5,19 @@ local L = addon.L
 local AceGUI = addon.AceGUI
 local db
 local stream
+local tracked = {}
+local trackedDirty = true
+
+local function rebuildTracked()
+	if not db then return end
+	for k in pairs(tracked) do
+		tracked[k] = nil
+	end
+	for _, id in ipairs(db.ids) do
+		tracked[id] = true
+	end
+	trackedDirty = false
+end
 
 local updatePending = false
 local function RequestUpdateDebounced()
@@ -22,6 +35,7 @@ local function ensureDB()
 	db = addon.db.datapanel.currency
 	db.fontSize = db.fontSize or 14
 	db.ids = db.ids or {}
+	if trackedDirty then rebuildTracked() end
 end
 
 local aceWindowWidget -- AceGUI widget
@@ -83,6 +97,7 @@ local function renderList()
 		remove:SetWidth(30)
 		remove:SetCallback("OnClick", function()
 			table.remove(db.ids, idx)
+			rebuildTracked()
 			renderList()
 			RequestUpdateDebounced()
 		end)
@@ -141,6 +156,7 @@ local function createAceWindow()
 				end
 			end
 			table.insert(db.ids, id)
+			rebuildTracked()
 			addBox:SetText("")
 			renderList()
 			RequestUpdateDebounced()
@@ -192,12 +208,7 @@ local provider = {
 		PLAYER_LOGIN = function() RequestUpdateDebounced() end,
 		CURRENCY_DISPLAY_UPDATE = function(_, currencyType)
 			ensureDB()
-			for _, tracked in ipairs(db.ids) do
-				if tracked == currencyType then
-					RequestUpdateDebounced()
-					break
-				end
-			end
+			if tracked[currencyType] then RequestUpdateDebounced() end
 		end,
 	},
 	OnClick = function(_, btn)
