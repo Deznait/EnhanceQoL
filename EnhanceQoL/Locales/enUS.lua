@@ -213,6 +213,10 @@ L["unitFrameScale"] = "Frame scale"
 L["UnitFrameUFExplain"] = "Applies to RAID and Party Frames"
 
 L["ActionbarHideExplain"] = 'Set the action bar to hidden and show on mouseover. This works only when your Action Bar is set to "%s" and "%s" in %s'
+L["fullButtonRangeColoring"] = "Full button range coloring"
+L["fullButtonRangeColoringDesc"] = "Tint the entire action button when out of range"
+L["rangeOverlayColor"] = "Overlay color"
+L["rangeOverlayAlpha"] = "Overlay opacity"
 
 L["enableMinimapButtonBin"] = "Enable Minimap Button Sink"
 L["enableMinimapButtonBinDesc"] = "Collect all minimap buttons in a single button"

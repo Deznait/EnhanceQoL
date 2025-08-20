@@ -42,6 +42,7 @@ English • German • French • Spanish • Italian • Russian • Korean •
 ### Action Bars & Mouse
 
 *   Mouse-over action bars.
+*   Optional full button range coloring.
 *   Customisable mouse ring and mouse trail for better cursor visibility.
 
 ### Group & Raid Tools

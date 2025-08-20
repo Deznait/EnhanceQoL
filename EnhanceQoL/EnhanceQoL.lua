@@ -3,6 +3,7 @@
 -- luacheck: globals GenericTraitUI_LoadUI GenericTraitFrame
 -- luacheck: globals CancelDuel DeclineGroup C_PetBattles
 -- luacheck: globals ExpansionLandingPage ExpansionLandingPageMinimapButton ShowGarrisonLandingPage GarrisonLandingPage GarrisonLandingPage_Toggle GarrisonLandingPageMinimapButton CovenantSanctumFrame CovenantSanctumFrame_LoadUI EasyMenu
+-- luacheck: globals ActionButton_UpdateRangeIndicator
 local addonName, addon = ...
 
 local LDB = LibStub("LibDataBroker-1.1")
@@ -377,6 +378,56 @@ local function UpdateActionBarMouseover(barName, enable, variable)
 		end
 	end
 end
+
+-- Enhance QoL: Full button range coloring (taint-safe)
+local function EnsureOverlay(btn)
+	if btn.EQOL_RangeOverlay then return btn.EQOL_RangeOverlay end
+	local tex = btn:CreateTexture(nil, "OVERLAY", nil, 7)
+	tex:SetAllPoints(btn.icon or btn.Icon or btn)
+	tex:Hide()
+	btn.EQOL_RangeOverlay = tex
+	return tex
+end
+
+local function ShowRangeOverlay(btn, show)
+	local ov = EnsureOverlay(btn)
+	if show and addon.db and addon.db.actionBarFullRangeColoring then
+		local col = addon.db.actionBarFullRangeColor or { r = 1, g = 0.1, b = 0.1 }
+		local alpha = addon.db.actionBarFullRangeAlpha or 0.35
+		ov:SetColorTexture(col.r, col.g, col.b, alpha)
+		ov:Show()
+	else
+		ov:Hide()
+	end
+end
+
+local function RefreshAllRangeOverlays()
+	for _, info in ipairs(addon.variables.actionBarNames or {}) do
+		local prefix
+		if info.name == "MainMenuBar" then
+			prefix = "ActionButton"
+		elseif info.name == "PetActionBar" then
+			prefix = "PetActionButton"
+		elseif info.name == "StanceBar" then
+			prefix = "StanceButton"
+		else
+			prefix = info.name .. "Button"
+		end
+		for i = 1, 12 do
+			local button = _G[prefix .. i]
+			if button then ActionButton_UpdateRangeIndicator(button) end
+		end
+	end
+end
+
+hooksecurefunc("ActionButton_UpdateRangeIndicator", function(self, checksRange, inRange)
+	if not self or not self.action then return end
+	if checksRange and inRange == false then
+		ShowRangeOverlay(self, true)
+	else
+		ShowRangeOverlay(self, false)
+	end
+end)
 
 local doneHook = false
 local inspectDone = {}
@@ -1543,6 +1594,36 @@ local function addActionBarFrame(container, d)
 			end
 		end, desc)
 		groupCore:AddChild(cbElement)
+	end
+
+	groupCore:AddChild(addon.functions.createSpacerAce())
+
+	local cbRange = addon.functions.createCheckboxAce(L["fullButtonRangeColoring"], addon.db["actionBarFullRangeColoring"], function(_, _, value)
+		addon.db["actionBarFullRangeColoring"] = value
+		RefreshAllRangeOverlays()
+		container:ReleaseChildren()
+		addActionBarFrame(container)
+	end, L["fullButtonRangeColoringDesc"])
+	groupCore:AddChild(cbRange)
+
+	if addon.db["actionBarFullRangeColoring"] then
+		local colorPicker = AceGUI:Create("ColorPicker")
+		colorPicker:SetLabel(L["rangeOverlayColor"])
+		local c = addon.db["actionBarFullRangeColor"]
+		colorPicker:SetColor(c.r, c.g, c.b)
+		colorPicker:SetCallback("OnValueChanged", function(_, _, r, g, b)
+			addon.db["actionBarFullRangeColor"] = { r = r, g = g, b = b }
+			RefreshAllRangeOverlays()
+		end)
+		groupCore:AddChild(colorPicker)
+
+		local alphaPercent = math.floor((addon.db["actionBarFullRangeAlpha"] or 0.35) * 100)
+		local sliderAlpha = addon.functions.createSliderAce(L["rangeOverlayAlpha"] .. ": " .. alphaPercent .. "%", alphaPercent, 1, 100, 1, function(self, _, val)
+			addon.db["actionBarFullRangeAlpha"] = val / 100
+			self:SetLabel(L["rangeOverlayAlpha"] .. ": " .. val .. "%")
+			RefreshAllRangeOverlays()
+		end)
+		groupCore:AddChild(sliderAlpha)
 	end
 end
 
@@ -3454,6 +3535,9 @@ local function initDungeon()
 end
 
 local function initActionBars()
+	addon.functions.InitDBValue("actionBarFullRangeColoring", false)
+	addon.functions.InitDBValue("actionBarFullRangeColor", { r = 1, g = 0.1, b = 0.1 })
+	addon.functions.InitDBValue("actionBarFullRangeAlpha", 0.35)
 	for _, cbData in ipairs(addon.variables.actionBarNames) do
 		if cbData.var and cbData.name then
 			if addon.db[cbData.var] then UpdateActionBarMouseover(cbData.name, addon.db[cbData.var], cbData.var) end

@@ -48,6 +48,7 @@ Each action bar can be set to appear only on mouseover:
 - mouseoverActionBar1 through mouseoverActionBar8 (main and multi bars).
 - mouseoverActionBarPet (pet bar).
 - mouseoverActionBarStanceBar (stance bar).
+- **Full button range coloring** (Tint the entire action button when a spell is out of range; includes color and opacity controls).
 
 ## Unit Frames
 - **Hide floating combat text over your character** (Hide floating combat text (damage and healing) over your character).
