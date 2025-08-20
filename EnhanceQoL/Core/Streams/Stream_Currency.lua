@@ -1,4 +1,4 @@
--- luacheck: globals EnhanceQoL GAMEMENU_OPTIONS C_CurrencyInfo C_Timer ITEM_QUALITY_COLORS HIGHLIGHT_FONT_COLOR_CODE RED_FONT_COLOR_CODE FONT_COLOR_CODE_CLOSE CURRENCY_SEASON_TOTAL_MAXIMUM CURRENCY_SEASON_TOTAL CURRENCY_TOTAL CURRENCY_TOTAL_CAP BreakUpLargeNumbers UIParent GameTooltip GetCursorPosition GameFontNormal
+-- luacheck: globals EnhanceQoL GAMEMENU_OPTIONS C_CurrencyInfo C_Timer ITEM_QUALITY_COLORS HIGHLIGHT_FONT_COLOR_CODE RED_FONT_COLOR_CODE FONT_COLOR_CODE_CLOSE CURRENCY_SEASON_TOTAL_MAXIMUM CURRENCY_SEASON_TOTAL CURRENCY_TOTAL CURRENCY_TOTAL_CAP BreakUpLargeNumbers
 local addonName, addon = ...
 local L = addon.L
 
@@ -7,7 +7,6 @@ local db
 local stream
 local tracked = {}
 local trackedDirty = true
-local measureFont = UIParent:CreateFontString()
 
 local function rebuildTracked()
 	if not db then return end
@@ -199,12 +198,6 @@ local function checkCurrencies(stream)
 	local size = db.fontSize or 14
 	local parts = {}
 	local tips = db.tooltipPerCurrency and nil or {}
-	local hover = db.tooltipPerCurrency and {} or nil
-	local font = (addon.variables and addon.variables.defaultFont) or select(1, GameFontNormal:GetFont())
-	measureFont:SetFont(font, size, "OUTLINE")
-	measureFont:SetText(" ")
-	local spaceWidth = measureFont:GetStringWidth()
-	local x = 0
 	for _, id in ipairs(db.ids) do
 		local info = C_CurrencyInfo.GetCurrencyInfo(id)
 		if info then
@@ -218,15 +211,11 @@ local function checkCurrencies(stream)
 			elseif info.maxQuantity and info.maxQuantity > 0 and qty >= info.maxQuantity then
 				colorCode = RED_FONT_COLOR_CODE
 			end
-			parts[#parts + 1] = ("|T%s:%d:%d:0:0|t %s%d%s"):format(icon or 0, size, size, colorCode, qty, FONT_COLOR_CODE_CLOSE)
-			if hover then
-				if #hover > 0 then x = x + spaceWidth end
-				local start = x
-				measureFont:SetText(tostring(qty))
-				local numWidth = measureFont:GetStringWidth()
-				x = x + size + spaceWidth + numWidth
-				hover[#hover + 1] = { id = id, start = start, stop = x }
-			else
+			parts[#parts + 1] = {
+				id = id,
+				text = ("|T%s:%d:%d:0:0|t %s%d%s"):format(icon or 0, size, size, colorCode, qty, FONT_COLOR_CODE_CLOSE),
+			}
+			if tips then
 				local color = ITEM_QUALITY_COLORS[info.quality]
 				local name = (color and color.hex or "|cffffffff") .. (info.name or ("ID %d"):format(id)) .. "|r"
 				tips[#tips + 1] = name
@@ -251,17 +240,14 @@ local function checkCurrencies(stream)
 		end
 	end
 
-	local newText
 	if #parts > 0 then
-		newText = table.concat(parts, " ")
+		stream.snapshot.parts = parts
+		stream.snapshot.text = nil
 	else
-		newText = L["Right-Click for options"]
+		stream.snapshot.parts = nil
+		stream.snapshot.text = L["Right-Click for options"]
 	end
-	if stream.snapshot.text ~= newText or stream.snapshot.fontSize ~= size then
-		stream.snapshot.text = newText
-		stream.snapshot.fontSize = size
-	end
-	stream.snapshot.hover = hover
+	stream.snapshot.fontSize = size
 	if tips then
 		if #tips > 0 then
 			if tips[#tips] == "" then tips[#tips] = nil end
@@ -272,8 +258,10 @@ local function checkCurrencies(stream)
 			stream.snapshot.tooltip = L["Right-Click for options"]
 		end
 	else
-		stream.snapshot.tooltip = L["Right-Click for options"]
+		stream.snapshot.tooltip = nil
 	end
+	stream.snapshot.perCurrency = db.tooltipPerCurrency
+	stream.snapshot.showDescription = db.showDescription
 end
 
 local provider = {
@@ -290,27 +278,6 @@ local provider = {
 	},
 	OnClick = function(_, btn)
 		if btn == "RightButton" then createAceWindow() end
-	end,
-	OnMouseEnter = function(b)
-		local tip = GameTooltip
-		tip:ClearLines()
-		tip:SetOwner(b, "ANCHOR_TOPLEFT")
-
-		local hover = stream.snapshot and stream.snapshot.hover
-		if hover and #hover > 0 then
-			local mx = GetCursorPosition()
-			local scale = b:GetEffectiveScale()
-			mx = mx / scale - b:GetLeft()
-			for _, h in ipairs(hover) do
-				if mx >= h.start and mx <= h.stop then
-					tip:SetCurrencyByID(h.id)
-					tip:AddLine(" ")
-					break
-				end
-			end
-		end
-		tip:AddLine(L["Right-Click for options"])
-		tip:Show()
 	end,
 }
 
