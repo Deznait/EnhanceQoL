@@ -23,7 +23,7 @@ local updatePending = false
 local function RequestUpdateDebounced()
 	if updatePending then return end
 	updatePending = true
-	C_Timer.After(0.05, function()
+	C_Timer.After(0.2, function()
 		updatePending = false
 		if stream then addon.DataHub:RequestUpdate(stream) end
 	end)
@@ -271,7 +271,7 @@ local provider = {
 	update = checkCurrencies,
 	events = {
 		PLAYER_LOGIN = function() RequestUpdateDebounced() end,
-		CURRENCY_DISPLAY_UPDATE = function(_, currencyType)
+		CURRENCY_DISPLAY_UPDATE = function(_, currencyType, ...)
 			ensureDB()
 			if tracked[currencyType] then RequestUpdateDebounced() end
 		end,

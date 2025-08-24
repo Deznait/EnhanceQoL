@@ -378,13 +378,13 @@ local function updateButtonInfo(itemButton, bag, slot, frameName)
 				if addon.itemBagFilters["rarity"] then
 					if nil == addon.itemBagFiltersQuality[itemQuality] or addon.itemBagFiltersQuality[itemQuality] == false then setVisibility = true end
 				end
-                                local cilvl = C_Item.GetDetailedItemLevelInfo(itemLink)
-                                if addon.itemBagFilters["minLevel"] and (not cilvl or cilvl < addon.itemBagFilters["minLevel"] or (nil == itemEquipLoc or addon.variables.ignoredEquipmentTypes[itemEquipLoc])) then
-                                        setVisibility = true
-                                end
-                                if addon.itemBagFilters["maxLevel"] and (not cilvl or cilvl > addon.itemBagFilters["maxLevel"] or (nil == itemEquipLoc or addon.variables.ignoredEquipmentTypes[itemEquipLoc])) then
-                                        setVisibility = true
-                                end
+				local cilvl = C_Item.GetDetailedItemLevelInfo(itemLink)
+				if addon.itemBagFilters["minLevel"] and (not cilvl or cilvl < addon.itemBagFilters["minLevel"] or (nil == itemEquipLoc or addon.variables.ignoredEquipmentTypes[itemEquipLoc])) then
+					setVisibility = true
+				end
+				if addon.itemBagFilters["maxLevel"] and (not cilvl or cilvl > addon.itemBagFilters["maxLevel"] or (nil == itemEquipLoc or addon.variables.ignoredEquipmentTypes[itemEquipLoc])) then
+					setVisibility = true
+				end
 				if addon.itemBagFilters["currentExpension"] and LE_EXPANSION_LEVEL_CURRENT ~= expId then setVisibility = true end
 				if addon.itemBagFilters["equipment"] and (nil == itemEquipLoc or addon.variables.ignoredEquipmentTypes[itemEquipLoc]) then setVisibility = true end
 				if addon.itemBagFilters["bind"] then
@@ -974,6 +974,11 @@ end
 
 function addon.functions.catalystChecks()
 	local mId = C_MythicPlus.GetCurrentSeason()
+	if mId == -1 then
+		C_MythicPlus.RequestMapInfo()
+		C_Timer.After(0.1, function() addon.functions.catalystChecks() end)
+		return
+	end
 	if not mId or mId < 0 then
 		-- calculate by time of Patch release
 		if addon.functions.IsPatchLive("horrificVisions") and not addon.functions.IsPatchLive("whispersOfKaresh") then

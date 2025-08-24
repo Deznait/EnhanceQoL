@@ -9,6 +9,7 @@ end
 
 local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_Aura")
 local AceGUI = addon.AceGUI
+local eventFrame = CreateFrame("Frame")
 
 -- luacheck: globals ChatFrame_OpenChat ActionButtonSpellAlertManager
 
@@ -104,7 +105,6 @@ local sortedCategoryIds -- cached sorted category ids
 local function invalidateBuffOrder(catId) orderedBuffs[catId] = nil end
 local function invalidateCategoryOrder() sortedCategoryIds = nil end
 
--- UI helper to avoid redundant glow calls
 local function setGlow(frame, enabled)
 	if frame._glow == enabled then return end
 	frame._glow = enabled
@@ -195,6 +195,7 @@ local function scheduleEquipScan()
 	equipScanPending = true
 	C_Timer.After(0.10, scanTrinketSlots)
 end
+
 -- Throttled sweep for cooldown updates to coalesce rapid events
 local cooldownSweepPending = false
 local cooldownGlobalSweep = false
@@ -1309,10 +1310,28 @@ local function scanBuffs()
 	firstScan = false
 end
 
+-- Debounced context refresh for instance/group changes (incl. Delves)
+local contextRefreshPending = false
+local function refreshInstanceContext()
+	updateInstanceGroup()
+	updateGroupType()
+	rebuildAltMapping()
+	scanBuffs()
+end
+
+local function scheduleContextRefresh(reason)
+	-- coalesce bursts (e.g., multiple events during Delve entry)
+	if contextRefreshPending then return end
+	contextRefreshPending = true
+	C_Timer.After(1, function()
+		contextRefreshPending = false
+		refreshInstanceContext()
+	end)
+end
+
 addon.Aura.buffAnchors = anchors
 addon.Aura.scanBuffs = scanBuffs
 
-local eventFrame = CreateFrame("Frame")
 eventFrame:SetScript("OnEvent", function(_, event, unit, ...)
 	if event == "GROUP_ROSTER_UPDATE" then
 		if hasGroupTypeFilters and updateGroupType() then
@@ -1321,6 +1340,21 @@ eventFrame:SetScript("OnEvent", function(_, event, unit, ...)
 		end
 		return
 	end
+	if event == "ACTIVE_DELVE_DATA_UPDATE" then
+		-- Delves don’t fire a clean start/stop event and difficulty can arrive late.
+		-- Do an initial refresh and then watch for a single map change to catch the final difficulty.
+		scheduleContextRefresh("delve")
+		eventFrame:RegisterEvent("PLAYER_MAP_CHANGED")
+		return
+	end
+
+	if event == "PLAYER_MAP_CHANGED" then
+		-- One-time follow-up to finalize context after zone switch
+		scheduleContextRefresh("map")
+		eventFrame:UnregisterEvent("PLAYER_MAP_CHANGED")
+		return
+	end
+
 	if event == "CHALLENGE_MODE_START" then
 		updateInstanceGroup()
 		updateGroupType()
@@ -1344,6 +1378,10 @@ eventFrame:SetScript("OnEvent", function(_, event, unit, ...)
 				updateGroupType()
 				rebuildAltMapping()
 				scanBuffs()
+				if currentInstanceGroup == "DELVES" then
+					eventFrame:RegisterEvent("PLAYER_MAP_CHANGED")
+					-- we need that to determine, if the player left a delve when he is inside it during login
+				end
 			end)
 			return
 		end
@@ -1453,6 +1491,7 @@ eventFrame:RegisterEvent("SPELL_UPDATE_CHARGES")
 eventFrame:RegisterEvent("BAG_UPDATE_COOLDOWN")
 eventFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 eventFrame:RegisterEvent("UNIT_INVENTORY_CHANGED")
+eventFrame:RegisterEvent("ACTIVE_DELVE_DATA_UPDATE")
 
 local function addBuff(catId, id)
 	-- get spell name and icon once

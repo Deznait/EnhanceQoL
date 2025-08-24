@@ -1,5 +1,15 @@
 # Changelog
 
+
+## [4.7.1] – 2025-08-24
+
+### 🐛 Fixed
+
+- **BuffTrack** was not correctly detecting _Delve_ as a difficulty
+- **Catalyst Charge** sometimes fall back to a heavier detection method
+
+---
+
 ## [4.7.0] – 2025-08-20
 
 ### ✨ Added
