@@ -17,10 +17,18 @@ end
 
 local function buildMacroString(item)
 	local resetType = "combat"
+	local recuperateString = ""
+
+	if addon.db.allowRecuperate and addon.db.useRecuperateWithDrinks then
+		local spellInfo = C_Spell.GetSpellInfo(1231411)
+		local spellName = spellInfo and spellInfo.name
+		if spellName and C_SpellBook.IsSpellInSpellBook(1231411) and item ~= spellName then recuperateString = "\n/cast " .. spellName end
+	end
+
 	if item == nil then
-		return "#showtooltip"
+		return "#showtooltip" .. recuperateString
 	else
-		return "#showtooltip \n/castsequence reset=" .. resetType .. " " .. item
+		return "#showtooltip \n/castsequence reset=" .. resetType .. " " .. item .. recuperateString
 	end
 end
 
@@ -64,6 +72,7 @@ addon.functions.InitDBValue("preferMageFood", true)
 addon.functions.InitDBValue("ignoreBuffFood", true)
 addon.functions.InitDBValue("ignoreGemsEarthen", true)
 addon.functions.InitDBValue("allowRecuperate", true)
+addon.functions.InitDBValue("useRecuperateWithDrinks", false)
 addon.functions.updateAllowedDrinks()
 
 local frameLoad = CreateFrame("Frame")
@@ -108,7 +117,18 @@ local function addDrinkFrame(container)
 		{ text = L["Prefer mage food"], var = "preferMageFood" },
 		{ text = L["Ignore bufffood"], var = "ignoreBuffFood" },
 		{ text = L["ignoreGemsEarthen"], var = "ignoreGemsEarthen" },
-		{ text = L["allowRecuperate"], var = "allowRecuperate", desc = L["allowRecuperateDesc"] },
+		{
+			text = L["allowRecuperate"],
+			var = "allowRecuperate",
+			desc = L["allowRecuperateDesc"],
+			func = function(self, _, value)
+				addon.db["allowRecuperate"] = value
+				addon.functions.updateAllowedDrinks()
+				addon.functions.updateAvailableDrinks(false)
+				container:ReleaseChildren()
+				addDrinkFrame(container)
+			end,
+		},
 		{
 			text = L["mageFoodReminder"],
 			var = "mageFoodReminder",
@@ -129,6 +149,8 @@ local function addDrinkFrame(container)
 			end,
 		},
 	}
+
+	if addon.db["allowRecuperate"] then table.insert(data, { text = L["useRecuperateWithDrinks"], var = "useRecuperateWithDrinks", desc = L["useRecuperateWithDrinksDesc"] }) end
 
 	table.sort(data, function(a, b) return a.text < b.text end)
 

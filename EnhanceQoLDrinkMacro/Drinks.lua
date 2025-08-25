@@ -554,7 +554,7 @@ addon.Drinks.drinkList = { -- Special Food
 	{ key = "SourTopazBites", id = 228493, requiredLevel = 1, mana = 3700000, isBuffFood = true, isEarthenFood = true, earthenOnly = true },
 	-- Mana of this spell is adjusted per level
 	{ key = "QuietContemplation", id = 461063, requiredLevel = 1, mana = 3700000, isBuffFood = false, isEarthenFood = true, earthenOnly = true, isSpell = true },
-	{ key = "Recuperate", id = 1231411, requiredLevel = 1, mana = 0, isBuffFood = false, isSpell = true, isHealthOnly = true },
+	{ key = "Recuperate", id = 1231411, requiredLevel = 5, mana = 0, isBuffFood = false, isSpell = true, isHealthOnly = true },
 }
 
 table.sort(addon.Drinks.drinkList, function(a, b) return a.mana > b.mana end)
