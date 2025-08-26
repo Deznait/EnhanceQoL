@@ -899,3 +899,13 @@ SlashCmdList["EQOLCM"] = function(msg)
 		resetMeter()
 	end
 end
+
+local function OnEvent(self, event)
+	if event == "SPELL_INTERRUPT" then
+	print(CombatLogGetCurrentEventInfo())
+	end
+end
+
+local f = CreateFrame("Frame")
+f:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+f:SetScript("OnEvent", OnEvent)
