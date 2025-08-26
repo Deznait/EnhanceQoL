@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.9.0] – 2025-08-27
+
+### ✨ Added
+
+- **Combat Meter:** Interrupts are now tracked with a dedicated metric and panel.
+- **Combat Meter:** Tooltips list which spells were interrupted.
+
+### 🐛 Fixed
+
+- **New Combat Meter Panel:** Loads and anchors correctly.
+- Minor polish across the meter.
+
+---
+
 ## [4.8.1] – 2025-08-25
 
 ### 🐛 Fixed
