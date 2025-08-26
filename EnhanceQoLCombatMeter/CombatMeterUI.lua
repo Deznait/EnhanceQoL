@@ -89,8 +89,8 @@ local metricNames = {
         damageOverall = L["Damage Overall"],
         healingPerFight = L["Healing Per Fight"],
         healingOverall = L["Healing Overall"],
-        interrupts = INTERRUPTS,
-        interruptsOverall = INTERRUPTS .. " Overall",
+       interrupts = INTERRUPTS,
+       interruptsOverall = INTERRUPTS .. L[" Overall"],
 }
 
 local overallMetrics = { "damageOverall", "healingOverall", "interruptsOverall" }
