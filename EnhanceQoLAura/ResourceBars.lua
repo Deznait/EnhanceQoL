@@ -25,8 +25,13 @@ local getAnchor
 local layoutRunes
 local lastTabIndex
 local lastBarSelectionPerSpec = {}
-local BAR_STACK_SPACING = -4
+local BAR_STACK_SPACING = -1
 local SEPARATOR_THICKNESS = 1
+-- Fixed, non-DB defaults
+local DEFAULT_HEALTH_WIDTH = 200
+local DEFAULT_HEALTH_HEIGHT = 20
+local DEFAULT_POWER_WIDTH = 200
+local DEFAULT_POWER_HEIGHT = 20
 
 function addon.Aura.functions.addResourceFrame(container)
 	local scroll = addon.functions.createContainer("ScrollFrame", "Flow")
@@ -98,13 +103,13 @@ function addon.Aura.functions.addResourceFrame(container)
 		}
 
 		local function displayNameForBarType(pType)
-			if pType == "HEALTH" then return "Health" end
-			local s = _G[pType]
+			if pType == "HEALTH" then return HEALTH end
+			local s = _G["POWER_TYPE_" .. pType] or _G[pType]
 			if type(s) == "string" and s ~= "" then return s end
 			return pType
 		end
 
-		local function addAnchorOptions(barType, parent, info, frameList)
+        local function addAnchorOptions(barType, parent, info, frameList, specIndex)
 			info = info or {}
 			frameList = frameList or baseFrameList
 
@@ -163,35 +168,35 @@ function addon.Aura.functions.addResourceFrame(container)
 				local relName = info.relativeFrame or "UIParent"
 				if relName ~= "UIParent" then
                     local dropPoint = addon.functions.createDropdownAce(RESAMPLE_QUALITY_POINT, anchorPoints, anchorOrder, function(self, _, val)
-						info.point = val
-						if addon.Aura.ResourceBars then addon.Aura.ResourceBars.Refresh() end
-					end)
+                        info.point = val
+                        if addon.Aura.ResourceBars and addon.Aura.ResourceBars.MaybeRefreshActive then addon.Aura.ResourceBars.MaybeRefreshActive(specIndex) end
+                    end)
 					dropPoint:SetValue(info.point or "TOPLEFT")
 					dropPoint:SetFullWidth(false)
 					dropPoint:SetRelativeWidth(0.5)
 					anchorSub:AddChild(dropPoint)
 
                     local dropRelPoint = addon.functions.createDropdownAce(L["Relative Point"], anchorPoints, anchorOrder, function(self, _, val)
-						info.relativePoint = val
-						if addon.Aura.ResourceBars then addon.Aura.ResourceBars.Refresh() end
-					end)
+                        info.relativePoint = val
+                        if addon.Aura.ResourceBars and addon.Aura.ResourceBars.MaybeRefreshActive then addon.Aura.ResourceBars.MaybeRefreshActive(specIndex) end
+                    end)
 					dropRelPoint:SetValue(info.relativePoint or info.point or "TOPLEFT")
 					dropRelPoint:SetFullWidth(false)
 					dropRelPoint:SetRelativeWidth(0.5)
 					anchorSub:AddChild(dropRelPoint)
 
-					local editX = addon.functions.createEditboxAce("X", tostring(info.x or 0), function(self)
-						info.x = tonumber(self:GetText()) or 0
-						if addon.Aura.ResourceBars then addon.Aura.ResourceBars.Refresh() end
-					end)
+                    local editX = addon.functions.createEditboxAce("X", tostring(info.x or 0), function(self)
+                        info.x = tonumber(self:GetText()) or 0
+                        if addon.Aura.ResourceBars and addon.Aura.ResourceBars.MaybeRefreshActive then addon.Aura.ResourceBars.MaybeRefreshActive(specIndex) end
+                    end)
 					editX:SetFullWidth(false)
 					editX:SetRelativeWidth(0.5)
 					anchorSub:AddChild(editX)
 
-					local editY = addon.functions.createEditboxAce("Y", tostring(info.y or 0), function(self)
-						info.y = tonumber(self:GetText()) or 0
-						if addon.Aura.ResourceBars then addon.Aura.ResourceBars.Refresh() end
-					end)
+                    local editY = addon.functions.createEditboxAce("Y", tostring(info.y or 0), function(self)
+                        info.y = tonumber(self:GetText()) or 0
+                        if addon.Aura.ResourceBars and addon.Aura.ResourceBars.MaybeRefreshActive then addon.Aura.ResourceBars.MaybeRefreshActive(specIndex) end
+                    end)
 					editY:SetFullWidth(false)
 					editY:SetRelativeWidth(0.5)
 					anchorSub:AddChild(editY)
@@ -221,9 +226,9 @@ function addon.Aura.functions.addResourceFrame(container)
 				--    compute TOPLEFT/TOPLEFT offsets so the bar appears centered on screen.
 				if val == "UIParent" and prev ~= "UIParent" then
 					-- Determine current (or configured) frame size to center properly
-					local cfg = getBarSettings(barType)
-					local defaultW = barType == "HEALTH" and addon.db.personalResourceBarHealthWidth or addon.db.personalResourceBarManaWidth
-					local defaultH = barType == "HEALTH" and addon.db.personalResourceBarHealthHeight or addon.db.personalResourceBarManaHeight
+                    local cfg = getBarSettings(barType)
+                    local defaultW = barType == "HEALTH" and DEFAULT_HEALTH_WIDTH or DEFAULT_POWER_WIDTH
+                    local defaultH = barType == "HEALTH" and DEFAULT_HEALTH_HEIGHT or DEFAULT_POWER_HEIGHT
 					local w = (cfg and cfg.width) or defaultW or 0
 					local h = (cfg and cfg.height) or defaultH or 0
 					local pw = UIParent and UIParent.GetWidth and UIParent:GetWidth() or 0
@@ -234,9 +239,9 @@ function addon.Aura.functions.addResourceFrame(container)
 					info.x = (pw - w) / 2
 					info.y = (h - ph) / 2
 				end
-				buildAnchorSub()
-				if addon.Aura.ResourceBars then addon.Aura.ResourceBars.Refresh() end
-			end)
+                buildAnchorSub()
+                if addon.Aura.ResourceBars and addon.Aura.ResourceBars.MaybeRefreshActive then addon.Aura.ResourceBars.MaybeRefreshActive(specIndex) end
+            end)
 
 			parent:AddChild(addon.functions.createSpacerAce())
 		end
@@ -270,8 +275,8 @@ function addon.Aura.functions.addResourceFrame(container)
                     dbSpec[pType] = dbSpec[pType]
                         or {
                             enabled = false,
-                            width = addon.db.personalResourceBarManaWidth,
-                            height = addon.db.personalResourceBarManaHeight,
+                            width = DEFAULT_POWER_WIDTH,
+                            height = DEFAULT_POWER_HEIGHT,
                             textStyle = pType == "MANA" and "PERCENT" or "CURMAX",
                             fontSize = 16,
                             showSeparator = false,
@@ -291,8 +296,8 @@ function addon.Aura.functions.addResourceFrame(container)
             dbSpec.HEALTH = dbSpec.HEALTH
                 or {
                     enabled = false,
-                    width = addon.db.personalResourceBarHealthWidth,
-                    height = addon.db.personalResourceBarHealthHeight,
+                    width = DEFAULT_HEALTH_WIDTH,
+                    height = DEFAULT_HEALTH_HEIGHT,
                     textStyle = "PERCENT",
                     fontSize = 16,
                     anchor = {},
@@ -302,7 +307,7 @@ function addon.Aura.functions.addResourceFrame(container)
                 local cbH = addon.functions.createCheckboxAce(HEALTH, hcfg.enabled == true, function(self, _, val)
                     if (hcfg.enabled == true) and not val then addon.Aura.ResourceBars.DetachAnchorsFrom("HEALTH", specIndex) end
                     hcfg.enabled = val
-                    addon.Aura.ResourceBars.Refresh()
+                    if addon.Aura.ResourceBars and addon.Aura.ResourceBars.MaybeRefreshActive then addon.Aura.ResourceBars.MaybeRefreshActive(specIndex) end
                     buildSpec(container, specIndex)
                 end)
 				cbH:SetFullWidth(false)
@@ -312,11 +317,11 @@ function addon.Aura.functions.addResourceFrame(container)
 			for pType in pairs(available) do
 				if pType ~= "HEALTH" then
 					local cfg = dbSpec[pType]
-					local label = _G[pType] or pType
+					local label = _G["POWER_TYPE_" .. pType] or _G[pType] or pType
                     local cb = addon.functions.createCheckboxAce(label, cfg.enabled == true, function(self, _, val)
                         if (cfg.enabled == true) and not val then addon.Aura.ResourceBars.DetachAnchorsFrom(pType, specIndex) end
                         cfg.enabled = val
-                        addon.Aura.ResourceBars.Refresh()
+                        if addon.Aura.ResourceBars and addon.Aura.ResourceBars.MaybeRefreshActive then addon.Aura.ResourceBars.MaybeRefreshActive(specIndex) end
                         buildSpec(container, specIndex)
                     end)
 					cb:SetFullWidth(false)
@@ -335,7 +340,7 @@ function addon.Aura.functions.addResourceFrame(container)
                 if available[pType] then
                     local cfg = dbSpec[pType]
                     if cfg and cfg.enabled == true then
-                        cfgList[pType] = _G[pType] or pType
+                        cfgList[pType] = _G["POWER_TYPE_" .. pType] or _G[pType] or pType
                         table.insert(cfgOrder, pType)
                     end
                 end
@@ -383,16 +388,16 @@ function addon.Aura.functions.addResourceFrame(container)
 				-- Size row (50%/50%)
 				local sizeRow = addon.functions.createContainer("SimpleGroup", "Flow")
 				sizeRow:SetFullWidth(true)
-                local sw = addon.functions.createSliderAce(HUD_EDIT_MODE_SETTING_CHAT_FRAME_WIDTH, hCfg.width or addon.db.personalResourceBarHealthWidth, 1, 2000, 1, function(self, _, val)
-					hCfg.width = val
-					addon.Aura.ResourceBars.SetHealthBarSize(hCfg.width, hCfg.height or addon.db.personalResourceBarHealthHeight)
-				end)
+                local sw = addon.functions.createSliderAce(HUD_EDIT_MODE_SETTING_CHAT_FRAME_WIDTH, hCfg.width or DEFAULT_HEALTH_WIDTH, 1, 2000, 1, function(self, _, val)
+                    hCfg.width = val
+                    if specIndex == addon.variables.unitSpec then addon.Aura.ResourceBars.SetHealthBarSize(hCfg.width, hCfg.height or DEFAULT_HEALTH_HEIGHT) end
+                end)
 				sw:SetFullWidth(false); sw:SetRelativeWidth(0.5)
 				sizeRow:AddChild(sw)
-                local sh = addon.functions.createSliderAce(HUD_EDIT_MODE_SETTING_CHAT_FRAME_HEIGHT, hCfg.height or addon.db.personalResourceBarHealthHeight, 1, 2000, 1, function(self, _, val)
-					hCfg.height = val
-					addon.Aura.ResourceBars.SetHealthBarSize(hCfg.width or addon.db.personalResourceBarHealthWidth, hCfg.height)
-				end)
+                local sh = addon.functions.createSliderAce(HUD_EDIT_MODE_SETTING_CHAT_FRAME_HEIGHT, hCfg.height or DEFAULT_HEALTH_HEIGHT, 1, 2000, 1, function(self, _, val)
+                    hCfg.height = val
+                    if specIndex == addon.variables.unitSpec then addon.Aura.ResourceBars.SetHealthBarSize(hCfg.width or DEFAULT_HEALTH_WIDTH, hCfg.height) end
+                end)
 				sh:SetFullWidth(false); sh:SetRelativeWidth(0.5)
 				sizeRow:AddChild(sh)
 				groupConfig:AddChild(sizeRow)
@@ -405,30 +410,30 @@ function addon.Aura.functions.addResourceFrame(container)
 					healthTextRow:ReleaseChildren()
 					local tList = { PERCENT = STATUS_TEXT_PERCENT, CURMAX = L["Current/Max"], CURRENT = L["Current"], NONE = NONE }
 					local tOrder = { "PERCENT", "CURMAX", "CURRENT", "NONE" }
-					local dropT = addon.functions.createDropdownAce(L["Text"], tList, tOrder, function(self, _, key)
-						hCfg.textStyle = key
-						addon.Aura.ResourceBars.Refresh()
-						buildHealthTextRow()
-					end)
+                    local dropT = addon.functions.createDropdownAce(L["Text"], tList, tOrder, function(self, _, key)
+                        hCfg.textStyle = key
+                        if addon.Aura.ResourceBars and addon.Aura.ResourceBars.MaybeRefreshActive then addon.Aura.ResourceBars.MaybeRefreshActive(specIndex) end
+                        buildHealthTextRow()
+                    end)
 					dropT:SetValue(hCfg.textStyle or "PERCENT")
 					dropT:SetFullWidth(false); dropT:SetRelativeWidth(0.5)
 					healthTextRow:AddChild(dropT)
 					if (hCfg.textStyle or "PERCENT") ~= "NONE" then
-						local sFont = addon.functions.createSliderAce(HUD_EDIT_MODE_SETTING_OBJECTIVE_TRACKER_TEXT_SIZE, hCfg.fontSize or 16, 6, 64, 1, function(self, _, val)
-							hCfg.fontSize = val
-							addon.Aura.ResourceBars.Refresh()
-						end)
+                        local sFont = addon.functions.createSliderAce(HUD_EDIT_MODE_SETTING_OBJECTIVE_TRACKER_TEXT_SIZE, hCfg.fontSize or 16, 6, 64, 1, function(self, _, val)
+                            hCfg.fontSize = val
+                            if addon.Aura.ResourceBars and addon.Aura.ResourceBars.MaybeRefreshActive then addon.Aura.ResourceBars.MaybeRefreshActive(specIndex) end
+                        end)
 						sFont:SetFullWidth(false); sFont:SetRelativeWidth(0.5)
 						healthTextRow:AddChild(sFont)
 					end
 				end
 				buildHealthTextRow()
 
-				addAnchorOptions("HEALTH", groupConfig, hCfg.anchor, frames)
+                addAnchorOptions("HEALTH", groupConfig, hCfg.anchor, frames, specIndex)
 			else
 				local cfg = dbSpec[sel] or {}
-				local defaultW = addon.db.personalResourceBarManaWidth
-				local defaultH = addon.db.personalResourceBarManaHeight
+                local defaultW = DEFAULT_POWER_WIDTH
+                local defaultH = DEFAULT_POWER_HEIGHT
 				local curW = cfg.width or defaultW
 				local curH = cfg.height or defaultH
 				local defaultStyle = (sel == "MANA") and "PERCENT" or "CURMAX"
@@ -440,13 +445,13 @@ function addon.Aura.functions.addResourceFrame(container)
                 sizeRow2:SetFullWidth(true)
                 local sw = addon.functions.createSliderAce(HUD_EDIT_MODE_SETTING_CHAT_FRAME_WIDTH, curW, 1, 2000, 1, function(self, _, val)
                     cfg.width = val
-                    addon.Aura.ResourceBars.SetPowerBarSize(val, cfg.height or defaultH, sel)
+                    if specIndex == addon.variables.unitSpec then addon.Aura.ResourceBars.SetPowerBarSize(val, cfg.height or defaultH, sel) end
                 end)
                 sw:SetFullWidth(false); sw:SetRelativeWidth(0.5)
                 sizeRow2:AddChild(sw)
                 local sh = addon.functions.createSliderAce(HUD_EDIT_MODE_SETTING_CHAT_FRAME_HEIGHT, curH, 1, 2000, 1, function(self, _, val)
                     cfg.height = val
-                    addon.Aura.ResourceBars.SetPowerBarSize(cfg.width or defaultW, val, sel)
+                    if specIndex == addon.variables.unitSpec then addon.Aura.ResourceBars.SetPowerBarSize(cfg.width or defaultW, val, sel) end
                 end)
                 sh:SetFullWidth(false); sh:SetRelativeWidth(0.5)
                 sizeRow2:AddChild(sh)
@@ -463,7 +468,7 @@ function addon.Aura.functions.addResourceFrame(container)
                     local tOrder = { "PERCENT", "CURMAX", "CURRENT", "NONE" }
                     local drop = addon.functions.createDropdownAce(L["Text"], tList, tOrder, function(self, _, key)
                         cfg.textStyle = key
-                        addon.Aura.ResourceBars.Refresh()
+                        if addon.Aura.ResourceBars and addon.Aura.ResourceBars.MaybeRefreshActive then addon.Aura.ResourceBars.MaybeRefreshActive(specIndex) end
                         buildTextRow()
                     end)
                     drop:SetValue(cfg.textStyle or curStyle)
@@ -472,7 +477,7 @@ function addon.Aura.functions.addResourceFrame(container)
                     if (cfg.textStyle or curStyle) ~= "NONE" then
                         local sFont = addon.functions.createSliderAce(HUD_EDIT_MODE_SETTING_OBJECTIVE_TRACKER_TEXT_SIZE, cfg.fontSize or curFont, 6, 64, 1, function(self, _, val)
                             cfg.fontSize = val
-                            addon.Aura.ResourceBars.Refresh()
+                            if addon.Aura.ResourceBars and addon.Aura.ResourceBars.MaybeRefreshActive then addon.Aura.ResourceBars.MaybeRefreshActive(specIndex) end
                         end)
                         sFont:SetFullWidth(false); sFont:SetRelativeWidth(0.5)
                         textRow:AddChild(sFont)
@@ -502,7 +507,7 @@ function addon.Aura.functions.addResourceFrame(container)
                     local sepColor
                     local cbSep = addon.functions.createCheckboxAce(L["Show separator"], cfg.showSeparator == true, function(self, _, val)
                         cfg.showSeparator = val and true or false
-                        addon.Aura.ResourceBars.Refresh()
+                        if addon.Aura.ResourceBars and addon.Aura.ResourceBars.MaybeRefreshActive then addon.Aura.ResourceBars.MaybeRefreshActive(specIndex) end
                         if sepColor then sepColor:SetDisabled(not cfg.showSeparator) end
                     end)
                     cbSep:SetFullWidth(false); cbSep:SetRelativeWidth(0.5)
@@ -513,7 +518,7 @@ function addon.Aura.functions.addResourceFrame(container)
                     sepColor:SetColor(sc[1] or 1, sc[2] or 1, sc[3] or 1, sc[4] or 0.5)
                     sepColor:SetCallback("OnValueChanged", function(_, _, r, g, b, a)
                         cfg.separatorColor = { r, g, b, a }
-                        addon.Aura.ResourceBars.Refresh()
+                        if addon.Aura.ResourceBars and addon.Aura.ResourceBars.MaybeRefreshActive then addon.Aura.ResourceBars.MaybeRefreshActive(specIndex) end
                     end)
                     sepColor:SetFullWidth(false); sepColor:SetRelativeWidth(0.5)
                     sepColor:SetDisabled(not (cfg.showSeparator == true))
@@ -521,7 +526,7 @@ function addon.Aura.functions.addResourceFrame(container)
                     groupConfig:AddChild(sepRow)
                 end
 
-				addAnchorOptions(sel, groupConfig, cfg.anchor, frames)
+                addAnchorOptions(sel, groupConfig, cfg.anchor, frames, specIndex)
 			end
 		end
 
@@ -637,20 +642,20 @@ local function resolveAnchor(info, type)
 end
 
 local function createHealthBar()
-	if mainFrame then
-		mainFrame:Show()
-		healthBar:Show()
-		return
-	end
+    if mainFrame then
+        mainFrame:Show()
+        healthBar:Show()
+        return
+    end
 
-	mainFrame = CreateFrame("frame", "EQOLResourceFrame", UIParent)
-	healthBar = CreateFrame("StatusBar", "EQOLHealthBar", UIParent, "BackdropTemplate")
-	do
-		local cfg = getBarSettings("HEALTH")
-		local w = (cfg and cfg.width) or addon.db["personalResourceBarHealthWidth"]
-		local h = (cfg and cfg.height) or addon.db["personalResourceBarHealthHeight"]
-		healthBar:SetSize(w, h)
-	end
+    mainFrame = CreateFrame("frame", "EQOLResourceFrame", UIParent)
+    healthBar = CreateFrame("StatusBar", "EQOLHealthBar", UIParent, "BackdropTemplate")
+    do
+        local cfg = getBarSettings("HEALTH")
+        local w = (cfg and cfg.width) or DEFAULT_HEALTH_WIDTH
+        local h = (cfg and cfg.height) or DEFAULT_HEALTH_HEIGHT
+        healthBar:SetSize(w, h)
+    end
 	healthBar:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
 	healthBar:SetClampedToScreen(true)
 	local anchor = getAnchor("HEALTH", addon.variables.unitSpec)
@@ -1072,9 +1077,9 @@ local function createPowerBar(type, anchor)
 		isNew = true
 	end
 
-	local settings = getBarSettings(type)
-	local w = settings and settings.width or addon.db["personalResourceBarManaWidth"]
-	local h = settings and settings.height or addon.db["personalResourceBarManaHeight"]
+    local settings = getBarSettings(type)
+    local w = settings and settings.width or DEFAULT_POWER_WIDTH
+    local h = settings and settings.height or DEFAULT_POWER_HEIGHT
 	bar:SetSize(w, h)
 	bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
 	bar:SetClampedToScreen(true)
@@ -1107,10 +1112,20 @@ local function createPowerBar(type, anchor)
 		a.relativePoint = "BOTTOMLEFT"
 		a.x = 0
 		a.y = BAR_STACK_SPACING
-	else
-		bar:ClearAllPoints()
-		bar:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, -40)
-	end
+    else
+        -- No anchor in DB and no previous anchor in code path; default: center on UIParent
+        bar:ClearAllPoints()
+        local pw = UIParent and UIParent.GetWidth and UIParent:GetWidth() or 0
+        local ph = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 0
+        local cx = (pw - w) / 2
+        local cy = (h - ph) / 2
+        bar:SetPoint("TOPLEFT", UIParent, "TOPLEFT", cx, cy)
+        a.point = "TOPLEFT"
+        a.relativeFrame = "UIParent"
+        a.relativePoint = "TOPLEFT"
+        a.x = cx
+        a.y = cy
+    end
 
 	-- Visuals and text
 	bar:SetBackdrop({
@@ -1431,8 +1446,8 @@ function ResourceBars.DetachAnchorsFrom(disabledType, specIndex)
 				local ph = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 0
 				-- Determine dependent frame size (fallback to defaults by bar type)
 				local cfgDep = getBarSettings(pType)
-				local defaultW = (pType == "HEALTH") and addon.db.personalResourceBarHealthWidth or addon.db.personalResourceBarManaWidth
-				local defaultH = (pType == "HEALTH") and addon.db.personalResourceBarHealthHeight or addon.db.personalResourceBarManaHeight
+                local defaultW = (pType == "HEALTH") and DEFAULT_HEALTH_WIDTH or DEFAULT_POWER_WIDTH
+                local defaultH = (pType == "HEALTH") and DEFAULT_HEALTH_HEIGHT or DEFAULT_POWER_HEIGHT
 				local w = (depFrame and depFrame.GetWidth and depFrame:GetWidth()) or (cfgDep and cfgDep.width) or defaultW or 0
 				local h = (depFrame and depFrame.GetHeight and depFrame:GetHeight()) or (cfgDep and cfgDep.height) or defaultH or 0
 				cfg.anchor.point = "TOPLEFT"
@@ -1454,8 +1469,8 @@ function ResourceBars.SetPowerBarSize(w, h, pType)
     -- Ensure sane defaults if nil provided
     if pType then
         local s = getBarSettings(pType)
-        local defaultW = addon.db.personalResourceBarManaWidth
-        local defaultH = addon.db.personalResourceBarManaHeight
+        local defaultW = DEFAULT_POWER_WIDTH
+        local defaultH = DEFAULT_POWER_HEIGHT
         w = w or (s and s.width) or defaultW
         h = h or (s and s.height) or defaultH
     end
@@ -1518,23 +1533,31 @@ function ResourceBars.Refresh()
 	-- Re-apply anchors so option changes take effect immediately
 	if healthBar then
 		local a = getAnchor("HEALTH", addon.variables.unitSpec)
-		if (a.relativeFrame or "UIParent") == "UIParent" then
-			a.point = "TOPLEFT"
-			a.relativePoint = "TOPLEFT"
-		end
-		local rel, looped = resolveAnchor(a, "HEALTH")
-		if looped and (a.relativeFrame or "UIParent") ~= "UIParent" then
-			local pw = UIParent and UIParent.GetWidth and UIParent:GetWidth() or 0
-			local ph = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 0
-			local w = healthBar:GetWidth() or (addon.db.personalResourceBarHealthWidth or 0)
-			local h = healthBar:GetHeight() or (addon.db.personalResourceBarHealthHeight or 0)
-			a.point = "TOPLEFT"
-			a.relativeFrame = "UIParent"
-			a.relativePoint = "TOPLEFT"
-			a.x = (pw - w) / 2
-			a.y = (h - ph) / 2
-			rel = UIParent
-		end
+    if (a.relativeFrame or "UIParent") == "UIParent" then
+            a.point = a.point or "TOPLEFT"
+            a.relativePoint = a.relativePoint or "TOPLEFT"
+            if a.x == nil or a.y == nil then
+                local pw = UIParent and UIParent.GetWidth and UIParent:GetWidth() or 0
+                local ph = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 0
+                local w = healthBar:GetWidth() or DEFAULT_HEALTH_WIDTH
+                local h = healthBar:GetHeight() or DEFAULT_HEALTH_HEIGHT
+                a.x = (pw - w) / 2
+                a.y = (h - ph) / 2
+            end
+        end
+            local rel, looped = resolveAnchor(a, "HEALTH")
+            if looped and (a.relativeFrame or "UIParent") ~= "UIParent" then
+                local pw = UIParent and UIParent.GetWidth and UIParent:GetWidth() or 0
+                local ph = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 0
+                local w = healthBar:GetWidth() or DEFAULT_HEALTH_WIDTH
+                local h = healthBar:GetHeight() or DEFAULT_HEALTH_HEIGHT
+                a.point = "TOPLEFT"
+                a.relativeFrame = "UIParent"
+                a.relativePoint = "TOPLEFT"
+                a.x = (pw - w) / 2
+                a.y = (h - ph) / 2
+                rel = UIParent
+            end
 		healthBar:ClearAllPoints()
 		healthBar:SetPoint(a.point or "TOPLEFT", rel, a.relativePoint or a.point or "TOPLEFT", a.x or 0, a.y or 0)
 	end
@@ -1542,15 +1565,23 @@ function ResourceBars.Refresh()
         if bar then
             local a = getAnchor(pType, addon.variables.unitSpec)
             if (a.relativeFrame or "UIParent") == "UIParent" then
-                a.point = "TOPLEFT"
-                a.relativePoint = "TOPLEFT"
+                a.point = a.point or "TOPLEFT"
+                a.relativePoint = a.relativePoint or "TOPLEFT"
+                if a.x == nil or a.y == nil then
+                    local pw = UIParent and UIParent.GetWidth and UIParent:GetWidth() or 0
+                    local ph = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 0
+                    local w = bar:GetWidth() or DEFAULT_POWER_WIDTH
+                    local h = bar:GetHeight() or DEFAULT_POWER_HEIGHT
+                    a.x = (pw - w) / 2
+                    a.y = (h - ph) / 2
+                end
             end
             local rel, looped = resolveAnchor(a, pType)
             if looped and (a.relativeFrame or "UIParent") ~= "UIParent" then
                 local pw = UIParent and UIParent.GetWidth and UIParent:GetWidth() or 0
                 local ph = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 0
-                local w = bar:GetWidth() or (addon.db.personalResourceBarManaWidth or 0)
-                local h = bar:GetHeight() or (addon.db.personalResourceBarManaHeight or 0)
+                local w = bar:GetWidth() or DEFAULT_POWER_WIDTH
+                local h = bar:GetHeight() or DEFAULT_POWER_HEIGHT
                 a.point = "TOPLEFT"
                 a.relativeFrame = "UIParent"
                 a.relativePoint = "TOPLEFT"
@@ -1604,6 +1635,13 @@ function ResourceBars.Refresh()
     end
 end
 
+-- Only refresh live bars when editing the active spec
+function ResourceBars.MaybeRefreshActive(specIndex)
+    if specIndex == addon.variables.unitSpec then
+        ResourceBars.Refresh()
+    end
+end
+
 -- Re-anchor pass only: reapplies anchor points without rebuilding bars
 function ResourceBars.ReanchorAll()
 	-- Health first
@@ -1617,8 +1655,8 @@ function ResourceBars.ReanchorAll()
 		if looped and (a.relativeFrame or "UIParent") ~= "UIParent" then
 			local pw = UIParent and UIParent.GetWidth and UIParent:GetWidth() or 0
 			local ph = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 0
-			local w = healthBar:GetWidth() or (addon.db.personalResourceBarHealthWidth or 0)
-			local h = healthBar:GetHeight() or (addon.db.personalResourceBarHealthHeight or 0)
+                local w = healthBar:GetWidth() or DEFAULT_HEALTH_WIDTH
+                local h = healthBar:GetHeight() or DEFAULT_HEALTH_HEIGHT
 			a.point = "TOPLEFT"
 			a.relativeFrame = "UIParent"
 			a.relativePoint = "TOPLEFT"
@@ -1642,8 +1680,8 @@ function ResourceBars.ReanchorAll()
 			if looped and (a.relativeFrame or "UIParent") ~= "UIParent" then
 				local pw = UIParent and UIParent.GetWidth and UIParent:GetWidth() or 0
 				local ph = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 0
-				local w = bar:GetWidth() or (addon.db.personalResourceBarManaWidth or 0)
-				local h = bar:GetHeight() or (addon.db.personalResourceBarManaHeight or 0)
+				local w = bar:GetWidth() or DEFAULT_POWER_WIDTH
+				local h = bar:GetHeight() or DEFAULT_POWER_HEIGHT
 				a.point = "TOPLEFT"
 				a.relativeFrame = "UIParent"
 				a.relativePoint = "TOPLEFT"
