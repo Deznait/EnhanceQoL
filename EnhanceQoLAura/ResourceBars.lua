@@ -20,6 +20,7 @@ local healthBar
 local powerbar = {}
 local powerfrequent = {}
 local getBarSettings
+local getAnchor
 local lastTabIndex
 local lastBarSelectionPerSpec = {}
 local BAR_STACK_SPACING = -4
@@ -97,12 +98,51 @@ function addon.Aura.functions.addResourceFrame(container)
 			info = info or {}
 			frameList = frameList or baseFrameList
 
-			local header = addon.functions.createLabelAce(barType .. " Anchor")
-			parent:AddChild(header)
+        local header = addon.functions.createLabelAce(barType .. " Anchor")
+        parent:AddChild(header)
 
-			local dropFrame = addon.functions.createDropdownAce("Relative Frame", frameList, nil, nil)
-			dropFrame:SetValue(info.relativeFrame or "UIParent")
-			parent:AddChild(dropFrame)
+        -- Filter choices to avoid creating loops
+        local function frameNameToBarType(fname)
+            if fname == "EQOLHealthBar" then return "HEALTH" end
+            return type(fname) == "string" and fname:match("^EQOL(.+)Bar$") or nil
+        end
+        local function wouldCauseLoop(fromType, candidateName)
+            -- Always safe: UIParent and non-EQOL frames
+            if candidateName == "UIParent" then return false end
+            local candType = frameNameToBarType(candidateName)
+            if not candType then return false end
+            -- Direct self-reference
+            if candType == fromType then return true end
+            -- Follow anchors from candidate; if we reach fromType's frame, it would loop
+            local seen = {}
+            local name = candidateName
+            local limit = 10
+            local targetFrameName = (fromType == "HEALTH") and "EQOLHealthBar" or ("EQOL" .. fromType .. "Bar")
+            while name and name ~= "UIParent" and limit > 0 do
+                if seen[name] then break end
+                seen[name] = true
+                if name == targetFrameName then return true end
+                local bt = frameNameToBarType(name)
+                if not bt then break end
+                local anch = getAnchor(bt, addon.variables.unitSpec)
+                name = anch and anch.relativeFrame or "UIParent"
+                limit = limit - 1
+            end
+            return false
+        end
+
+        local filtered = {}
+        for k, v in pairs(frameList) do
+            if not wouldCauseLoop(barType, k) then filtered[k] = v end
+        end
+        -- Ensure UIParent is always present
+        filtered.UIParent = frameList.UIParent or "UIParent"
+
+        local dropFrame = addon.functions.createDropdownAce("Relative Frame", filtered, nil, nil)
+        local initial = info.relativeFrame or "UIParent"
+        if not filtered[initial] then initial = "UIParent" end
+        dropFrame:SetValue(initial)
+        parent:AddChild(dropFrame)
 
 			-- Sub-group we can rebuild when relative frame changes
 			local anchorSub = addon.functions.createContainer("SimpleGroup", "Flow")
@@ -156,11 +196,37 @@ function addon.Aura.functions.addResourceFrame(container)
 			-- Initial build
 			buildAnchorSub()
 
-			dropFrame:SetCallback("OnValueChanged", function(self, _, val)
-				info.relativeFrame = val
-				buildAnchorSub()
-				if addon.Aura.ResourceBars then addon.Aura.ResourceBars.Refresh() end
-			end)
+        dropFrame:SetCallback("OnValueChanged", function(self, _, val)
+            local prev = info.relativeFrame or "UIParent"
+            info.relativeFrame = val
+            -- Behavior tweaks:
+            -- A) Switching TO a non-UIParent frame: default to TOPLEFT/BOTTOMLEFT just below, with 0/0 offsets.
+            if val ~= "UIParent" then
+                info.point = "TOPLEFT"
+                info.relativePoint = "BOTTOMLEFT"
+                info.x = 0
+                info.y = 0
+            end
+            -- B) Switching TO UIParent (only if previous wasn't UIParent):
+            --    compute TOPLEFT/TOPLEFT offsets so the bar appears centered on screen.
+            if val == "UIParent" and prev ~= "UIParent" then
+                -- Determine current (or configured) frame size to center properly
+                local cfg = getBarSettings(barType)
+                local defaultW = barType == "HEALTH" and addon.db.personalResourceBarHealthWidth or addon.db.personalResourceBarManaWidth
+                local defaultH = barType == "HEALTH" and addon.db.personalResourceBarHealthHeight or addon.db.personalResourceBarManaHeight
+                local w = (cfg and cfg.width) or defaultW or 0
+                local h = (cfg and cfg.height) or defaultH or 0
+                local pw = UIParent and UIParent.GetWidth and UIParent:GetWidth() or 0
+                local ph = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 0
+                -- Centered position while using TOPLEFT/TOPLEFT anchors
+                info.point = "TOPLEFT"
+                info.relativePoint = "TOPLEFT"
+                info.x = (pw - w) / 2
+                info.y = (h - ph) / 2
+            end
+            buildAnchorSub()
+            if addon.Aura.ResourceBars then addon.Aura.ResourceBars.Refresh() end
+        end)
 
 			parent:AddChild(addon.functions.createSpacerAce())
 		end
@@ -407,7 +473,7 @@ local function updateHealthBar()
 	end
 end
 
-local function getAnchor(name, spec)
+function getAnchor(name, spec)
 	local class = addon.variables.unitClass
 	spec = spec or addon.variables.unitSpec
 	addon.db.personalResourceBarSettings = addon.db.personalResourceBarSettings or {}
@@ -420,8 +486,8 @@ local function getAnchor(name, spec)
 end
 
 local function resolveAnchor(info, type)
-	local frame = _G[info and info.relativeFrame]
-	if not frame or frame == UIParent then return frame or UIParent end
+    local frame = _G[info and info.relativeFrame]
+    if not frame or frame == UIParent then return frame or UIParent, false end
 
 	local visited = {}
 	local check = frame
@@ -429,10 +495,10 @@ local function resolveAnchor(info, type)
 
 	while check and check.GetName and check ~= UIParent and limit > 0 do
 		local fname = check:GetName()
-		if visited[fname] then
-			print("|cff00ff98Enhance QoL|r: " .. L["AnchorLoop"]:format(fname))
-			return UIParent
-		end
+        if visited[fname] then
+            print("|cff00ff98Enhance QoL|r: " .. L["AnchorLoop"]:format(fname))
+            return UIParent, true
+        end
 		visited[fname] = true
 
 		local bType
@@ -449,11 +515,11 @@ local function resolveAnchor(info, type)
 		limit = limit - 1
 	end
 
-	if limit <= 0 then
-		print("|cff00ff98Enhance QoL|r: " .. L["AnchorLoop"]:format(info.relativeFrame or ""))
-		return UIParent
-	end
-	return frame or UIParent
+    if limit <= 0 then
+        print("|cff00ff98Enhance QoL|r: " .. L["AnchorLoop"]:format(info.relativeFrame or ""))
+        return UIParent, true
+    end
+    return frame or UIParent, false
 end
 
 local function createHealthBar()
@@ -474,7 +540,20 @@ local function createHealthBar()
 	healthBar:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
 	healthBar:SetClampedToScreen(true)
     local anchor = getAnchor("HEALTH", addon.variables.unitSpec)
-    local rel = resolveAnchor(anchor)
+    local rel, looped = resolveAnchor(anchor, "HEALTH")
+    -- If we had to fallback due to a loop, recenter on UIParent using TOPLEFT/TOPLEFT
+    if looped and (anchor.relativeFrame or "UIParent") ~= "UIParent" then
+        local pw = UIParent and UIParent.GetWidth and UIParent:GetWidth() or 0
+        local ph = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 0
+        local w = healthBar:GetWidth() or 0
+        local h = healthBar:GetHeight() or 0
+        anchor.point = "TOPLEFT"
+        anchor.relativeFrame = "UIParent"
+        anchor.relativePoint = "TOPLEFT"
+        anchor.x = (pw - w) / 2
+        anchor.y = (h - ph) / 2
+        rel = UIParent
+    end
     healthBar:ClearAllPoints()
     healthBar:SetPoint(anchor.point or "CENTER", rel, anchor.relativePoint or anchor.point or "CENTER", anchor.x or 0, anchor.y or 0)
 	healthBar:SetBackdrop({
@@ -684,14 +763,25 @@ local function createPowerBar(type, anchor)
 	bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
 	bar:SetClampedToScreen(true)
 
-	-- Anchor handling: only use fallback anchor if no explicit DB anchor exists
-	local a = getAnchor(type, addon.variables.unitSpec)
-	local allowMove = true
-	if a.point then
-		local rel = resolveAnchor(a, type)
-		if rel and rel.GetName and rel:GetName() ~= "UIParent" then allowMove = false end
-		bar:ClearAllPoints()
-		bar:SetPoint(a.point, rel or UIParent, a.relativePoint or a.point, a.x or 0, a.y or 0)
+    -- Anchor handling: only use fallback anchor if no explicit DB anchor exists
+    local a = getAnchor(type, addon.variables.unitSpec)
+    local allowMove = true
+    if a.point then
+        local rel, looped = resolveAnchor(a, type)
+        if looped and (a.relativeFrame or "UIParent") ~= "UIParent" then
+            -- Loop fallback: recenter on UIParent
+            local pw = UIParent and UIParent.GetWidth and UIParent:GetWidth() or 0
+            local ph = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 0
+            a.point = "TOPLEFT"
+            a.relativeFrame = "UIParent"
+            a.relativePoint = "TOPLEFT"
+            a.x = (pw - w) / 2
+            a.y = (h - ph) / 2
+            rel = UIParent
+        end
+        if rel and rel.GetName and rel:GetName() ~= "UIParent" then allowMove = false end
+        bar:ClearAllPoints()
+        bar:SetPoint(a.point, rel or UIParent, a.relativePoint or a.point, a.x or 0, a.y or 0)
 	elseif anchor then
 		-- Default stack below provided anchor and persist default anchor in DB
 		bar:ClearAllPoints()
@@ -725,10 +815,12 @@ local function createPowerBar(type, anchor)
 	-- Dragging only when not anchored to another EQOL bar
 	bar:SetMovable(allowMove)
 	bar:EnableMouse(allowMove)
-	if isNew then bar:RegisterForDrag("LeftButton") end
-	bar:SetScript("OnDragStart", function(self)
-		if IsShiftKeyDown() and allowMove then self:StartMoving() end
-	end)
+    if isNew then bar:RegisterForDrag("LeftButton") end
+    bar:SetScript("OnDragStart", function(self)
+        local ai = getAnchor(type, addon.variables.unitSpec)
+        local canMove = (not ai) or ((ai.relativeFrame or "UIParent") == "UIParent")
+        if IsShiftKeyDown() and canMove then self:StartMoving() end
+    end)
 	bar:SetScript("OnDragStop", function(self)
 		self:StopMovingOrSizing()
 		local point, rel, relPoint, xOfs, yOfs = self:GetPoint()
@@ -1029,28 +1121,56 @@ end
 function ResourceBars.Refresh()
 	setPowerbars()
 	-- Re-apply anchors so option changes take effect immediately
-	if healthBar then
-		local a = getAnchor("HEALTH", addon.variables.unitSpec)
-		if (a.relativeFrame or "UIParent") == "UIParent" then
-			a.point = "TOPLEFT"
-			a.relativePoint = "TOPLEFT"
-		end
-		local rel = resolveAnchor(a, "HEALTH")
-		healthBar:ClearAllPoints()
-		healthBar:SetPoint(a.point or "TOPLEFT", rel, a.relativePoint or a.point or "TOPLEFT", a.x or 0, a.y or 0)
-	end
-	for pType, bar in pairs(powerbar) do
-		if bar then
-			local a = getAnchor(pType, addon.variables.unitSpec)
-			if (a.relativeFrame or "UIParent") == "UIParent" then
-				a.point = "TOPLEFT"
-				a.relativePoint = "TOPLEFT"
-			end
-			local rel = resolveAnchor(a, pType)
-			bar:ClearAllPoints()
-			bar:SetPoint(a.point or "TOPLEFT", rel, a.relativePoint or a.point or "TOPLEFT", a.x or 0, a.y or 0)
-		end
-	end
+    if healthBar then
+        local a = getAnchor("HEALTH", addon.variables.unitSpec)
+        if (a.relativeFrame or "UIParent") == "UIParent" then
+            a.point = "TOPLEFT"
+            a.relativePoint = "TOPLEFT"
+        end
+        local rel, looped = resolveAnchor(a, "HEALTH")
+        if looped and (a.relativeFrame or "UIParent") ~= "UIParent" then
+            local pw = UIParent and UIParent.GetWidth and UIParent:GetWidth() or 0
+            local ph = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 0
+            local w = healthBar:GetWidth() or (addon.db.personalResourceBarHealthWidth or 0)
+            local h = healthBar:GetHeight() or (addon.db.personalResourceBarHealthHeight or 0)
+            a.point = "TOPLEFT"
+            a.relativeFrame = "UIParent"
+            a.relativePoint = "TOPLEFT"
+            a.x = (pw - w) / 2
+            a.y = (h - ph) / 2
+            rel = UIParent
+        end
+        healthBar:ClearAllPoints()
+        healthBar:SetPoint(a.point or "TOPLEFT", rel, a.relativePoint or a.point or "TOPLEFT", a.x or 0, a.y or 0)
+    end
+    for pType, bar in pairs(powerbar) do
+        if bar then
+            local a = getAnchor(pType, addon.variables.unitSpec)
+            if (a.relativeFrame or "UIParent") == "UIParent" then
+                a.point = "TOPLEFT"
+                a.relativePoint = "TOPLEFT"
+            end
+            local rel, looped = resolveAnchor(a, pType)
+            if looped and (a.relativeFrame or "UIParent") ~= "UIParent" then
+                local pw = UIParent and UIParent.GetWidth and UIParent:GetWidth() or 0
+                local ph = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 0
+                local w = bar:GetWidth() or (addon.db.personalResourceBarManaWidth or 0)
+                local h = bar:GetHeight() or (addon.db.personalResourceBarManaHeight or 0)
+                a.point = "TOPLEFT"
+                a.relativeFrame = "UIParent"
+                a.relativePoint = "TOPLEFT"
+                a.x = (pw - w) / 2
+                a.y = (h - ph) / 2
+                rel = UIParent
+            end
+            bar:ClearAllPoints()
+            bar:SetPoint(a.point or "TOPLEFT", rel, a.relativePoint or a.point or "TOPLEFT", a.x or 0, a.y or 0)
+            -- Update movability based on anchor target (only movable when relative to UIParent)
+            local isUI = (a.relativeFrame or "UIParent") == "UIParent"
+            bar:SetMovable(isUI)
+            bar:EnableMouse(isUI)
+        end
+    end
 	-- Apply text font sizes without forcing full rebuild
 	local class = addon.variables.unitClass
 	local spec = addon.variables.unitSpec
