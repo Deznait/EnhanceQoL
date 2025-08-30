@@ -653,6 +653,7 @@ function addon.Aura.functions.addResourceFrame(container)
 
 				addAnchorOptions(sel, groupConfig, cfg.anchor, frames, specIndex)
 			end
+            scroll:DoLayout()
 		end
 
 		tabGroup:SetTabs(specTabs)
@@ -1241,6 +1242,7 @@ local function updateBarSeparators(pType)
 
 	local segments
 	if pType == "RUNES" then
+		-- Runes don't use UnitPowerMax; always 6 segments
 		segments = 6
 	elseif pType == "ENERGY" then
 		segments = 10
@@ -1258,7 +1260,22 @@ local function updateBarSeparators(pType)
 		return
 	end
 
+	-- Ensure we draw separators above any child frames (e.g., Rune sub-bars)
+	if not bar._sepOverlay then
+		bar._sepOverlay = CreateFrame("Frame", nil, bar)
+		bar._sepOverlay:SetAllPoints(bar)
+		bar._sepOverlay:EnableMouse(false)
+	end
+	-- Keep overlay on top of child frames
+	local baseLevel = (bar:GetFrameLevel() or 1)
+	bar._sepOverlay:SetFrameStrata(bar:GetFrameStrata())
+	bar._sepOverlay:SetFrameLevel(baseLevel + 20)
+
 	bar.separatorMarks = bar.separatorMarks or {}
+	-- Ensure existing marks render on the overlay frame
+	for _, tx in ipairs(bar.separatorMarks) do
+		if tx and tx.GetParent and tx:GetParent() ~= bar._sepOverlay then tx:SetParent(bar._sepOverlay) end
+	end
 	local needed = segments - 1
 	local w = max(1, bar:GetWidth() or 0)
 	local h = max(1, bar:GetHeight() or 0)
@@ -1271,7 +1288,7 @@ local function updateBarSeparators(pType)
 
 	-- Ensure we have enough textures
 	for i = #bar.separatorMarks + 1, needed do
-		local tx = bar:CreateTexture(nil, "OVERLAY")
+		local tx = bar._sepOverlay:CreateTexture(nil, "OVERLAY")
 		tx:SetColorTexture(r, g, b, a)
 		bar.separatorMarks[i] = tx
 	end
@@ -1282,7 +1299,7 @@ local function updateBarSeparators(pType)
 		local frac = i / segments
 		local x = Snap(bar, w * frac)
 		local half = floor(thickness * 0.5)
-		tx:SetPoint("LEFT", bar, "LEFT", x - max(0, half), 0)
+		tx:SetPoint("LEFT", bar._sepOverlay, "LEFT", x - max(0, half), 0)
 		tx:SetSize(thickness, h)
 		tx:SetColorTexture(r, g, b, a)
 		tx:Show()
