@@ -691,7 +691,8 @@ local function updateHealthBar(evt)
 		local curHealth = UnitHealth("player")
 		-- Always compute absorbs fresh; caching combined/lastCombined is unnecessary now
 		local abs = UnitGetTotalAbsorbs("player") or 0
-
+		if abs > maxHealth then abs = maxHealth end
+        
 		-- Only push values to the bar if changed
 		if healthBar._lastVal ~= curHealth then
 			healthBar:SetValue(curHealth)
