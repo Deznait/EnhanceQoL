@@ -1,4 +1,3 @@
---@debug@
 local parentAddonName = "EnhanceQoL"
 local addonName, addon = ...
 
@@ -653,7 +652,7 @@ function addon.Aura.functions.addResourceFrame(container)
 
 				addAnchorOptions(sel, groupConfig, cfg.anchor, frames, specIndex)
 			end
-            scroll:DoLayout()
+			scroll:DoLayout()
 		end
 
 		tabGroup:SetTabs(specTabs)
@@ -2215,43 +2214,4 @@ function ResourceBars.ReanchorAll()
 	ResourceBars._reanchoring = false
 end
 
--- Debug helper: prints current anchor DB and effective point info
-function ResourceBars.DebugAnchors()
-	local class = addon.variables.unitClass
-	local spec = addon.variables.unitSpec
-	local specCfg = addon.db.personalResourceBarSettings and addon.db.personalResourceBarSettings[class] and addon.db.personalResourceBarSettings[class][spec]
-	if not specCfg then
-		print("EQOL: no specCfg")
-		return
-	end
-	local function dumpOne(name, frame)
-		local cfg = specCfg[name]
-		local a = cfg and cfg.anchor or {}
-		local rp = a.relativeFrame or "UIParent"
-		local p, r, rp2, x, y = frame and frame:GetPoint() or nil
-		local rn = (r and r.GetName and r:GetName()) or "?"
-		print(
-			string.format(
-				"%s: DB-> %s %s/%s %+d %+d | RT-> %s %s/%s %+d %+d",
-				name,
-				tostring(a.point or "?"),
-				tostring(rp),
-				tostring(a.relativePoint or a.point or "?"),
-				tonumber(a.x or 0),
-				tonumber(a.y or 0),
-				tostring(p or "?"),
-				tostring(rn or "?"),
-				tostring(rp2 or "?"),
-				tonumber(x or 0),
-				tonumber(y or 0)
-			)
-		)
-	end
-	dumpOne("HEALTH", _G["EQOLHealthBar"])
-	for _, pType in ipairs(classPowerTypes) do
-		dumpOne(pType, _G[getFrameName(pType)])
-	end
-end
-
 return ResourceBars
---@end-debug@
