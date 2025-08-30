@@ -1,5 +1,18 @@
 # Changelog
 
+## [4.10.0] – 2025-08-30
+
+### ✨ Added
+
+- **Resource Bars:** Movable bars for Health and your class resources.
+  - Disabled by default — enable via Options → Aura → Resource Bars.
+  - Per‑spec: choose which bars to show. Supports Health and all class resources.
+  - Positioning: anchor to the UI or to another Resource Bar; bars stack neatly. Hold Shift to drag when anchored to the UI.
+  - Appearance: set width/height; pick the text style (Percent, Current/Max, Current) and font size. The Health bar has an absorb overlay and changes color with your health.
+  - Setup & performance: simple per‑spec configuration; lightweight and resource‑friendly.
+  - Charge‑style: optional separator ticks for charge resources; with customizable color.
+  - Druid: per‑form visibility.
+
 ## [4.9.1] – 2025-08-28
 
 ### 🐛 Fixed

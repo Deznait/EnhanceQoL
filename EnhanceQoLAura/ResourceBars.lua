@@ -47,19 +47,35 @@ function addon.Aura.functions.addResourceFrame(container)
 	wrapper:AddChild(groupCore)
 
 	local data = {
-		{
-			text = L["Enable Resource frame"],
-			var = "enableResourceFrame",
-			func = function(self, _, value)
-				addon.db["enableResourceFrame"] = value
-				if value then
-					addon.Aura.ResourceBars.EnableResourceBars()
-				elseif addon.Aura.ResourceBars and addon.Aura.ResourceBars.DisableResourceBars then
-					addon.Aura.ResourceBars.DisableResourceBars()
-				end
-			end,
-		},
-	}
+			{
+				text = L["Enable Resource frame"],
+				var = "enableResourceFrame",
+				func = function(self, _, value)
+					addon.db["enableResourceFrame"] = value
+					if value then
+						addon.Aura.ResourceBars.EnableResourceBars()
+					elseif addon.Aura.ResourceBars and addon.Aura.ResourceBars.DisableResourceBars then
+						addon.Aura.ResourceBars.DisableResourceBars()
+					end
+					-- Rebuild the options UI to reflect enabled/disabled state
+					if container and container.ReleaseChildren then
+						container:ReleaseChildren()
+						-- Defer rebuild slightly to ensure enable/disable side effects settle
+						if C_Timer and C_Timer.After then
+							C_Timer.After(0, function()
+								if addon and addon.Aura and addon.Aura.functions and addon.Aura.functions.addResourceFrame then
+									addon.Aura.functions.addResourceFrame(container)
+								end
+							end)
+						else
+							if addon and addon.Aura and addon.Aura.functions and addon.Aura.functions.addResourceFrame then
+								addon.Aura.functions.addResourceFrame(container)
+							end
+						end
+					end
+				end,
+			},
+		}
 
 	table.sort(data, function(a, b) return a.text < b.text end)
 
@@ -153,18 +169,27 @@ function addon.Aura.functions.addResourceFrame(container)
 			-- Ensure UIParent is always present
 			filtered.UIParent = frameList.UIParent or "UIParent"
 
-			local dropFrame = addon.functions.createDropdownAce(L["Relative Frame"], filtered, nil, nil)
-			local initial = info.relativeFrame or "UIParent"
-			if not filtered[initial] then initial = "UIParent" end
-			dropFrame:SetValue(initial)
-			parent:AddChild(dropFrame)
-
 			-- Sub-group we can rebuild when relative frame changes
 			local anchorSub = addon.functions.createContainer("SimpleGroup", "Flow")
 			parent:AddChild(anchorSub)
 
 			local function buildAnchorSub()
 				anchorSub:ReleaseChildren()
+
+				-- Row for Relative Frame, Point, Relative Point (each 33%)
+				local row = addon.functions.createContainer("SimpleGroup", "Flow")
+				row:SetFullWidth(true)
+
+				local initial = info.relativeFrame or "UIParent"
+				if not filtered[initial] then initial = "UIParent" end
+				-- Ensure DB reflects a valid selection
+				info.relativeFrame = initial
+				local dropFrame = addon.functions.createDropdownAce(L["Relative Frame"], filtered, nil, nil)
+				dropFrame:SetValue(initial)
+				dropFrame:SetFullWidth(false)
+				dropFrame:SetRelativeWidth(0.333)
+				row:AddChild(dropFrame)
+
 				local relName = info.relativeFrame or "UIParent"
 				if relName ~= "UIParent" then
 					local dropPoint = addon.functions.createDropdownAce(RESAMPLE_QUALITY_POINT, anchorPoints, anchorOrder, function(self, _, val)
@@ -173,8 +198,8 @@ function addon.Aura.functions.addResourceFrame(container)
 					end)
 					dropPoint:SetValue(info.point or "TOPLEFT")
 					dropPoint:SetFullWidth(false)
-					dropPoint:SetRelativeWidth(0.5)
-					anchorSub:AddChild(dropPoint)
+					dropPoint:SetRelativeWidth(0.333)
+					row:AddChild(dropPoint)
 
 					local dropRelPoint = addon.functions.createDropdownAce(L["Relative Point"], anchorPoints, anchorOrder, function(self, _, val)
 						info.relativePoint = val
@@ -182,9 +207,14 @@ function addon.Aura.functions.addResourceFrame(container)
 					end)
 					dropRelPoint:SetValue(info.relativePoint or info.point or "TOPLEFT")
 					dropRelPoint:SetFullWidth(false)
-					dropRelPoint:SetRelativeWidth(0.5)
-					anchorSub:AddChild(dropRelPoint)
+					dropRelPoint:SetRelativeWidth(0.333)
+					row:AddChild(dropRelPoint)
+				end
 
+				anchorSub:AddChild(row)
+
+				-- X / Y row (50% / 50%) when anchored to a frame
+				if (info.relativeFrame or "UIParent") ~= "UIParent" then
 					local editX = addon.functions.createEditboxAce("X", tostring(info.x or 0), function(self)
 						info.x = tonumber(self:GetText()) or 0
 						if addon.Aura.ResourceBars and addon.Aura.ResourceBars.MaybeRefreshActive then addon.Aura.ResourceBars.MaybeRefreshActive(specIndex) end
@@ -206,42 +236,39 @@ function addon.Aura.functions.addResourceFrame(container)
 					local hint = addon.functions.createLabelAce(L["Movable while holding SHIFT"], nil, nil, 10)
 					anchorSub:AddChild(hint)
 				end
+
+				-- Callback for Relative Frame change (rebuild the sub UI on selection)
+				local function onFrameChanged(self, _, val)
+					local prev = info.relativeFrame or "UIParent"
+					info.relativeFrame = val
+					if val ~= "UIParent" then
+						info.point = "TOPLEFT"
+						info.relativePoint = "BOTTOMLEFT"
+						info.x = 0
+						info.y = 0
+					end
+					if val == "UIParent" and prev ~= "UIParent" then
+						local cfg = getBarSettings(barType)
+						local defaultW = barType == "HEALTH" and DEFAULT_HEALTH_WIDTH or DEFAULT_POWER_WIDTH
+						local defaultH = barType == "HEALTH" and DEFAULT_HEALTH_HEIGHT or DEFAULT_POWER_HEIGHT
+						local w = (cfg and cfg.width) or defaultW or 0
+						local h = (cfg and cfg.height) or defaultH or 0
+						local pw = UIParent and UIParent.GetWidth and UIParent:GetWidth() or 0
+						local ph = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 0
+						info.point = "TOPLEFT"
+						info.relativePoint = "TOPLEFT"
+						info.x = (pw - w) / 2
+						info.y = (h - ph) / 2
+					end
+					buildAnchorSub()
+					if addon.Aura.ResourceBars and addon.Aura.ResourceBars.MaybeRefreshActive then addon.Aura.ResourceBars.MaybeRefreshActive(specIndex) end
+				end
+
+				dropFrame:SetCallback("OnValueChanged", onFrameChanged)
 			end
 
 			-- Initial build
 			buildAnchorSub()
-
-			dropFrame:SetCallback("OnValueChanged", function(self, _, val)
-				local prev = info.relativeFrame or "UIParent"
-				info.relativeFrame = val
-				-- Behavior tweaks:
-				-- A) Switching TO a non-UIParent frame: default to TOPLEFT/BOTTOMLEFT just below, with 0/0 offsets.
-				if val ~= "UIParent" then
-					info.point = "TOPLEFT"
-					info.relativePoint = "BOTTOMLEFT"
-					info.x = 0
-					info.y = 0
-				end
-				-- B) Switching TO UIParent (only if previous wasn't UIParent):
-				--    compute TOPLEFT/TOPLEFT offsets so the bar appears centered on screen.
-				if val == "UIParent" and prev ~= "UIParent" then
-					-- Determine current (or configured) frame size to center properly
-					local cfg = getBarSettings(barType)
-					local defaultW = barType == "HEALTH" and DEFAULT_HEALTH_WIDTH or DEFAULT_POWER_WIDTH
-					local defaultH = barType == "HEALTH" and DEFAULT_HEALTH_HEIGHT or DEFAULT_POWER_HEIGHT
-					local w = (cfg and cfg.width) or defaultW or 0
-					local h = (cfg and cfg.height) or defaultH or 0
-					local pw = UIParent and UIParent.GetWidth and UIParent:GetWidth() or 0
-					local ph = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 0
-					-- Centered position while using TOPLEFT/TOPLEFT anchors
-					info.point = "TOPLEFT"
-					info.relativePoint = "TOPLEFT"
-					info.x = (pw - w) / 2
-					info.y = (h - ph) / 2
-				end
-				buildAnchorSub()
-				if addon.Aura.ResourceBars and addon.Aura.ResourceBars.MaybeRefreshActive then addon.Aura.ResourceBars.MaybeRefreshActive(specIndex) end
-			end)
 
 			parent:AddChild(addon.functions.createSpacerAce())
 		end
@@ -536,6 +563,7 @@ function addon.Aura.functions.addResourceFrame(container)
 
 				-- Druid: Show in forms (per bar), skip for COMBO_POINTS (always Cat)
 				if addon.variables.unitClass == "DRUID" and sel ~= "COMBO_POINTS" then
+					groupConfig:AddChild(addon.functions.createSpacerAce())
 					cfg.showForms = cfg.showForms or {}
 					local formsRow = addon.functions.createContainer("SimpleGroup", "Flow")
 					formsRow:SetFullWidth(true)
@@ -579,6 +607,7 @@ function addon.Aura.functions.addResourceFrame(container)
 					end
 					groupConfig:AddChild(formsRow)
 				end
+				groupConfig:AddChild(addon.functions.createSpacerAce())
 
 				addAnchorOptions(sel, groupConfig, cfg.anchor, frames, specIndex)
 			end
@@ -707,14 +736,20 @@ local function resolveAnchor(info, type)
 end
 
 local function createHealthBar()
-	if mainFrame then
-		mainFrame:Show()
-		healthBar:Show()
-		return
-	end
+    if mainFrame then
+        -- Ensure correct parent when re-enabling
+        if mainFrame:GetParent() ~= UIParent then mainFrame:SetParent(UIParent) end
+        if healthBar and healthBar.GetParent and healthBar:GetParent() ~= UIParent then healthBar:SetParent(UIParent) end
+        mainFrame:Show()
+        healthBar:Show()
+        return
+    end
 
-	mainFrame = CreateFrame("frame", "EQOLResourceFrame", UIParent)
-	healthBar = CreateFrame("StatusBar", "EQOLHealthBar", UIParent, "BackdropTemplate")
+    -- Reuse existing named frames if they still exist from a previous enable
+    mainFrame = _G["EQOLResourceFrame"] or CreateFrame("frame", "EQOLResourceFrame", UIParent)
+    if mainFrame:GetParent() ~= UIParent then mainFrame:SetParent(UIParent) end
+    healthBar = _G["EQOLHealthBar"] or CreateFrame("StatusBar", "EQOLHealthBar", UIParent, "BackdropTemplate")
+    if healthBar:GetParent() ~= UIParent then healthBar:SetParent(UIParent) end
 	do
 		local cfg = getBarSettings("HEALTH")
 		local w = (cfg and cfg.width) or DEFAULT_HEALTH_WIDTH
@@ -907,12 +942,12 @@ local classPowerTypes = {
 ResourceBars.powertypeClasses = powertypeClasses
 ResourceBars.classPowerTypes = classPowerTypes
 ResourceBars.separatorEligible = {
-    HOLY_POWER = true,
-    SOUL_SHARDS = true,
-    ESSENCE = true,
-    ARCANE_CHARGES = true,
-    CHI = true,
-    COMBO_POINTS = true,
+	HOLY_POWER = true,
+	SOUL_SHARDS = true,
+	ESSENCE = true,
+	ARCANE_CHARGES = true,
+	CHI = true,
+	COMBO_POINTS = true,
 }
 
 function getBarSettings(pType)
@@ -925,7 +960,7 @@ function getBarSettings(pType)
 end
 
 local function updatePowerBar(type)
-    if powerbar[type] and powerbar[type]:IsVisible() then
+	if powerbar[type] and powerbar[type]:IsVisible() then
 		-- Special handling for DK Runes: six sub-bars that fill as cooldown progresses
 		if type == "RUNES" then
 			local bar = powerbar[type]
@@ -1026,9 +1061,9 @@ local function updatePowerBar(type)
 			if bar.text then bar.text:SetText("") end
 			return
 		end
-        local pType = powerTypeEnums[type:gsub("_", "")]
-        local maxPower = UnitPowerMax("player", pType)
-        local curPower = UnitPower("player", pType)
+		local pType = powerTypeEnums[type:gsub("_", "")]
+		local maxPower = UnitPowerMax("player", pType)
+		local curPower = UnitPower("player", pType)
 
 		local settings = getBarSettings(type)
 		local style = settings and settings.textStyle
@@ -1041,36 +1076,36 @@ local function updatePowerBar(type)
 			end
 		end
 
-        local bar = powerbar[type]
-        if bar._lastMax ~= maxPower then
-            bar:SetMinMaxValues(0, maxPower)
-            bar._lastMax = maxPower
-        end
-        if bar._lastVal ~= curPower then
-            bar:SetValue(curPower)
-            bar._lastVal = curPower
-        end
-        if bar.text then
-            if style == "NONE" then
-                bar.text:SetText("")
-                bar.text:Hide()
-            else
-                local text
-                if style == "PERCENT" then
-                    text = tostring(math.floor(((curPower / math.max(maxPower, 1)) * 100) + 0.5))
-                elseif style == "CURRENT" then
-                    text = tostring(curPower)
-                else -- CURMAX
-                    text = curPower .. " / " .. maxPower
-                end
-                if bar._lastText ~= text then
-                    bar.text:SetText(text)
-                    bar._lastText = text
-                end
-                bar.text:Show()
-            end
-        end
-    end
+		local bar = powerbar[type]
+		if bar._lastMax ~= maxPower then
+			bar:SetMinMaxValues(0, maxPower)
+			bar._lastMax = maxPower
+		end
+		if bar._lastVal ~= curPower then
+			bar:SetValue(curPower)
+			bar._lastVal = curPower
+		end
+		if bar.text then
+			if style == "NONE" then
+				bar.text:SetText("")
+				bar.text:Hide()
+			else
+				local text
+				if style == "PERCENT" then
+					text = tostring(math.floor(((curPower / math.max(maxPower, 1)) * 100) + 0.5))
+				elseif style == "CURRENT" then
+					text = tostring(curPower)
+				else -- CURMAX
+					text = curPower .. " / " .. maxPower
+				end
+				if bar._lastText ~= text then
+					bar.text:SetText(text)
+					bar._lastText = text
+				end
+				bar.text:Show()
+			end
+		end
+	end
 end
 
 -- Create/update separator ticks for a given bar type if enabled
@@ -1110,38 +1145,36 @@ local function updateBarSeparators(pType)
 
 	bar.separatorMarks = bar.separatorMarks or {}
 	local needed = segments - 1
-    local w = math.max(1, bar:GetWidth() or 0)
-    local h = math.max(1, bar:GetHeight() or 0)
-    local sc = (cfg and cfg.separatorColor) or { 1, 1, 1, 0.5 }
-    local colorKey = table.concat({ tostring(sc[1] or 1), tostring(sc[2] or 1), tostring(sc[3] or 1), tostring(sc[4] or 0.5) }, ":")
+	local w = math.max(1, bar:GetWidth() or 0)
+	local h = math.max(1, bar:GetHeight() or 0)
+	local sc = (cfg and cfg.separatorColor) or { 1, 1, 1, 0.5 }
+	local colorKey = table.concat({ tostring(sc[1] or 1), tostring(sc[2] or 1), tostring(sc[3] or 1), tostring(sc[4] or 0.5) }, ":")
 
-    if bar._sepW == w and bar._sepH == h and bar._sepSegments == segments and bar._sepColorKey == colorKey then
-        return
-    end
+	if bar._sepW == w and bar._sepH == h and bar._sepSegments == segments and bar._sepColorKey == colorKey then return end
 
 	-- Ensure we have enough textures
 	for i = #bar.separatorMarks + 1, needed do
-        local tx = bar:CreateTexture(nil, "OVERLAY")
-        tx:SetColorTexture(sc[1] or 1, sc[2] or 1, sc[3] or 1, sc[4] or 0.5)
-        bar.separatorMarks[i] = tx
-    end
+		local tx = bar:CreateTexture(nil, "OVERLAY")
+		tx:SetColorTexture(sc[1] or 1, sc[2] or 1, sc[3] or 1, sc[4] or 0.5)
+		bar.separatorMarks[i] = tx
+	end
 	-- Position visible separators
 	for i = 1, needed do
 		local tx = bar.separatorMarks[i]
 		tx:ClearAllPoints()
 		local frac = i / segments
 		local x = math.floor(w * frac + 0.5)
-        local half = math.floor(SEPARATOR_THICKNESS * 0.5)
-        tx:SetPoint("LEFT", bar, "LEFT", x - math.max(0, half), 0)
-        tx:SetSize(SEPARATOR_THICKNESS, h)
-        tx:SetColorTexture(sc[1] or 1, sc[2] or 1, sc[3] or 1, sc[4] or 0.5)
-        tx:Show()
-    end
+		local half = math.floor(SEPARATOR_THICKNESS * 0.5)
+		tx:SetPoint("LEFT", bar, "LEFT", x - math.max(0, half), 0)
+		tx:SetSize(SEPARATOR_THICKNESS, h)
+		tx:SetColorTexture(sc[1] or 1, sc[2] or 1, sc[3] or 1, sc[4] or 0.5)
+		tx:Show()
+	end
 	-- Hide extras
 	for i = needed + 1, #bar.separatorMarks do
-        bar.separatorMarks[i]:Hide()
-    end
-    bar._sepW, bar._sepH, bar._sepSegments, bar._sepColorKey = w, h, segments, colorKey
+		bar.separatorMarks[i]:Hide()
+	end
+	bar._sepW, bar._sepH, bar._sepSegments, bar._sepColorKey = w, h, segments, colorKey
 end
 
 -- Layout helper for DK RUNES: create or resize 6 child statusbars
@@ -1187,13 +1220,15 @@ function layoutRunes(bar)
 end
 
 local function createPowerBar(type, anchor)
-	-- Reuse existing bar if present; avoid destroying frames to preserve anchors
-	local bar = powerbar[type] or _G["EQOL" .. type .. "Bar"]
-	local isNew = false
-	if not bar then
-		bar = CreateFrame("StatusBar", "EQOL" .. type .. "Bar", UIParent, "BackdropTemplate")
-		isNew = true
-	end
+    -- Reuse existing bar if present; avoid destroying frames to preserve anchors
+    local bar = powerbar[type] or _G["EQOL" .. type .. "Bar"]
+    local isNew = false
+    if not bar then
+        bar = CreateFrame("StatusBar", "EQOL" .. type .. "Bar", UIParent, "BackdropTemplate")
+        isNew = true
+    end
+    -- Ensure a valid parent when reusing frames after disable
+    if bar:GetParent() ~= UIParent then bar:SetParent(UIParent) end
 
 	local settings = getBarSettings(type)
 	local w = settings and settings.width or DEFAULT_POWER_WIDTH
@@ -1414,43 +1449,43 @@ local function setPowerbars()
 			end
 		end
 
-        if shouldShow then
-            -- Per-form filter for Druid
-            local formAllowed = true
-            if isDruid and specCfg and specCfg[pType] and specCfg[pType].showForms then
-                local allowed = specCfg[pType].showForms
-                if druidForm and allowed[druidForm] == false then formAllowed = false end
-            end
-            if formAllowed and addon.variables.unitClass == "DRUID" then
-                powerfrequent[pType] = true
-                -- Always show main power bar when enabled
-                if pType == mainPowerBar then
-                    if powerbar[pType] then powerbar[pType]:Show() end
-                -- Always allow MANA bar (secondary mana)
-                elseif pType == "MANA" then
-                    createPowerBar(pType, powerbar[lastBar] or ((specCfg and specCfg.HEALTH and specCfg.HEALTH.enabled == true) and EQOLHealthBar or nil))
-                    lastBar = pType
-                    if powerbar[pType] then powerbar[pType]:Show() end
-                -- Show COMBO_POINTS in Cat form
-                elseif pType == "COMBO_POINTS" and druidForm == "CAT" then
-                    createPowerBar(pType, powerbar[lastBar] or ((specCfg and specCfg.HEALTH and specCfg.HEALTH.enabled == true) and EQOLHealthBar or nil))
-                    lastBar = pType
-                    if powerbar[pType] then powerbar[pType]:Show() end
-                -- Otherwise, show if current power token matches (e.g., ENERGY/RAGE/LUNAR_POWER)
-                elseif powerToken == pType and powerToken ~= mainPowerBar then
-                    createPowerBar(pType, powerbar[lastBar] or ((specCfg and specCfg.HEALTH and specCfg.HEALTH.enabled == true) and EQOLHealthBar or nil))
-                    lastBar = pType
-                    if powerbar[pType] then powerbar[pType]:Show() end
-                end
-            elseif formAllowed then
-                powerfrequent[pType] = true
-                if mainPowerBar ~= pType then
-                    createPowerBar(pType, powerbar[lastBar] or ((specCfg and specCfg.HEALTH and specCfg.HEALTH.enabled == true) and EQOLHealthBar or nil))
-                    lastBar = pType
-                end
-                if powerbar[pType] then powerbar[pType]:Show() end
-            end
-        end
+		if shouldShow then
+			-- Per-form filter for Druid
+			local formAllowed = true
+			if isDruid and specCfg and specCfg[pType] and specCfg[pType].showForms then
+				local allowed = specCfg[pType].showForms
+				if druidForm and allowed[druidForm] == false then formAllowed = false end
+			end
+			if formAllowed and addon.variables.unitClass == "DRUID" then
+				powerfrequent[pType] = true
+				-- Always show main power bar when enabled
+				if pType == mainPowerBar then
+					if powerbar[pType] then powerbar[pType]:Show() end
+				-- Always allow MANA bar (secondary mana)
+				elseif pType == "MANA" then
+					createPowerBar(pType, powerbar[lastBar] or ((specCfg and specCfg.HEALTH and specCfg.HEALTH.enabled == true) and EQOLHealthBar or nil))
+					lastBar = pType
+					if powerbar[pType] then powerbar[pType]:Show() end
+				-- Show COMBO_POINTS in Cat form
+				elseif pType == "COMBO_POINTS" and druidForm == "CAT" then
+					createPowerBar(pType, powerbar[lastBar] or ((specCfg and specCfg.HEALTH and specCfg.HEALTH.enabled == true) and EQOLHealthBar or nil))
+					lastBar = pType
+					if powerbar[pType] then powerbar[pType]:Show() end
+				-- Otherwise, show if current power token matches (e.g., ENERGY/RAGE/LUNAR_POWER)
+				elseif powerToken == pType and powerToken ~= mainPowerBar then
+					createPowerBar(pType, powerbar[lastBar] or ((specCfg and specCfg.HEALTH and specCfg.HEALTH.enabled == true) and EQOLHealthBar or nil))
+					lastBar = pType
+					if powerbar[pType] then powerbar[pType]:Show() end
+				end
+			elseif formAllowed then
+				powerfrequent[pType] = true
+				if mainPowerBar ~= pType then
+					createPowerBar(pType, powerbar[lastBar] or ((specCfg and specCfg.HEALTH and specCfg.HEALTH.enabled == true) and EQOLHealthBar or nil))
+					lastBar = pType
+				end
+				if powerbar[pType] then powerbar[pType]:Show() end
+			end
+		end
 	end
 
 	-- Toggle Health visibility according to config
@@ -1542,40 +1577,44 @@ function ResourceBars.EnableResourceBars()
 	frameAnchor:SetScript("OnEvent", eventHandler)
 	frameAnchor:Hide()
 
-	createHealthBar()
-	-- setPowerbars()
-	if addon.Aura.ResourceBars.UpdateRuneEventRegistration then addon.Aura.ResourceBars.UpdateRuneEventRegistration() end
+    createHealthBar()
+    -- Build bars and anchor immediately; no deferred timers needed
+    if addon and addon.Aura and addon.Aura.ResourceBars and addon.Aura.ResourceBars.Refresh then
+        addon.Aura.ResourceBars.Refresh()
+    else
+        if setPowerbars then setPowerbars() end
+        if addon and addon.Aura and addon.Aura.ResourceBars and addon.Aura.ResourceBars.ReanchorAll then addon.Aura.ResourceBars.ReanchorAll() end
+    end
 end
 
 function ResourceBars.DisableResourceBars()
-	if frameAnchor then
-		frameAnchor:UnregisterAllEvents()
-		frameAnchor:SetScript("OnEvent", nil)
-		frameAnchor = nil
-		addon.Aura.anchorFrame = nil
-	end
-	if mainFrame then
-		mainFrame:Hide()
-		mainFrame:SetParent(nil)
-		mainFrame = nil
-	end
-	if healthBar then
-		healthBar:Hide()
-		healthBar:SetParent(nil)
-		healthBar = nil
-	end
-	for pType, bar in pairs(powerbar) do
-		if bar then
-			bar:Hide()
-			bar:SetParent(nil)
-			if pType == "RUNES" then
-				bar:SetScript("OnUpdate", nil)
-				bar._runesAnimating = false
-			end
-		end
-		powerbar[pType] = nil
-	end
-	powerbar = {}
+    if frameAnchor then
+        frameAnchor:UnregisterAllEvents()
+        frameAnchor:SetScript("OnEvent", nil)
+        frameAnchor = nil
+        addon.Aura.anchorFrame = nil
+    end
+    if mainFrame then
+        mainFrame:Hide()
+        -- Keep parent to preserve frame and anchors for reuse
+        mainFrame = nil
+    end
+    if healthBar then
+        healthBar:Hide()
+        -- Keep parent to preserve frame and anchors for reuse
+        healthBar = nil
+    end
+    for pType, bar in pairs(powerbar) do
+        if bar then
+            bar:Hide()
+            if pType == "RUNES" then
+                bar:SetScript("OnUpdate", nil)
+                bar._runesAnimating = false
+            end
+        end
+        powerbar[pType] = nil
+    end
+    powerbar = {}
 end
 
 -- Register/unregister DK rune event depending on class and user config
