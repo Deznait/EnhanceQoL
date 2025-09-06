@@ -6,6 +6,9 @@ local L = addon.L
 local AceGUI = addon.AceGUI
 local db
 local stream
+-- Forward declarations used across functions
+local listWindow -- AceGUI window
+local populateListWindow -- function to (re)build the list window
 
 local function ensureDB()
 	addon.db.datapanel = addon.db.datapanel or {}
@@ -250,8 +253,6 @@ local function getFriends(stream)
     end
 end
 
--- Expanded list window ------------------------------------------------------
-local listWindow -- AceGUI window
 local function ensureListWindow()
     if listWindow and listWindow.frame and listWindow.frame:IsShown() then return listWindow end
     local frame = AceGUI:Create("Window")
@@ -296,7 +297,7 @@ local function addRow(scroll, cols)
     end
 end
 
-local function populateListWindow()
+function populateListWindow()
     if not (listWindow and listWindow._scroll) then return end
     local scroll = listWindow._scroll
     scroll:ReleaseChildren()
@@ -313,8 +314,8 @@ local function populateListWindow()
     end
     headerLabel(NAME, 0.30)
     headerLabel("Client", 0.12)
-    headerLabel(PRESENCE or L["Presence"] or "Presence", 0.38)
-    headerLabel(NOTES_LABEL or "Note", 0.20)
+    headerLabel((_G.PRESENCE or L["Presence"] or "Presence"), 0.38)
+    headerLabel((_G.NOTES_LABEL or "Note"), 0.20)
     scroll:AddChild(headerRow)
 
     -- Battle.net section
