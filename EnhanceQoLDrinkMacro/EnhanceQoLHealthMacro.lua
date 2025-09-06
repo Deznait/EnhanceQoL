@@ -283,11 +283,11 @@ function addon.Health.functions.addHealthFrame(container)
 		group:AddChild(cbPrefer)
 	end
 
-	local cbOther = addon.functions.createCheckboxAce(L["Allow other healing items"], addon.db["healthAllowOther"], function(_, _, value)
-		addon.db["healthAllowOther"] = value
-		addon.Health.functions.updateHealthMacro(false)
-	end)
-	group:AddChild(cbOther)
+	-- local cbOther = addon.functions.createCheckboxAce(L["Allow other healing items"], addon.db["healthAllowOther"], function(_, _, value)
+	-- 	addon.db["healthAllowOther"] = value
+	-- 	addon.Health.functions.updateHealthMacro(false)
+	-- end)
+	-- group:AddChild(cbOther)
 
 	local cbReorder = addon.functions.createCheckboxAce(L["Reorder by cooldown on combat end"], addon.db["healthReorderByCooldown"], function(_, _, value)
 		addon.db["healthReorderByCooldown"] = value
