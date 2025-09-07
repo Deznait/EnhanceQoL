@@ -95,6 +95,48 @@ local function UnregisterHeavyEvents()
 	f:UnregisterEvent("AUCTION_HOUSE_SHOW_ERROR")
 end
 
+-- Helpers to manage mini-frame state
+local function GetCurrentRecipeID()
+	local recipeID
+	if
+		ProfessionsFrame
+		and ProfessionsFrame.CraftingPage
+		and ProfessionsFrame.CraftingPage.SchematicForm
+		and ProfessionsFrame.CraftingPage.SchematicForm.currentRecipeInfo
+		and ProfessionsFrame.CraftingPage.SchematicForm.currentRecipeInfo.recipeID
+	then
+		recipeID = ProfessionsFrame.CraftingPage.SchematicForm.currentRecipeInfo.recipeID
+	elseif C_TradeSkillUI and C_TradeSkillUI.GetSelectedRecipeID then
+		recipeID = C_TradeSkillUI.GetSelectedRecipeID()
+	end
+	return recipeID
+end
+
+local function IsRecipeTrackedAny(recipeID)
+	if not recipeID or not C_TradeSkillUI or not C_TradeSkillUI.IsRecipeTracked then return false end
+	local ok, tracked = pcall(C_TradeSkillUI.IsRecipeTracked, recipeID, false)
+	if ok and tracked then return true end
+	local ok2, tracked2 = pcall(C_TradeSkillUI.IsRecipeTracked, recipeID, true)
+	return ok2 and tracked2 or false
+end
+
+local function UpdateMultiplyFrameState()
+	local frame = _G.EQOLCrafterMultiply
+	if not frame or not frame.ok or not frame.editBox then return end
+	local txt = frame.editBox:GetText() or ""
+	local rid = GetCurrentRecipeID()
+	local isTracked = IsRecipeTrackedAny(rid)
+	if txt == "" then
+		frame.ok:SetText(isTracked and PROFESSIONS_UNTRACK_RECIPE or TRACK_ACHIEVEMENT)
+	else
+		if frame.autoFilled then
+			frame.ok:SetText(PROFESSIONS_UNTRACK_RECIPE)
+		else
+			frame.ok:SetText(TRACK_ACHIEVEMENT)
+		end
+	end
+end
+
 local function isAHBuyable(itemID)
 	if ahCache[itemID] ~= nil then return ahCache[itemID] end
 	local buyable = true
@@ -645,6 +687,7 @@ local function createCrafterMultiplyFrame()
 	fCMF:SetSize(260, 32)
 	fCMF:SetFrameStrata("HIGH")
 	fCMF:EnableMouse(true)
+	fCMF.autoFilled = false
 
 	-- Visible, skinned OK button
 	local btnOK = CreateFrame("Button", nil, fCMF, "UIPanelButtonTemplate")
@@ -654,13 +697,25 @@ local function createCrafterMultiplyFrame()
 	fCMF.ok = btnOK
 	btnOK:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -3, -2)
 	btnOK:SetSize(70, 22)
-	btnOK:SetText(L["Track"])
+	btnOK:SetText(TRACK_ACHIEVEMENT)
 	btnOK:SetScript("OnClick", function()
+		if btnOK:GetText() == PROFESSIONS_UNTRACK_RECIPE then
+			fCMF.autoFilled = false
+			eb:SetText("0")
+			addToCraftShopper(eb)
+			eb:ClearFocus()
+			if UpdateMultiplyFrameState then UpdateMultiplyFrameState() end
+			return
+		end
 		if eb and eb.GetText then
-			if nil == eb:GetText() or eb:GetText() == "" then eb:SetText("1") end
+			if nil == eb:GetText() or eb:GetText() == "" then
+				fCMF.autoFilled = true
+				eb:SetText("1")
+			end
 		end
 		addToCraftShopper(eb)
 		eb:ClearFocus()
+		if UpdateMultiplyFrameState then UpdateMultiplyFrameState() end
 	end)
 
 	-- Label + edit box for quantity
@@ -676,23 +731,53 @@ local function createCrafterMultiplyFrame()
 	eb:SetMaxLetters(5)
 
 	eb:SetScript("OnEnterPressed", function(self)
+		if (self:GetText() or "") == "" then
+			if self:GetParent() then self:GetParent().autoFilled = true end
+			self:SetText("1")
+		end
 		addToCraftShopper(self)
 		self:ClearFocus()
+		if UpdateMultiplyFrameState then UpdateMultiplyFrameState() end
 	end)
 	eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+	eb:SetScript("OnTextChanged", function(self, userInput)
+		if userInput and self:GetParent() then self:GetParent().autoFilled = false end
+		if UpdateMultiplyFrameState then UpdateMultiplyFrameState() end
+	end)
 
 	-- Ensure sub-widgets are visible (frame visibility controlled below)
 	eb:Show()
 	btnOK:Show()
 
+	-- Track recipe changes to refresh button label
+	fCMF._accum = 0
+	fCMF.lastRecipeID = nil
+	fCMF:SetScript("OnUpdate", function(self, elapsed)
+		self._accum = (self._accum or 0) + elapsed
+		if self._accum < 0.3 then return end
+		self._accum = 0
+		local rid
+		if GetCurrentRecipeID then rid = GetCurrentRecipeID() end
+		if rid ~= self.lastRecipeID then
+			self.lastRecipeID = rid
+			self.autoFilled = false
+			if self.editBox and self.editBox:GetText() ~= "" then self.editBox:SetText("") end
+			if UpdateMultiplyFrameState then UpdateMultiplyFrameState() end
+		end
+	end)
+
 	-- Default hidden; only show when enabled and professions is visible
 	fCMF:Hide()
-	if addon.db and addon.db["vendorCraftShopperEnable"] and ProfessionsFrame:IsShown() then fCMF:Show() end
+	if addon.db and addon.db["vendorCraftShopperEnable"] and ProfessionsFrame:IsShown() then
+		fCMF:Show()
+		if UpdateMultiplyFrameState then UpdateMultiplyFrameState() end
+	end
 
 	ProfessionsFrame.CraftingPage.SchematicForm.TrackRecipeCheckbox:HookScript("OnShow", function(self)
 		if addon.db and addon.db["vendorCraftShopperEnable"] and EQOLCrafterMultiply then
 			EQOLCrafterMultiply:Show()
 			self:SetAlpha(0)
+			if UpdateMultiplyFrameState then UpdateMultiplyFrameState() end
 		end
 	end)
 	ProfessionsFrame.CraftingPage.SchematicForm.TrackRecipeCheckbox:HookScript("OnHide", function(self)
@@ -729,6 +814,7 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2)
 			end
 			if addon.Vendor.CraftShopper.frame then addon.Vendor.CraftShopper.frame.frame:Hide() end
 		end
+		if UpdateMultiplyFrameState then UpdateMultiplyFrameState() end
 	elseif event == "BAG_UPDATE_DELAYED" then
 		ScheduleRescan()
 	elseif event == "CRAFTINGORDERS_ORDER_PLACEMENT_RESPONSE" then
