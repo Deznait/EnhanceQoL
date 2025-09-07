@@ -3577,15 +3577,18 @@ local function updateFlyoutButtonInfo(button)
 		if not location then return end
 
 		-- TODO 12.0: EquipmentManager_UnpackLocation will change once Void Storage is removed
-		local player, bank, bags, voidStorage, slot, bag = EquipmentManager_UnpackLocation(location)
-
 		local itemLink
-		if bags then
-			itemLink = C_Container.GetContainerItemLink(bag, slot)
-		elseif not bags then
-			itemLink = GetInventoryItemLink("player", slot)
-		end
+		if type(button.location) == "number" then
+			local player, bank, bags, voidStorage, slot, bag = EquipmentManager_UnpackLocation(location)
 
+			if bags then
+				itemLink = C_Container.GetContainerItemLink(bag, slot)
+			elseif not bags then
+				itemLink = GetInventoryItemLink("player", slot)
+			end
+		elseif button.itemLink then
+			itemLink = button.itemLink
+		end
 		if itemLink then
 			local eItem = Item:CreateFromItemLink(itemLink)
 			if eItem and not eItem:IsItemEmpty() then
@@ -4929,7 +4932,26 @@ local function initCharacter()
 
 	hooksecurefunc("MerchantFrame_UpdateMerchantInfo", updateMerchantButtonInfo)
 	hooksecurefunc("MerchantFrame_UpdateBuybackInfo", updateBuybackButtonInfo)
-	hooksecurefunc("EquipmentFlyout_DisplayButton", function(button) updateFlyoutButtonInfo(button) end)
+
+	local function RefreshAllFlyoutButtons()
+		local f = _G.EquipmentFlyoutFrame
+		if not f then return end
+		-- Blizzard pflegt eine buttons-Liste, darauf verlassen wir uns:
+		if f.buttons then
+			for _, btn in ipairs(f.buttons) do
+				if btn and btn:IsShown() then
+					updateFlyoutButtonInfo(btn) -- <- deine vorhandene Routine
+				end
+			end
+			return
+		end
+		-- Fallback (falls mal keine Liste existiert): Children scannen
+		for i = 1, (f:GetNumChildren() or 0) do
+			local child = select(i, f:GetChildren())
+			if child and child:IsShown() and child.icon then updateFlyoutButtonInfo(child) end
+		end
+	end
+	hooksecurefunc("EquipmentFlyout_UpdateItems", RefreshAllFlyoutButtons)
 
 	if _G.BankPanel then
 		hooksecurefunc(BankPanel, "GenerateItemSlotsForSelectedTab", addon.functions.updateBags)

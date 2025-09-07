@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.11.1] – 2025-09-07
+
+### 🐛 Fixed
+
+- Flyout menu on the upgrade merchant sometimes had stale item level entries and not the correct ones
+
+---
+
 ## [4.11.0] – 2025-09-05
 
 ### ✨ Added
