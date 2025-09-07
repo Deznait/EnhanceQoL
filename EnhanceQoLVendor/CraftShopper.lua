@@ -17,6 +17,7 @@ local f = CreateFrame("Frame")
 addon.Vendor = addon.Vendor or {}
 addon.Vendor.CraftShopper = addon.Vendor.CraftShopper or {}
 addon.Vendor.CraftShopper.items = addon.Vendor.CraftShopper.items or {}
+addon.Vendor.CraftShopper.multipliers = addon.Vendor.CraftShopper.multipliers or {}
 
 local RANK_TO_USE = 3 -- 1-3: gewünschter Qualitätsrang
 local isRecraftTbl = { false, true } -- erst normale, dann Recrafts
@@ -44,6 +45,7 @@ local heavyEvents = {
 	"CRAFTINGORDERS_ORDER_PLACEMENT_RESPONSE",
 	"AUCTION_HOUSE_SHOW",
 	"AUCTION_HOUSE_CLOSED",
+	"ADDON_LOADED",
 }
 
 local heavyEventsRegistered = false
@@ -100,16 +102,18 @@ end
 
 local function BuildShoppingList()
 	local need = {} -- [itemID] = fehlende Menge
+	local multipliers = addon.Vendor.CraftShopper.multipliers or {}
 
 	for _, isRecraft in ipairs(isRecraftTbl) do
 		local recipes = C_TradeSkillUI.GetRecipesTracked(isRecraft) or {}
 		for _, recipeID in ipairs(recipes) do
 			local schem = getSchematic(recipeID, isRecraft)
+			local mult = multipliers[recipeID] or 1
 			if schem and schem.reagentSlotSchematics then
 				for _, slot in ipairs(schem.reagentSlotSchematics) do
 					-- Nur Pflicht-Reagenzien, optional/finishing überspringen:
 					if slot.reagentType == Enum.CraftingReagentType.Basic then
-						local reqQty = slot.quantityRequired
+						local reqQty = slot.quantityRequired * mult
 						-- gewünschte Qualitäts-ID holen:
 						local reagent = slot.reagents[RANK_TO_USE]
 						local id
@@ -541,9 +545,91 @@ end
 
 f:RegisterEvent("PLAYER_LOGIN")
 
+local function addToCraftShopper(el)
+	if not el or not el.GetText then return end
+	local txt = el:GetText()
+	local count = tonumber(txt)
+	if not count or count < 1 then
+		el:SetText("")
+		return
+	end
+
+	-- Determine current recipeID from the professions UI
+	local recipeID
+	if
+		ProfessionsFrame
+		and ProfessionsFrame.CraftingPage
+		and ProfessionsFrame.CraftingPage.SchematicForm
+		and ProfessionsFrame.CraftingPage.SchematicForm.currentRecipeInfo
+		and ProfessionsFrame.CraftingPage.SchematicForm.currentRecipeInfo.recipeID
+	then
+		recipeID = ProfessionsFrame.CraftingPage.SchematicForm.currentRecipeInfo.recipeID
+		print(recipeID)
+	end
+
+	if not recipeID then return end
+
+	-- Store multiplier and ensure recipe is tracked
+	addon.Vendor.CraftShopper.multipliers[recipeID] = math.floor(count)
+	if C_TradeSkillUI and C_TradeSkillUI.SetRecipeTracked then pcall(C_TradeSkillUI.SetRecipeTracked, recipeID, true, false) end
+
+	-- Update list immediately and show the UI
+	addon.Vendor.CraftShopper.items = BuildShoppingList()
+	if addon.Vendor.CraftShopper.frame then addon.Vendor.CraftShopper.frame:Refresh() end
+	ShowCraftShopperFrameIfNeeded()
+end
+
+local function createCrafterMultiplyFrame()
+	local fCMF = CreateFrame("frame", "EQOLCrafterMultiply", ProfessionsFrame.CraftingPage.SchematicForm, "BackdropTemplate")
+	-- Compact, unobtrusive container in the top-right of the schematic form
+
+	local _, _, _, x, y = ProfessionsFrame.CraftingPage.SchematicForm.TrackRecipeCheckbox:GetPoint()
+	local _, height = ProfessionsFrame.CraftingPage.SchematicForm.TrackRecipeCheckbox:GetSize()
+	y = y - height
+
+	fCMF:SetPoint("TOPRIGHT", ProfessionsFrame.CraftingPage.SchematicForm, "TOPRIGHT", 0, y)
+	fCMF:SetSize(180, 32)
+	fCMF:SetFrameStrata("HIGH")
+	fCMF:EnableMouse(true)
+
+	-- Edit box for quantity
+	local eb = CreateFrame("EditBox", nil, fCMF, "InputBoxTemplate")
+	fCMF.editBox = eb
+	eb:SetPoint("LEFT", fCMF, "LEFT", 0, 0)
+	eb:SetAutoFocus(false)
+	eb:SetHeight(22)
+	eb:SetWidth(80)
+	eb:SetFontObject(ChatFontNormal)
+	eb:SetMaxLetters(5)
+
+	eb:SetScript("OnEnterPressed", function(self)
+		addToCraftShopper(self)
+		self:ClearFocus()
+	end)
+	eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+
+	-- Visible, skinned OK button
+	local btnOK = CreateFrame("Button", nil, fCMF, "UIPanelButtonTemplate")
+	fCMF.ok = btnOK
+	btnOK:SetPoint("LEFT", eb, "RIGHT", 6, 0)
+	btnOK:SetSize(70, 22)
+	btnOK:SetText("Track")
+	btnOK:SetScript("OnClick", function()
+		addToCraftShopper(eb)
+		eb:ClearFocus()
+	end)
+
+	-- Ensure sub-widgets are visible
+	eb:Show()
+	btnOK:Show()
+	fCMF:Show()
+end
+
 f:SetScript("OnEvent", function(_, event, arg1, arg2)
 	if event == "PLAYER_LOGIN" then
 		if addon.db["vendorCraftShopperEnable"] then addon.Vendor.CraftShopper.EnableCraftShopper() end
+	elseif event == "ADDON_LOADED" and arg1 == "Blizzard_Professions" then
+		if not EQOLCrafterMultiply then createCrafterMultiplyFrame() end
 	elseif event == "TRACKED_RECIPE_UPDATE" then
 		if HasTrackedRecipes() then
 			RegisterHeavyEvents()
