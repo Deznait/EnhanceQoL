@@ -229,15 +229,15 @@ local function addGeneralFrame(container)
 	groupGroup:SetTitle(L["Groups"])
 	wrapper:AddChild(groupGroup)
 
-        local metricNames = {
-                dps = L["DPS"],
-                damageOverall = L["Damage Overall"],
-                healingPerFight = L["Healing Per Fight"],
-                healingOverall = L["Healing Overall"],
-               interrupts = INTERRUPTS,
-               interruptsOverall = INTERRUPTS .. L[" Overall"],
-       }
-       local metricOrder = { "damageOverall", "healingOverall", "interruptsOverall", "dps", "healingPerFight", "interrupts" }
+	local metricNames = {
+		dps = L["DPS"],
+		damageOverall = L["Damage Overall"],
+		healingPerFight = L["Healing Per Fight"],
+		healingOverall = L["Healing Overall"],
+		interrupts = INTERRUPTS,
+		interruptsOverall = INTERRUPTS .. L[" Overall"],
+	}
+	local metricOrder = { "damageOverall", "healingOverall", "interruptsOverall", "dps", "healingPerFight", "interrupts" }
 
 	for i, cfg in ipairs(addon.db["combatMeterGroups"]) do
 		local idx = i
@@ -287,27 +287,27 @@ local function addGeneralFrame(container)
 		groupGroup:AddChild(cbSelf)
 	end
 
-       local addDrop = addon.functions.createDropdownAce(L["Add Group"], metricNames, metricOrder, function(self, _, val)
-               local barWidth = 210
-               local barHeight = 25
-               local frameWidth = barWidth + barHeight + 2
-               local screenW, screenH = UIParent:GetWidth(), UIParent:GetHeight()
-               local x = (screenW - frameWidth) / 2
-               local y = -((screenH - barHeight) / 2)
-               table.insert(addon.db["combatMeterGroups"], {
-                       type = val,
-                       point = "TOPLEFT",
-                       x = x,
-                       y = y,
-                       barWidth = barWidth,
-                       barHeight = barHeight,
-                       maxBars = 8,
-                       alwaysShowSelf = false,
-               })
-               addon.CombatMeter.functions.rebuildGroups()
-               container:ReleaseChildren()
-               addGeneralFrame(container)
-       end)
+	local addDrop = addon.functions.createDropdownAce(L["Add Group"], metricNames, metricOrder, function(self, _, val)
+		local barWidth = 210
+		local barHeight = 25
+		local frameWidth = barWidth + barHeight + 2
+		local screenW, screenH = UIParent:GetWidth(), UIParent:GetHeight()
+		local x = (screenW - frameWidth) / 2
+		local y = -((screenH - barHeight) / 2)
+		table.insert(addon.db["combatMeterGroups"], {
+			type = val,
+			point = "TOPLEFT",
+			x = x,
+			y = y,
+			barWidth = barWidth,
+			barHeight = barHeight,
+			maxBars = 8,
+			alwaysShowSelf = false,
+		})
+		addon.CombatMeter.functions.rebuildGroups()
+		container:ReleaseChildren()
+		addGeneralFrame(container)
+	end)
 	groupGroup:AddChild(addDrop)
 	scroll:DoLayout()
 end

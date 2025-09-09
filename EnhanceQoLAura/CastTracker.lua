@@ -34,26 +34,26 @@ local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
 local DEFAULT_CASTBAR_TEX = "Interface\\TargetingFrame\\UI-StatusBar"
 
 local function isValidStatusbarPath(path)
-    if not path or type(path) ~= "string" or path == "" then return false end
-    if path == DEFAULT_CASTBAR_TEX then return true end
-    if path == "Interface\\Buttons\\WHITE8x8" then return true end
-    if path == "Interface\\Tooltips\\UI-Tooltip-Background" then return true end
-    if LSM and LSM.HashTable then
-        local ht = LSM:HashTable("statusbar")
-        for _, p in pairs(ht or {}) do
-            if p == path then return true end
-        end
-    end
-    return false
+	if not path or type(path) ~= "string" or path == "" then return false end
+	if path == DEFAULT_CASTBAR_TEX then return true end
+	if path == "Interface\\Buttons\\WHITE8x8" then return true end
+	if path == "Interface\\Tooltips\\UI-Tooltip-Background" then return true end
+	if LSM and LSM.HashTable then
+		local ht = LSM:HashTable("statusbar")
+		for _, p in pairs(ht or {}) do
+			if p == path then return true end
+		end
+	end
+	return false
 end
 
 local function resolveCategoryTexture(db)
-    local sel = db and db.barTexture
-    if sel == nil or sel == "DEFAULT" or not isValidStatusbarPath(sel) then
-        if db then db.barTexture = "DEFAULT" end
-        return DEFAULT_CASTBAR_TEX
-    end
-    return sel
+	local sel = db and db.barTexture
+	if sel == nil or sel == "DEFAULT" or not isValidStatusbarPath(sel) then
+		if db then db.barTexture = "DEFAULT" end
+		return DEFAULT_CASTBAR_TEX
+	end
+	return sel
 end
 
 local anchors = {}

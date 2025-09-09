@@ -66,33 +66,31 @@ addon.MythicPlus.anchorFrame = frameAnchor
 local DEFAULT_POTION_BAR_TEX = "Interface\\TargetingFrame\\UI-StatusBar"
 
 local function isValidStatusbarPath(path)
-    if not path or type(path) ~= "string" or path == "" then return false end
-    if path == DEFAULT_POTION_BAR_TEX then return true end
-    if path == "Interface\\Buttons\\WHITE8x8" then return true end
-    if path == "Interface\\Tooltips\\UI-Tooltip-Background" then return true end
-    if LSM and LSM.HashTable then
-        local ht = LSM:HashTable("statusbar")
-        for _, p in pairs(ht or {}) do
-            if p == path then return true end
-        end
-    end
-    return false
+	if not path or type(path) ~= "string" or path == "" then return false end
+	if path == DEFAULT_POTION_BAR_TEX then return true end
+	if path == "Interface\\Buttons\\WHITE8x8" then return true end
+	if path == "Interface\\Tooltips\\UI-Tooltip-Background" then return true end
+	if LSM and LSM.HashTable then
+		local ht = LSM:HashTable("statusbar")
+		for _, p in pairs(ht or {}) do
+			if p == path then return true end
+		end
+	end
+	return false
 end
 
 local function resolvePotionBarTexturePath()
-    local sel = addon.db and addon.db["potionTrackerBarTexture"]
-    if sel == nil or sel == "DEFAULT" or not isValidStatusbarPath(sel) then
-        return DEFAULT_POTION_BAR_TEX
-    end
-    return sel
+	local sel = addon.db and addon.db["potionTrackerBarTexture"]
+	if sel == nil or sel == "DEFAULT" or not isValidStatusbarPath(sel) then return DEFAULT_POTION_BAR_TEX end
+	return sel
 end
 
 local function applyPotionBarTexture()
-    local tex = resolvePotionBarTexturePath()
-    if frameAnchor and frameAnchor.SetStatusBarTexture then frameAnchor:SetStatusBarTexture(tex) end
-    for _, bar in ipairs(activeBars) do
-        if bar and bar.SetStatusBarTexture then bar:SetStatusBarTexture(tex) end
-    end
+	local tex = resolvePotionBarTexturePath()
+	if frameAnchor and frameAnchor.SetStatusBarTexture then frameAnchor:SetStatusBarTexture(tex) end
+	for _, bar in ipairs(activeBars) do
+		if bar and bar.SetStatusBarTexture then bar:SetStatusBarTexture(tex) end
+	end
 end
 addon.MythicPlus.functions.applyPotionBarTexture = applyPotionBarTexture
 
@@ -147,9 +145,9 @@ local function createCooldownBar(spellID, anchorFrame, playerName, unit)
 	if potInfo.isOffhealing and addon.db["potionTrackerOffhealing"] == false then return end
 	if potInfo.isOffhealing then PlaySoundFile("Interface\\AddOns\\EnhanceQoLSharedMedia\\Sounds\\Voiceovers\\offhealing active.ogg", "Master") end
 
-    local frame = CreateFrame("StatusBar", nil, UIParent, "BackdropTemplate")
-    frame:SetSize(anchorFrame:GetWidth() - addon.db["CooldownTrackerBarHeight"], addon.db["CooldownTrackerBarHeight"]) -- Größe des Balkens
-    frame:SetStatusBarTexture(resolvePotionBarTexturePath())
+	local frame = CreateFrame("StatusBar", nil, UIParent, "BackdropTemplate")
+	frame:SetSize(anchorFrame:GetWidth() - addon.db["CooldownTrackerBarHeight"], addon.db["CooldownTrackerBarHeight"]) -- Größe des Balkens
+	frame:SetStatusBarTexture(resolvePotionBarTexturePath())
 	frame:SetMinMaxValues(0, duration)
 	frame:SetValue(duration)
 	frame:SetPoint("TOPLEFT", anchorFrame, "TOPLEFT", 0, 0)
@@ -236,7 +234,7 @@ local function createCooldownBar(spellID, anchorFrame, playerName, unit)
 		end
 	end)
 
-    return frame
+	return frame
 end
 
 -- Main

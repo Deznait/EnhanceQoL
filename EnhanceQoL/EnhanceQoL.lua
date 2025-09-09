@@ -5513,6 +5513,9 @@ local function setAllHooks()
             if addon.Aura and addon.Aura.CastTracker and addon.Aura.CastTracker.functions and addon.Aura.CastTracker.functions.RefreshTextureDropdown then
                 addon.Aura.CastTracker.functions.RefreshTextureDropdown()
             end
+            if addon.Aura and addon.Aura.ResourceBars and addon.Aura.ResourceBars.RefreshTextureDropdown then
+                addon.Aura.ResourceBars.RefreshTextureDropdown()
+            end
         end
     end)
 end
