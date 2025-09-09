@@ -1,11 +1,12 @@
 # Changelog
 
-## [4.12.1] – 2025-09-08
+## [4.12.1] – 2025-09-09
 
 ### 🐛 Fixed
 
-- **Mouse:** Options had some wrong conditions
-- **Cast Tracker/Aura Tracker:** Guarding against wrong import strings
+- **Mouse:** Incorrect condition checks for some options.
+- **Cast/Aura Tracker, Cooldown Notify:** Guard against invalid import strings.
+- **Cooldown Notify:** Error on **Import Category** click.
 
 ---
 

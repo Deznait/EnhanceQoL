@@ -397,14 +397,14 @@ local function importCategory(encoded)
 	if not decoded then return end
 	local decompressed = deflate:DecompressDeflate(decoded)
 	if not decompressed then return end
-    local ok, data = serializer:Deserialize(decompressed)
-    if not ok or type(data) ~= "table" then return end
+	local ok, data = serializer:Deserialize(decompressed)
+	if not ok or type(data) ~= "table" then return end
 
-    -- strict guard: only accept CastTracker payloads
-    if data.kind ~= "EQOL_CAST_CATEGORY" then return end
-    local cat = data.category or data.cat or data
-    if type(cat) ~= "table" then return end
-    if type(cat.spells) ~= "table" then return end
+	-- strict guard: only accept CastTracker payloads
+	if data.kind ~= "EQOL_CAST_CATEGORY" then return end
+	local cat = data.category or data.cat or data
+	if type(cat) ~= "table" then return end
+	if type(cat.spells) ~= "table" then return end
 	cat.anchor = cat.anchor or { point = "CENTER", x = 0, y = 0 }
 	cat.width = cat.width or addon.db.castTrackerBarWidth or 200
 	cat.height = cat.height or addon.db.castTrackerBarHeight or 20
@@ -455,13 +455,13 @@ local function previewImportCategory(encoded)
 	if not decoded then return end
 	local decompressed = deflate:DecompressDeflate(decoded)
 	if not decompressed then return end
-    local ok, data = serializer:Deserialize(decompressed)
-    if not ok or type(data) ~= "table" then return end
-    -- strict guard: only accept CastTracker payloads
-    if data.kind ~= "EQOL_CAST_CATEGORY" then return end
-    local cat = data.category or data.cat or data
-    if type(cat) ~= "table" then return end
-    if type(cat.spells) ~= "table" then return end
+	local ok, data = serializer:Deserialize(decompressed)
+	if not ok or type(data) ~= "table" then return end
+	-- strict guard: only accept CastTracker payloads
+	if data.kind ~= "EQOL_CAST_CATEGORY" then return end
+	local cat = data.category or data.cat or data
+	if type(cat) ~= "table" then return end
+	if type(cat.spells) ~= "table" then return end
 	local count = 0
 	for _ in pairs(cat.spells or {}) do
 		count = count + 1

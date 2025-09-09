@@ -31,6 +31,7 @@ local ShareCategory
 local importCategory
 local exportCategory
 local GetItemInfo = C_Item.GetItemInfo
+local previewImportCategory
 
 for _, cat in pairs(addon.db.cooldownNotifyCategories or {}) do
 	if cat.useAdvancedTracking == nil then cat.useAdvancedTracking = true end
@@ -877,7 +878,19 @@ function CN.functions.addCooldownNotifyOptions(container)
 				local editBox = self.editBox or self.GetEditBox and self:GetEditBox()
 				editBox:SetText("")
 				editBox:SetFocus()
-				self.text:SetText(L["ImportCategory"])
+				local txt = self.text or self.Text
+				if txt then txt:SetText(L["ImportCategory"]) end
+			end
+			StaticPopupDialogs["EQOL_IMPORT_CATEGORY"].EditBoxOnTextChanged = function(editBox)
+				local frame = editBox:GetParent()
+				local name, count = previewImportCategory(editBox:GetText())
+				local txt = frame.text or frame.Text
+				if not txt then return end
+				if name then
+					txt:SetFormattedText("%s\n%s", L["ImportCategory"], (L["ImportCategoryPreview"] or "Category: %s (%d auras)"):format(name, count))
+				else
+					txt:SetText(L["ImportCategory"])
+				end
 			end
 			StaticPopupDialogs["EQOL_IMPORT_CATEGORY"].OnAccept = function(self)
 				local editBox = self.editBox or self.GetEditBox and self:GetEditBox()
@@ -919,6 +932,8 @@ function exportCategory(catId, encodeMode)
 	local cat = addon.db.cooldownNotifyCategories and addon.db.cooldownNotifyCategories[catId]
 	if not cat then return end
 	local data = {
+		-- guard: identify payload source to prevent cross-imports
+		kind = "EQOL_CDN_CATEGORY",
 		category = cat,
 		order = addon.db.cooldownNotifyOrder and addon.db.cooldownNotifyOrder[catId] or {},
 		sounds = addon.db.cooldownNotifySounds and addon.db.cooldownNotifySounds[catId] or {},
@@ -947,8 +962,11 @@ function importCategory(encoded)
 	if not decompressed then return end
 	local ok, data = serializer:Deserialize(decompressed)
 	if not ok or type(data) ~= "table" then return end
+	-- strict guard: only accept CooldownNotify payloads
+	if data.kind ~= "EQOL_CDN_CATEGORY" then return end
 	local cat = data.category or data.cat or data
 	if type(cat) ~= "table" then return end
+	if type(cat.spells) ~= "table" then return end
 	cat.anchor = cat.anchor or { point = "CENTER", x = 0, y = 0 }
 	cat.iconSize = cat.iconSize or 75
 	cat.fadeInTime = cat.fadeInTime or 0.3
@@ -988,6 +1006,28 @@ function importCategory(encoded)
 	applyLockState()
 	updateEventRegistration()
 	return newId
+end
+
+-- Returns (name, count) if valid CDN import string, otherwise nil
+function previewImportCategory(encoded)
+	if type(encoded) ~= "string" or encoded == "" then return end
+	local deflate = LibStub("LibDeflate")
+	local serializer = LibStub("AceSerializer-3.0")
+	local decoded = deflate:DecodeForPrint(encoded) or deflate:DecodeForWoWChatChannel(encoded) or deflate:DecodeForWoWAddonChannel(encoded)
+	if not decoded then return end
+	local decompressed = deflate:DecompressDeflate(decoded)
+	if not decompressed then return end
+	local ok, data = serializer:Deserialize(decompressed)
+	if not ok or type(data) ~= "table" then return end
+	if data.kind ~= "EQOL_CDN_CATEGORY" then return end
+	local cat = data.category or data.cat or data
+	if type(cat) ~= "table" then return end
+	if type(cat.spells) ~= "table" then return end
+	local count = 0
+	for _ in pairs(cat.spells) do
+		count = count + 1
+	end
+	return cat.name or "", count
 end
 
 local COMM_PREFIX = "EQOLCDNSHARE"
@@ -1075,23 +1115,14 @@ local function HandleEQOLLink(link, text, button, frame)
 		}
 	StaticPopupDialogs["EQOL_IMPORT_FROM_SHARE"].OnShow = function(self, data)
 		local encoded = incoming[data]
-		local name = ""
-		if encoded then
-			local deflate = LibStub("LibDeflate")
-			local serializer = LibStub("AceSerializer-3.0")
-			local decoded = deflate:DecodeForPrint(encoded) or deflate:DecodeForWoWChatChannel(encoded) or deflate:DecodeForWoWAddonChannel(encoded)
-			if decoded then
-				local decompressed = deflate:DecompressDeflate(decoded)
-				if decompressed then
-					local ok, data = serializer:Deserialize(decompressed)
-					if ok and type(data) == "table" then
-						local cat = data.category or data.cat or data
-						name = cat and cat.name or name
-					end
-				end
-			end
+		local name, count = previewImportCategory(encoded or "")
+		local txt = self.text or self.Text
+		if not txt then return end
+		if name then
+			txt:SetFormattedText("%s\n%s", L["ImportCategory"], (L["ImportCategoryPreview"] or "Category: %s (%d auras)"):format(name, count))
+		else
+			txt:SetText(L["ImportCategory"])
 		end
-		self.text:SetFormattedText("%s\n%s", L["ImportCategory"], name ~= "" and name or "")
 	end
 	StaticPopup_Show("EQOL_IMPORT_FROM_SHARE", nil, nil, pktID)
 end
