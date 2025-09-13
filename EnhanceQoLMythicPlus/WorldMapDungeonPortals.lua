@@ -444,9 +444,9 @@ local function EnsureTab(parent, anchorTo)
     tabButton.CustomIcon = customIcon
 
     -- helper to flip icon depending on selection
-    local function UpdateTabIcon(tb)
+    local function UpdateTabIconChecked(tb, checked)
         if not tb or not tb.CustomIcon then return end
-        if tb.GetChecked and tb:GetChecked() then
+        if checked then
             tb.CustomIcon:SetTexture(ICON_ACTIVE)
         else
             tb.CustomIcon:SetTexture(ICON_INACTIVE)
@@ -466,9 +466,9 @@ local function EnsureTab(parent, anchorTo)
 
 	-- Keep custom icon clear on state changes
     if not tabButton._eqolStateHooks then
-        hooksecurefunc(tabButton, "SetChecked", function(self)
+        hooksecurefunc(tabButton, "SetChecked", function(self, checked)
             if self.CustomIcon then self.CustomIcon:SetDesaturated(false) end
-            UpdateTabIcon(self)
+            UpdateTabIconChecked(self, checked)
         end)
         hooksecurefunc(tabButton, "Disable", function(self)
             if self.CustomIcon then self.CustomIcon:SetDesaturated(true) end
@@ -479,8 +479,9 @@ local function EnsureTab(parent, anchorTo)
         tabButton._eqolStateHooks = true
     end
 
-    -- Initialize icon for current state
-    UpdateTabIcon(tabButton)
+    -- Initialize checked state and icon based on QuestMapFrame displayMode
+    local isActive = QuestMapFrame and QuestMapFrame.displayMode == DISPLAY_MODE
+    if tabButton.SetChecked then tabButton:SetChecked(isActive) end
 
 	tabButton:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
