@@ -1885,6 +1885,35 @@ local function addAuctionHouseFrame(container)
 	end
 end
 
+-- Merchant UI (extended grid) options
+local function addMerchantFrame(container)
+    local data = {
+        {
+            parent = MERCHANT,
+            var = "enableExtendedMerchant",
+            text = (MERCHANT .. ": 20 Items per page"),
+            type = "CheckBox",
+            desc = "Expands the merchant window to show 20 items (2x10). Disabling requires a reload.",
+            callback = function(self, _, value)
+                addon.db["enableExtendedMerchant"] = value
+                if addon.Merchant then
+                    if value and addon.Merchant.Enable then
+                        addon.Merchant:Enable()
+                    elseif not value and addon.Merchant.Disable then
+                        addon.Merchant:Disable()
+                        addon.variables.requireReload = true
+                        addon.functions.checkReloadFrame()
+                    end
+                end
+                container:ReleaseChildren()
+                addMerchantFrame(container)
+            end,
+        },
+    }
+
+    addon.functions.createWrapperData(data, container, L)
+end
+
 local function addActionBarFrame(container, d)
 	local scroll = addon.functions.createContainer("ScrollFrame", "Flow")
 	scroll:SetFullWidth(true)
@@ -4500,6 +4529,7 @@ local function initUI()
 	addon.functions.InitDBValue("persistAuctionHouseFilter", false)
 	addon.functions.InitDBValue("alwaysUserCurExpAuctionHouse", false)
 	addon.functions.InitDBValue("hideDynamicFlightBar", false)
+	addon.functions.InitDBValue("enableExtendedMerchant", false)
     addon.functions.InitDBValue("showInstanceDifficulty", false)
     -- anchor no longer used; position controlled by offsets from CENTER
     addon.functions.InitDBValue("instanceDifficultyOffsetX", 0)
@@ -4591,6 +4621,9 @@ local function initUI()
 		end
 	end
 	addon.functions.toggleQuickJoinToastButton(addon.db["hideQuickJoinToast"])
+
+	-- Apply merchant extension on load if enabled
+	if addon.db["enableExtendedMerchant"] and addon.Merchant and addon.Merchant.Enable then addon.Merchant:Enable() end
 
 	function addon.functions.toggleDynamicFlightBar(value)
 		local bar = UIWidgetPowerBarContainerFrame
@@ -5440,6 +5473,7 @@ local function CreateUI()
 					{ value = "auctionhouse", text = BUTTON_LAG_AUCTIONHOUSE },
 					{ value = "actionbar", text = ACTIONBARS_LABEL },
 					{ value = "chatframe", text = HUD_EDIT_MODE_CHAT_FRAME_LABEL },
+					{ value = "merchant", text = MERCHANT },
 					{ value = "minimap", text = MINIMAP_LABEL },
 					{ value = "unitframe", text = UNITFRAME_LABEL },
 					{ value = "dynamicflight", text = DYNAMIC_FLIGHT },
@@ -5480,6 +5514,8 @@ local function CreateUI()
 			addAuctionHouseFrame(container)
 		elseif group == "general\001ui\001actionbar" then
 			addActionBarFrame(container)
+		elseif group == "general\001ui\001merchant" then
+			addMerchantFrame(container)
 		elseif group == "general\001ui\001unitframe" then
 			addUnitFrame(container)
 		elseif group == "general\001ui\001dynamicflight" then
