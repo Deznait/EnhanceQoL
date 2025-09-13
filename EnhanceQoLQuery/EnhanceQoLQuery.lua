@@ -7,105 +7,27 @@ else
 	error(parentAddonName .. " is not loaded")
 end
 
-local frame = CreateFrame("Frame", "EnhanceQoLQueryFrame", UIParent, "BasicFrameTemplateWithInset")
+-- Event frame (no visible UI)
+local eventFrame = CreateFrame("Frame")
 local AceGUI = LibStub and LibStub("AceGUI-3.0", true)
-local currentGroup = "generator" -- UI group: generator|inspector
+
+addon.Query = addon.Query or {}
+addon.Query.ui = addon.Query.ui or {}
+
 local currentMode = "drink" -- one of: "drink", "potion", "auto"
 local reSearchList = {}
 local resultsAHSearch = {}
 local lastProcessedBrowseCount = 0
 local browseStallCount = 0
-
 local executeSearch = false
-
-addon.Query = {}
-
-frame:SetSize(520, 420)
-frame:SetPoint("CENTER")
-frame:SetMovable(true)
-frame:EnableMouse(true)
-frame:SetResizable(true)
-frame:RegisterForDrag("LeftButton")
-frame:SetScript("OnDragStart", frame.StartMoving)
-frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-frame:Hide() -- Initially hide the frame
-
-frame.title = frame:CreateFontString(nil, "OVERLAY")
-frame.title:SetFontObject("GameFontHighlight")
-frame.title:SetPoint("LEFT", frame.TitleBg, "LEFT", 5, 0)
-frame.title:SetText(addonName)
-
--- Right content area that auto-resizes with the window
-frame.content = CreateFrame("Frame", nil, frame)
-frame.content:SetPoint("TOPLEFT", frame, "TOPLEFT", 160, -60)
-frame.content:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -10, 50)
-
--- Mode controls
-local modeLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-modeLabel:ClearAllPoints()
-modeLabel:SetPoint("TOPLEFT", frame.content, "TOPLEFT", 0, 0)
-modeLabel:SetText("Mode:")
-modeLabel:Hide() -- legacy UI hidden; AceGUI window is used
+local loadedResults = {}
 
 local function setMode(mode)
     currentMode = mode
-    if frame and frame.title then
-        frame.title:SetText(string.format("%s - %s", addonName or "Query", (mode == "drink" and "Drinks") or (mode == "potion" and "Mana Potions") or "Auto"))
-    end
-    if frame.scanButton then
-        frame.scanButton:SetText(mode == "potion" and "Scan Potions" or "Scan Drinks")
-    end
+    local titleSuffix = (mode == "drink" and "Drinks") or (mode == "potion" and "Mana Potions") or "Auto"
+    if addon.Query.ui and addon.Query.ui.window then addon.Query.ui.window:SetTitle("EnhanceQoLQuery - " .. titleSuffix) end
+    if addon.Query.ui and addon.Query.ui.scanBtn then addon.Query.ui.scanBtn:SetText(mode == "potion" and "Scan Potions" or "Scan Drinks") end
 end
-
-local btnModeDrink = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-btnModeDrink:SetPoint("TOPLEFT", modeLabel, "TOPRIGHT", 6, 0)
-btnModeDrink:SetSize(80, 20)
-btnModeDrink:SetText("Drinks")
-btnModeDrink:SetScript("OnClick", function() setMode("drink") end)
-btnModeDrink:Hide()
-
-local btnModePotion = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-btnModePotion:SetPoint("LEFT", btnModeDrink, "RIGHT", 4, 0)
-btnModePotion:SetSize(100, 20)
-btnModePotion:SetText("Mana Potions")
-btnModePotion:SetScript("OnClick", function() setMode("potion") end)
-btnModePotion:Hide()
-
-local btnModeAuto = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-btnModeAuto:SetPoint("LEFT", btnModePotion, "RIGHT", 4, 0)
-btnModeAuto:SetSize(60, 20)
-btnModeAuto:SetText("Auto")
-btnModeAuto:SetScript("OnClick", function() setMode("auto") end)
-btnModeAuto:Hide()
-
-frame.editBox = CreateFrame("ScrollFrame", nil, frame.content, "UIPanelScrollFrameTemplate")
-frame.editBox:ClearAllPoints()
-frame.editBox:SetPoint("TOPLEFT", frame.content, "TOPLEFT", 0, -24)
-frame.editBox:SetPoint("TOPRIGHT", frame.content, "TOPRIGHT", 0, -24)
-frame.editBox:SetHeight(60)
-frame.editBox:Hide()
-
-frame.editEditBox = CreateFrame("EditBox", nil, frame.editBox)
-frame.editEditBox:SetSize(480, 60)
-frame.editEditBox:SetMultiLine(true)
-frame.editEditBox:SetAutoFocus(false)
-frame.editEditBox:SetFontObject("ChatFontNormal")
-frame.editBox:SetScrollChild(frame.editEditBox)
-frame.editEditBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
-
-frame.outputBox = CreateFrame("ScrollFrame", nil, frame.content, "UIPanelScrollFrameTemplate")
-frame.outputBox:ClearAllPoints()
-frame.outputBox:SetPoint("TOPLEFT", frame.editBox, "BOTTOMLEFT", 0, -12)
-frame.outputBox:SetPoint("BOTTOMRIGHT", frame.content, "BOTTOMRIGHT", 0, 30)
-frame.outputBox:Hide()
-
-frame.outputEditBox = CreateFrame("EditBox", nil, frame.outputBox)
-frame.outputEditBox:SetSize(480, 230)
-frame.outputEditBox:SetMultiLine(true)
-frame.outputEditBox:SetAutoFocus(false)
-frame.outputEditBox:SetFontObject("ChatFontNormal")
-frame.outputBox:SetScrollChild(frame.outputEditBox)
-frame.outputEditBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
 
 local addedItems = {} -- known items already present in code lists
 local inputAdded = {} -- items the user has added in the current input session
@@ -208,42 +130,86 @@ end
 
 -- Public inspector function used by AceUI and Shift+Click when in inspector
 function addon.Query.showItem(itemLink)
-    local name, link, quality, ilvl, reqLevel, type, subType, stack, equipLoc, icon, sellPrice,
-        classID, subClassID, bindType, expacID, setID, isCraftingReagent = C_Item.GetItemInfo(itemLink)
-    local itemID = tonumber(itemLink:match("item:(%d+)"))
-    local effIlvl = (GetDetailedItemLevelInfo and select(1, GetDetailedItemLevelInfo(itemLink))) or ilvl
-    local stats = GetItemStats and GetItemStats(itemLink) or nil
+    local itemName, itemLink2, itemQuality, itemLevel, itemMinLevel, itemType, itemSubType,
+        itemStackCount, itemEquipLoc, itemTexture, sellPrice, classID, subclassID,
+        bindType, expansionID, setID, isCraftingReagent = C_Item.GetItemInfo(itemLink)
+
+    local function coinText(c)
+        c = tonumber(c or 0) or 0
+        if c <= 0 then return "0c" end
+        local g = math.floor(c / 10000)
+        local s = math.floor((c % 10000) / 100)
+        local k = c % 100
+        local parts = {}
+        if g > 0 then table.insert(parts, g .. "g") end
+        if s > 0 then table.insert(parts, s .. "s") end
+        if k > 0 then table.insert(parts, k .. "c") end
+        return table.concat(parts, " ")
+    end
+
+    local BIND_NAMES = { [0] = "None", [1] = "Bind on Pickup", [2] = "Bind on Equip", [3] = "Bind on Use", [4] = "Quest" }
+    local function expansionName(id)
+        if id == nil then return nil end
+        local key = "EXPANSION_NAME" .. tostring(id)
+        return _G[key] or nil
+    end
 
     local lines = {}
-    table.insert(lines, string.format("Name: %s", name or "?"))
-    table.insert(lines, string.format("Item ID: %s", itemID or "?"))
-    table.insert(lines, string.format("Link: %s", link or "?"))
-    table.insert(lines, string.format("Quality: %s", qualityText(quality)))
-    table.insert(lines, string.format("Item Level: %s", effIlvl or "?"))
-    table.insert(lines, string.format("Required Level: %s", reqLevel or "?"))
-    table.insert(lines, string.format("Type: %s", type or "?"))
-    table.insert(lines, string.format("Subtype: %s", subType or "?"))
-    table.insert(lines, string.format("ClassID/SubClassID: %s/%s", tostring(classID or "?"), tostring(subClassID or "?")))
-    table.insert(lines, string.format("Stack Size: %s", stack or "?"))
-    table.insert(lines, string.format("Equip Slot: %s", equipLoc or ""))
-    table.insert(lines, string.format("Icon: %s |T%s:16:16:0:0|t", tostring(icon or ""), tostring(icon or "")))
-    if sellPrice and sellPrice > 0 then
-        table.insert(lines, string.format("Sell Price: %s", GetCoinTextureString and GetCoinTextureString(sellPrice) or tostring(sellPrice)))
+    local function addRaw(key, val)
+        if val ~= nil then table.insert(lines, string.format("%s: %s", key, tostring(val))) end
     end
-    if isCraftingReagent ~= nil then table.insert(lines, string.format("Crafting Reagent: %s", tostring(isCraftingReagent))) end
+    local function addFriendly(key, friendly, raw)
+        if friendly ~= nil then table.insert(lines, string.format("%s: %s", key, tostring(friendly))) end
+        if raw ~= nil then table.insert(lines, string.format("%s (raw): %s", key, tostring(raw))) end
+    end
 
-    if stats then
-        table.insert(lines, " ")
-        table.insert(lines, "Stats:")
-        for k, v in pairs(stats) do
-            local nice = _G[k] or k
-            table.insert(lines, string.format(" - %s: %s", nice, tostring(v)))
+    -- Name/link
+    addRaw("itemName", itemName)
+    addRaw("itemLink", itemLink2)
+
+    -- Quality combined
+    if itemQuality ~= nil then addFriendly("itemQuality", qualityText(itemQuality), itemQuality) end
+
+    -- Levels
+    addRaw("itemLevel", itemLevel)
+    addRaw("itemMinLevel", itemMinLevel)
+
+    -- Types
+    addRaw("itemType", itemType)
+    addRaw("itemSubType", itemSubType)
+    addRaw("itemStackCount", itemStackCount)
+
+    -- Equip location: show localized name if possible
+    if itemEquipLoc ~= nil then
+        local locName = _G[itemEquipLoc]
+        if locName and locName ~= "" then
+            addFriendly("itemEquipLoc", string.format("%s (%s)", itemEquipLoc, locName), itemEquipLoc)
+        else
+            addRaw("itemEquipLoc", itemEquipLoc)
         end
     end
 
-    if addon.Query.ui and addon.Query.ui.inspectorOutput then
-        addon.Query.ui.inspectorOutput:SetText(table.concat(lines, "\n"))
-    end
+    -- Texture fileID
+    addRaw("itemTexture", itemTexture)
+
+    -- Sell price: raw and gold/silver/copper
+    if sellPrice ~= nil then addFriendly("sellPrice", coinText(sellPrice), sellPrice) end
+
+    -- Class/subclass raw (names already shown by type/subtype)
+    addRaw("classID", classID)
+    addRaw("subclassID", subclassID)
+
+    -- Bind type friendly + raw
+    if bindType ~= nil then addFriendly("bindType", BIND_NAMES[bindType] or tostring(bindType), bindType) end
+
+    -- Expansion friendly + raw
+    if expansionID ~= nil then addFriendly("expansionID", expansionName(expansionID) or tostring(expansionID), expansionID) end
+
+    -- Set / crafting reagent
+    addRaw("setID", setID)
+    if isCraftingReagent ~= nil then addRaw("isCraftingReagent", isCraftingReagent) end
+
+    if addon.Query.ui and addon.Query.ui.inspectorOutput then addon.Query.ui.inspectorOutput:SetText(table.concat(lines, "\n")) end
 end
 
 local function formatDrinkString(name, itemID, minLevel, mana, isBuffFood)
@@ -283,28 +249,29 @@ local function updateItemInfo(itemLink)
 	return nil
 end
 
-local loadedResults = {}
+-- Output helper + input processing (AceGUI path)
+local function UI_SetOutput(text)
+    if addon.Query.ui and addon.Query.ui.output then addon.Query.ui.output:SetText(text or "") end
+end
 
-frame.editEditBox:SetScript("OnTextChanged", function(self)
-	local itemLinks = { strsplit(" ", self:GetText()) }
-	local results = {}
-
-	for _, itemLink in ipairs(itemLinks) do
-		local itemID = itemLink:match("item:(%d+)")
-		if nil ~= itemID then
-			local result = nil
-			if nil == loadedResults[itemID] then
-				result = updateItemInfo(itemLink)
-				loadedResults[itemID] = result
-			else
-				result = loadedResults[itemID]
-			end
-			if result then table.insert(results, result) end
-		end
-	end
-
+local function processInputText(text)
+    local itemLinks = { strsplit(" ", text or "") }
+    local results = {}
+    for _, itemLink in ipairs(itemLinks) do
+        local itemID = itemLink:match("item:(%d+)")
+        if itemID then
+            local result = loadedResults[itemID]
+            if result == nil then
+                result = updateItemInfo(itemLink)
+                loadedResults[itemID] = result
+            end
+            if result then table.insert(results, result) end
+        end
+    end
     UI_SetOutput(table.concat(results, ",\n        "))
-end)
+end
+
+-- (legacy editbox removed; AceGUI input handles text changes)
 
 
 local function addToSearchResult(itemID)
@@ -346,10 +313,6 @@ local function handleItemLink(text)
             if addon.Query.ui and addon.Query.ui.input then
                 local currentText = addon.Query.ui.input:GetText() or ""
                 addon.Query.ui.input:SetText((currentText ~= "" and (currentText .. " ") or "") .. text)
-            elseif frame.editEditBox then
-                local currentText = frame.editEditBox:GetText()
-                frame.editEditBox:SetText(currentText .. " " .. text)
-                frame.editEditBox:GetScript("OnTextChanged")(frame.editEditBox)
             end
         else
             print("Item is already in the list.")
@@ -372,7 +335,7 @@ local function BuildAceWindow()
 
     local tree = AceGUI:Create("TreeGroup")
     addon.Query.ui.tree = tree
-    tree:SetTree({ { value = "generator", text = "Generator" }, { value = "inspector", text = "Inspector" } })
+    tree:SetTree({ { value = "generator", text = "Generator" }, { value = "inspector", text = "GetItemInfo" } })
     tree:SetLayout("Fill")
     win:AddChild(tree)
 
@@ -413,9 +376,9 @@ local function BuildAceWindow()
         addon.Query.ui.activeGroup = "inspector"
         container:ReleaseChildren()
         local outer = AceGUI:Create("SimpleGroup"); outer:SetFullWidth(true); outer:SetFullHeight(true); outer:SetLayout("List"); container:AddChild(outer)
-        local tip = AceGUI:Create("Label"); tip:SetText("Shift+Click an item link or press the button below to load from cursor."); tip:SetFullWidth(true); outer:AddChild(tip)
+        local tip = AceGUI:Create("Label"); tip:SetText("Shift+Click an item link or use the cursor button to inspect via GetItemInfo()."); tip:SetFullWidth(true); outer:AddChild(tip)
         local pick = AceGUI:Create("Button"); pick:SetText("Load item from cursor"); pick:SetWidth(200); pick:SetCallback("OnClick", function() local t,_,link = GetCursorInfo(); if t=="item" and link then addon.Query.showItem(link); ClearCursor() end end); outer:AddChild(pick)
-        local output = AceGUI:Create("MultiLineEditBox"); output:SetLabel("Item details"); output:SetFullWidth(true); output:SetNumLines(18); output:DisableButton(true); outer:AddChild(output); addon.Query.ui.inspectorOutput = output
+        local output = AceGUI:Create("MultiLineEditBox"); output:SetLabel("GetItemInfo"); output:SetFullWidth(true); output:SetNumLines(18); output:DisableButton(true); outer:AddChild(output); addon.Query.ui.inspectorOutput = output
         local follow = AceGUI:Create("CheckBox"); follow:SetLabel("Enable follow-up calls (experimental)"); addon.functions.InitDBValue("queryFollowupEnabled", false); follow:SetValue(addon.db.queryFollowupEnabled); follow:SetCallback("OnValueChanged", function(_,_,v) addon.db.queryFollowupEnabled = v and true or false end); outer:AddChild(follow)
     end
 
@@ -502,12 +465,12 @@ local function onEvent(self, event, ...)
 	end
 end
 
-frame:RegisterEvent("ADDON_LOADED")
-frame:RegisterEvent("PLAYER_LOGIN")
-frame:RegisterEvent("ITEM_PUSH")
-frame:RegisterEvent("AUCTION_HOUSE_BROWSE_RESULTS_UPDATED")
-frame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
-frame:SetScript("OnEvent", onEvent)
+eventFrame:RegisterEvent("ADDON_LOADED")
+eventFrame:RegisterEvent("PLAYER_LOGIN")
+eventFrame:RegisterEvent("ITEM_PUSH")
+eventFrame:RegisterEvent("AUCTION_HOUSE_BROWSE_RESULTS_UPDATED")
+eventFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+eventFrame:SetScript("OnEvent", onEvent)
 
 -- Handling Shift+Click to add item link to the EditBox and clear previous item
 hooksecurefunc("ChatEdit_InsertLink", function(itemLink)
@@ -522,230 +485,5 @@ hooksecurefunc("ChatEdit_InsertLink", function(itemLink)
     end
 end)
 
--- Button to copy the output to the clipboard
--- legacy copy button hidden (AceGUI provides UI)
-do
-    local copyButton = CreateFrame("Button", nil, frame, "GameMenuButtonTemplate")
-    copyButton:Hide()
-    frame.copyButton = nil
-end
-
--- Button to scan auction house items
-local scanButton = CreateFrame("Button", nil, frame, "GameMenuButtonTemplate")
-scanButton:Hide()
-scanButton:SetScript("OnClick", function()
-	executeSearch = true
-	lastProcessedBrowseCount = 0
-	browseStallCount = 0
-	if AuctionHouseFrame and AuctionHouseFrame:IsShown() then
-		-- local function SearchAuctionHouseByMultipleItemIDs(itemIDs)
-		--     local itemKeys = {}
-
-		--     for _, itemID in ipairs(itemIDs) do
-		--         local itemKey = C_AuctionHouse.MakeItemKey(itemID)
-		--         if itemKey then
-		--             table.insert(itemKeys, itemKey)
-		--         else
-		--             print("Kein ItemKey für ItemID:", itemID)
-		--         end
-		--     end
-
-		--     if #itemKeys > 0 then
-		--         -- Sortieren nach Preis aufsteigend
-		--         local sorts =
-		--             {{sortOrder = 0, reverseSort = false} -- 0 ist der Index für Preis, "false" bedeutet aufsteigend
-		--             }
-
-		--         -- Suche nach allen ItemKeys gleichzeitig mit Sortierung
-		--         C_AuctionHouse.SearchForItemKeys(itemKeys, sorts)
-		--         print("Suche nach den ItemIDs:", table.concat(itemIDs, ", "))
-		--     else
-		--         print("Keine gültigen ItemKeys gefunden.")
-		--     end
-		-- end
-
-		-- -- Beispielaufruf mit einer Liste von ItemIDs
-		-- SearchAuctionHouseByMultipleItemIDs({221853, 221854, 221855, 221859, 221860, 221861, 221856, 221857, 221858})
-
-		-- Build query according to mode
-		local query
-		if currentMode == "potion" then
-			query = {
-				searchString = "",
-				sorts = { { sortOrder = Enum.AuctionHouseSortOrder.Name, reverseSort = true } },
-				filters = { Enum.AuctionHouseFilter.Potions },
-				itemClassFilters = { { classID = Enum.ItemClass.Consumable, subClassID = Enum.ItemConsumableSubclass.Potion } },
-			}
-		else
-			query = {
-				searchString = "",
-				sorts = { { sortOrder = Enum.AuctionHouseSortOrder.Name, reverseSort = true } },
-				itemClassFilters = { { classID = Enum.ItemClass.Consumable, subClassID = Enum.ItemConsumableSubclass.Fooddrink } },
-			}
-		end
-		-- Clear per-scan buffers
-		reSearchList = {}
-		resultsAHSearch = {}
-		addedResults = {}
-		C_AuctionHouse.SendBrowseQuery(query)
-	else
-		print("Auction House is not open.")
-	end
-end)
-
-frame.scanButton = scanButton
-
--- Left navigation tree (simple two entries)
-local function buildLeftTree()
-    if not AceGUI then return end
-    local tree = AceGUI:Create("TreeGroup")
-    tree.frame:SetParent(frame)
-    tree.frame:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -28)
-    tree.frame:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 8, 8)
-    tree:SetWidth(140)
-    tree:SetTree({ { value = "generator", text = "Generator" }, { value = "inspector", text = "Inspector" } })
-    tree:EnableButtonTooltips(false)
-    tree:SetCallback("OnGroupSelected", function(_, _, group)
-        currentGroup = group or "generator"
-        -- Toggle visibility of groups
-        local genVisible = (currentGroup == "generator")
-        modeLabel:SetShown(genVisible)
-        btnModeDrink:SetShown(genVisible)
-        btnModePotion:SetShown(genVisible)
-        btnModeAuto:SetShown(genVisible)
-        frame.editBox:SetShown(genVisible)
-        frame.outputBox:SetShown(genVisible)
-        if frame.copyButton then frame.copyButton:SetShown(genVisible) end
-        if frame.scanButton then frame.scanButton:SetShown(genVisible) end
-        if frame.clearButton then frame.clearButton:SetShown(genVisible) end
-        -- Inspector visibility
-        if frame.inspector then
-            frame.inspector.drop:SetShown(not genVisible)
-            frame.inspector.outputScroll:Show()
-            frame.inspector.outputScroll:SetShown(not genVisible)
-            frame.inspector.followup:SetShown(not genVisible)
-        end
-        -- Update scan button label based on mode
-        if genVisible then setMode(currentMode) end
-    end)
-    frame.leftTree = tree
-end
-
--- Clear button
-do
-    local clearButton = CreateFrame("Button", nil, frame, "GameMenuButtonTemplate")
-    clearButton:Hide()
-    frame.clearButton = nil
-end
-
--- Initialize mode label/button state
-setMode(currentMode)
-
--- Inspector UI (drop item and show details)
-local function createInspectorUI()
-    if frame.inspector then return end
-    frame.inspector = {}
-    local drop = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    drop:SetPoint("TOPLEFT", frame.content, "TOPLEFT", 0, 0)
-    drop:SetSize(200, 40)
-    drop:SetText("Drop item here / Shift+Click")
-    drop:RegisterForClicks("AnyUp")
-    drop:SetScript("OnClick", function()
-        -- Try to read from cursor (drag & drop)
-        local infoType, itemID, itemLink = GetCursorInfo()
-        if infoType == "item" and itemLink then
-            addon.Query.showItem(itemLink)
-            ClearCursor()
-        end
-    end)
-    drop:SetScript("OnReceiveDrag", function()
-        local infoType, itemID, itemLink = GetCursorInfo()
-        if infoType == "item" and itemLink then
-            addon.Query.showItem(itemLink)
-            ClearCursor()
-        end
-    end)
-    frame.inspector.drop = drop
-
-    local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scroll:ClearAllPoints()
-    scroll:SetPoint("TOPLEFT", drop, "BOTTOMLEFT", 0, -12)
-    scroll:SetPoint("BOTTOMRIGHT", frame.content, "BOTTOMRIGHT", 0, 0)
-    local edit = CreateFrame("EditBox", nil, scroll)
-    edit:SetSize(480, 280)
-    edit:SetMultiLine(true)
-    edit:SetAutoFocus(false)
-    edit:SetFontObject("ChatFontNormal")
-    scroll:SetScrollChild(edit)
-    frame.inspector.outputScroll = scroll
-    frame.inspector.outputEdit = edit
-
-    local follow = CreateFrame("CheckButton", nil, frame, "ChatConfigCheckButtonTemplate")
-    follow:SetPoint("BOTTOMLEFT", frame.content, "BOTTOMLEFT", 0, 0)
-    follow.Text:SetText("Enable follow-up calls (experimental)")
-    addon.functions.InitDBValue("queryFollowupEnabled", false)
-    follow:SetChecked(addon.db.queryFollowupEnabled)
-    follow:SetScript("OnClick", function(self)
-        addon.db.queryFollowupEnabled = self:GetChecked() and true or false
-    end)
-    frame.inspector.followup = follow
-
-    local function qualityText(q)
-        local n = tonumber(q) or 0
-        local names = {
-            [0] = "Poor", [1] = "Common", [2] = "Uncommon", [3] = "Rare", [4] = "Epic",
-            [5] = "Legendary", [6] = "Artifact", [7] = "Heirloom", [8] = "WoWToken",
-        }
-        return string.format("%s (%d)", names[n] or tostring(n), n)
-    end
-
-    function frame.inspector.showItem(itemLink)
-        local name, link, quality, ilvl, reqLevel, type, subType, stack, equipLoc, icon, sellPrice,
-            classID, subClassID, bindType, expacID, setID, isCraftingReagent = C_Item.GetItemInfo(itemLink)
-        local itemID = tonumber(itemLink:match("item:(%d+)"))
-        local effIlvl = (GetDetailedItemLevelInfo and select(1, GetDetailedItemLevelInfo(itemLink))) or ilvl
-        local stats = GetItemStats and GetItemStats(itemLink) or nil
-
-        local lines = {}
-        table.insert(lines, string.format("Name: %s", name or "?"))
-        table.insert(lines, string.format("Item ID: %s", itemID or "?"))
-        table.insert(lines, string.format("Link: %s", link or "?"))
-        table.insert(lines, string.format("Quality: %s", qualityText(quality)))
-        table.insert(lines, string.format("Item Level: %s", effIlvl or "?"))
-        table.insert(lines, string.format("Required Level: %s", reqLevel or "?"))
-        table.insert(lines, string.format("Type: %s", type or "?"))
-        table.insert(lines, string.format("Subtype: %s", subType or "?"))
-        table.insert(lines, string.format("ClassID/SubClassID: %s/%s", tostring(classID or "?"), tostring(subClassID or "?")))
-        table.insert(lines, string.format("Stack Size: %s", stack or "?"))
-        table.insert(lines, string.format("Equip Slot: %s", equipLoc or ""))
-        table.insert(lines, string.format("Icon: %s |T%s:16:16:0:0|t", tostring(icon or ""), tostring(icon or "")))
-        if sellPrice and sellPrice > 0 then
-            table.insert(lines, string.format("Sell Price: %s", GetCoinTextureString and GetCoinTextureString(sellPrice) or tostring(sellPrice)))
-        end
-        if isCraftingReagent ~= nil then table.insert(lines, string.format("Crafting Reagent: %s", tostring(isCraftingReagent))) end
-
-        if stats then
-            table.insert(lines, " ")
-            table.insert(lines, "Stats:")
-            for k, v in pairs(stats) do
-                local nice = _G[k] or k
-                table.insert(lines, string.format(" - %s: %s", nice, tostring(v)))
-            end
-        end
-
-        edit:SetText(table.concat(lines, "\n"))
-    end
-end
-
--- AceGUI window will be built on /rq; legacy UI not used
-
--- Hide inspector by default (shown when tree selects it)
-if frame.inspector then frame.inspector.drop:Hide(); frame.inspector.outputScroll:Hide(); frame.inspector.followup:Hide() end
-
--- Now that all controls exist, select default group
--- No legacy tree selection; AceGUI manages selection
-
--- Simple resize handle (bottom-right corner)
--- No resizer for legacy frame; AceGUI handles resizing of its own window
-
-addon.Query.frame = frame
+-- Legacy UI removed; AceGUI builds UI on demand via /rq
+addon.Query.frame = eventFrame
