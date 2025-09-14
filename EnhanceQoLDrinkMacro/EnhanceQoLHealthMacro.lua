@@ -27,6 +27,8 @@ addon.functions.InitDBValue("healthReset", "combat")
 addon.functions.InitDBValue("healthAllowOther", false)
 addon.functions.InitDBValue("healthReorderByCooldown", true)
 addon.functions.InitDBValue("healthUseRecuperate", false)
+-- Allow using combat potions (from EnhanceQoLDrinkMacro/Health.lua entries tagged with isCombatPotion)
+addon.functions.InitDBValue("healthUseCombatPotions", false)
 
 local function createMacroIfMissing()
 	if not addon.db.healthMacroEnabled then return end
@@ -77,21 +79,49 @@ local function isOffCooldown(item)
 end
 
 local function getBestAvailableByType(t)
-	local list = addon.Health.filteredHealth
-	if not list or #list == 0 then return nil end
-	for _, v in ipairs(list) do
-		if v.type == t and v.getCount() > 0 then return v end
-	end
-	return nil
+    local list = addon.Health.filteredHealth
+    if not list or #list == 0 then return nil end
+    for _, v in ipairs(list) do
+        if v.type == t and v.getCount() > 0 then return v end
+    end
+    return nil
+end
+
+-- Helpers to distinguish combat vs non-combat potions
+local function isCombatPotionItem(v)
+    local id = numericId(v)
+    if not id or not addon.Health or not addon.Health.healthList then return false end
+    for _, e in ipairs(addon.Health.healthList) do
+        if e.id == id then return e.isCombatPotion == true end
+    end
+    return false
+end
+
+local function getBestCombatPotion()
+    local list = addon.Health.filteredHealth
+    if not list or #list == 0 then return nil end
+    for _, v in ipairs(list) do
+        if v.type == "potion" and v.getCount() > 0 and isCombatPotionItem(v) then return v end
+    end
+    return nil
+end
+
+local function getBestNonCombatPotion()
+    local list = addon.Health.filteredHealth
+    if not list or #list == 0 then return nil end
+    for _, v in ipairs(list) do
+        if v.type == "potion" and v.getCount() > 0 and not isCombatPotionItem(v) then return v end
+    end
+    return nil
 end
 
 local function getBestAvailableAny()
-	local list = addon.Health.filteredHealth
-	if not list or #list == 0 then return nil end
-	for _, v in ipairs(list) do
-		if v.getCount() > 0 then return v end
-	end
-	return nil
+    local list = addon.Health.filteredHealth
+    if not list or #list == 0 then return nil end
+    for _, v in ipairs(list) do
+        if v.getCount() > 0 then return v end
+    end
+    return nil
 end
 
 local function buildResetToken()
@@ -106,63 +136,98 @@ local function buildMacro()
 	local useBoth = addon.db.healthUseBoth
 	local preferStone = addon.db.healthPreferStoneFirst
 
-	local stone = getBestAvailableByType("stone")
-	local potion = getBestAvailableByType("potion")
+    local stone = getBestAvailableByType("stone")
+    local nonCombatPotion = getBestNonCombatPotion()
+    local combatPotion = addon.db.healthUseCombatPotions and getBestCombatPotion() or nil
 
-	-- optionally include other healing items
-	local other
-	if addon.db.healthAllowOther then other = getBestAvailableByType("other") end
+    -- optionally include other healing items
+    local other
+    if addon.db.healthAllowOther then other = getBestAvailableByType("other") end
 
-	local first, second
+    local first, second
 
-	if useBoth then
-		-- fallback: if one is missing, try other (avoid duplicates)
-		if not stone and addon.db.healthAllowOther then stone = other end
-		if not potion and addon.db.healthAllowOther then
-			local sid = numericId(stone)
-			local oid = numericId(other)
-			if not sid or not oid or sid ~= oid then potion = other end
-		end
+    if addon.db.healthUseCombatPotions then
+        -- When combat potions are enabled, always try to pair one normal heal (stone or non-combat potion)
+        -- with one combat potion, if both are available.
+        local normal
+        -- Choose normal according to preference and availability
+        if preferStone and stone then
+            normal = stone
+        else
+            -- pick the stronger of stone vs nonCombatPotion if preference not forcing stone
+            if stone and nonCombatPotion then
+                if (stone.heal or 0) >= (nonCombatPotion.heal or 0) then normal = stone else normal = nonCombatPotion end
+            else
+                normal = stone or nonCombatPotion
+            end
+        end
 
-		-- decide order based on availability, cooldown, then healing amount unless explicitly preferring stone
-		if stone and potion then
-			local stoneReady = isOffCooldown(stone)
-			local potionReady = isOffCooldown(potion)
-			-- 1) cooldown-based reorder if enabled and readiness differs
-			if addon.db.healthReorderByCooldown and (stoneReady ~= potionReady) then
-				if stoneReady then
-					first, second = stone, potion
-				else
-					first, second = potion, stone
-				end
-			else
-				-- 2) explicit preference
-				if preferStone then
-					first, second = stone, potion
-				else
-					-- 3) highest healing first (default behavior)
-					local hS = stone.heal or 0
-					local hP = potion.heal or 0
-					if hS >= hP then
-						first, second = stone, potion
-					else
-						first, second = potion, stone
-					end
-				end
-			end
-		else
-			-- only one available; avoid duplicate 'other'
-			first = stone or potion or other
-		end
-	else
-		-- pick the single best by heal value among available
-		local candidates = {}
-		if stone then table.insert(candidates, stone) end
-		if potion then table.insert(candidates, potion) end
-		if addon.db.healthAllowOther and other then table.insert(candidates, other) end
-		table.sort(candidates, function(a, b) return (a.heal or 0) > (b.heal or 0) end)
-		first = candidates[1] or getBestAvailableAny()
-	end
+        -- Fallback to 'other' if configured and no normal found
+        if not normal and addon.db.healthAllowOther then normal = other end
+
+        if normal and combatPotion then
+            local nReady = isOffCooldown(normal)
+            local cReady = isOffCooldown(combatPotion)
+            if addon.db.healthReorderByCooldown and (nReady ~= cReady) then
+                if nReady then first, second = normal, combatPotion else first, second = combatPotion, normal end
+            else
+                -- If preference is stone-first and our normal is stone, keep it first; otherwise default to normal first
+                if preferStone and normal == stone then
+                    first, second = normal, combatPotion
+                else
+                    -- default order: higher heal first
+                    if (normal.heal or 0) >= (combatPotion.heal or 0) then
+                        first, second = normal, combatPotion
+                    else
+                        first, second = combatPotion, normal
+                    end
+                end
+            end
+        else
+            -- Only one of them available
+            first = normal or combatPotion or other
+        end
+    else
+        -- Original behavior when combat potions are not enabled
+        local potion = nonCombatPotion -- only non-combat potions
+
+        if useBoth then
+            -- fallback: if one is missing, try other (avoid duplicates)
+            if not stone and addon.db.healthAllowOther then stone = other end
+            if not potion and addon.db.healthAllowOther then
+                local sid = numericId(stone)
+                local oid = numericId(other)
+                if not sid or not oid or sid ~= oid then potion = other end
+            end
+
+            -- decide order based on availability, cooldown, then healing amount unless explicitly preferring stone
+            if stone and potion then
+                local stoneReady = isOffCooldown(stone)
+                local potionReady = isOffCooldown(potion)
+                if addon.db.healthReorderByCooldown and (stoneReady ~= potionReady) then
+                    if stoneReady then first, second = stone, potion else first, second = potion, stone end
+                else
+                    if preferStone then
+                        first, second = stone, potion
+                    else
+                        local hS = stone.heal or 0
+                        local hP = potion.heal or 0
+                        if hS >= hP then first, second = stone, potion else first, second = potion, stone end
+                    end
+                end
+            else
+                first = stone or potion or other
+            end
+        else
+            -- pick the single best by heal value among available
+            local candidates = {}
+            if stone then table.insert(candidates, stone) end
+            if potion then table.insert(candidates, potion) end
+            if addon.db.healthAllowOther and other then table.insert(candidates, other) end
+            table.sort(candidates, function(a, b) return (a.heal or 0) > (b.heal or 0) end)
+            first = candidates[1] or getBestAvailableAny()
+        end
+    end
 
 	local resetType = buildResetToken()
 
@@ -322,6 +387,17 @@ function addon.Health.functions.addHealthFrame(container)
 		addon.Health.functions.updateHealthMacro(false)
 	end)
 	group:AddChild(cbRecup)
+
+	-- Allow using combat-only healing potions (from Health.lua entries flagged isCombatPotion)
+	local cbCombatPot = addon.functions.createCheckboxAce(
+		"Use Combat potions for health macro",
+		addon.db["healthUseCombatPotions"],
+		function(_, _, value)
+			addon.db["healthUseCombatPotions"] = value
+			addon.Health.functions.updateHealthMacro(false)
+		end
+	)
+	group:AddChild(cbCombatPot)
 
 	if addon.db["healthUseBoth"] then
 		local cbPrefer = addon.functions.createCheckboxAce(L["Prefer Healthstone first"], addon.db["healthPreferStoneFirst"], function(_, _, value)

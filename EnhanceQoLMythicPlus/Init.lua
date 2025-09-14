@@ -533,7 +533,7 @@ addon.MythicPlus.variables.portalCompendium = {
 			[410078] = { text = "NL", cId = { [206] = true } },
 			[373262] = { text = "KARA", cId = { [227] = true, [234] = true } },
 			[250796] = { text = "ENGI", isToy = true, toyID = 151652, isEngineering = true },
-			[222695] = { text = "HS", isToy = true, toyID = 140192, isHearthstone = true, icon = 1444943 },
+			[222695] = { text = "DALA", isToy = true, toyID = 140192, isHearthstone = true, icon = 1444943 },
 			-- Dalaran (Broken Isles, Legion)
 			[224869] = { text = "DalB", isClassTP = "MAGE" },
 			[224871] = { text = "DalB", isMagePortal = true },
@@ -623,7 +623,7 @@ addon.MythicPlus.variables.portalCompendium = {
 		headline = EXPANSION_NAME2,
 		spells = {
 			[67833] = { text = "ENGI", isToy = true, toyID = 48933, isEngineering = true },
-			[73324] = { text = "HS", isItem = true, itemID = 52251, isHearthstone = true, icon = 133308 },
+			[73324] = { text = "DALA", isItem = true, itemID = 52251, isHearthstone = true, icon = 133308 },
 			-- Dalaran (Northrend, WotLK)
 			[53140] = { text = "DalN", isClassTP = "MAGE" },
 			[53142] = { text = "DalN", isMagePortal = true },

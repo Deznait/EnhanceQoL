@@ -34,20 +34,23 @@
   - Atiesh, Greatstaff of the Guardian
   - The Brassiest Knuckle
 
-- **Merchant Frame:** Option to expand the Merchant frame size (20 items per page)
+- **Merchant Frame:** Option to expand the merchant frame (20 items per page)
 
 - **Tooltip (Mythic+):** Option to choose which score details to show on units  
   _(overall score, best dungeon, season overview)_
 
-- **Teleport Compendium UI:** Modern world-map integration with a native-feeling UI
+- **Teleport Compendium UI:** Modern world-map integration with a native-feeling UI  
   _(seamless; looks and behaves like a Blizzard panel)_
 
-- **Item level upgrades:** Option to show a small arrow on items, that are better than your currently equipped items
-  - On flyouts it compares the actual item with the inventory ones not just your slot (trinket1/2 if one is better, it ignores upgrades on those)
+- **Item upgrade arrows:** Option to show a small arrow on bag items that are upgrades over your equipped gear
+
+  - On flyouts, the comparison uses the **actual items** in your inventory (e.g., evaluates both trinket slots), not just the equipped slot
+
+- **Health Macro:** Option to use **combat potions** in combat
 
 ### 🐛 Fixed
 
-- _Invigorating Healing Potion_ had the wrong health regeneration for **Healthmacro**
+- **Health Macro:** _Invigorating Healing Potion_ used the wrong healing amount
 
 ---
 
