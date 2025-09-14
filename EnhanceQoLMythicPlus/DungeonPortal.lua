@@ -563,7 +563,18 @@ function addon.MythicPlus.functions.BuildTeleportCompendiumSections()
 				if data.isGoblin then specOk = specOk and hasGoblin end
 
 				-- Handle multiple itemIDs by splitting into separate entries
+				-- If a class-specific mapping exists, only include the item for the player's class
 				if data.isItem and type(data.itemID) == "table" then
+					local allowedIDs = data.itemID
+					if data.classItemID and addon.variables and addon.variables.unitClass then
+						local classToken = addon.variables.unitClass
+						local classSpecific = data.classItemID[classToken]
+						if classSpecific then
+							allowedIDs = { classSpecific }
+						else
+							allowedIDs = {} -- this class cannot use any of these variants
+						end
+					end
 					local baseShow = specOk
 						and (not data.faction or data.faction == faction)
 						and (not data.map or ((type(data.map) == "number" and data.map == aMapID) or (type(data.map) == "table" and data.map[aMapID])))
@@ -577,7 +588,7 @@ function addon.MythicPlus.functions.BuildTeleportCompendiumSections()
 						and ((addon.db["portalShowMagePortal"] and addon.variables.unitClass == "MAGE") or not data.isMagePortal)
 						and (addon.db["portalShowDungeonTeleports"] or not data.cId)
 
-					for _, iid in ipairs(data.itemID) do
+					for _, iid in ipairs(allowedIDs) do
 						local knownX = C_Item.GetItemCount(iid) > 0
 						local showX = baseShow and (not addon.db["portalHideMissing"] or (addon.db["portalHideMissing"] and knownX))
 						if not showX and addon.db.teleportFavoritesIgnoreFilters and favorites[spellID] then
@@ -743,7 +754,18 @@ local function CreatePortalCompendium(frame, compendium)
 				if data.isGoblin then specOk = specOk and hasGoblin end
 
 				-- Special handling: if an entry has multiple itemIDs, create one button per item
+				-- If a class-specific mapping exists, only include the item for the player's class
 				if data.isItem and type(data.itemID) == "table" then
+					local allowedIDs = data.itemID
+					if data.classItemID and addon.variables and addon.variables.unitClass then
+						local classToken = addon.variables.unitClass
+						local classSpecific = data.classItemID[classToken]
+						if classSpecific then
+							allowedIDs = { classSpecific }
+						else
+							allowedIDs = {} -- this class cannot use any of these variants
+						end
+					end
 					local baseShow = specOk
 						and (not data.faction or data.faction == faction)
 						and (not data.map or ((type(data.map) == "number" and data.map == aMapID) or (type(data.map) == "table" and data.map[aMapID])))
@@ -757,7 +779,7 @@ local function CreatePortalCompendium(frame, compendium)
 						and ((addon.db["portalShowMagePortal"] and addon.variables.unitClass == "MAGE") or not data.isMagePortal)
 						and (addon.db["portalShowDungeonTeleports"] or not data.cId)
 
-					for _, iid in ipairs(data.itemID) do
+					for _, iid in ipairs(allowedIDs) do
 						local knownX = GetItemCount(iid) > 0
 						local showX = baseShow and (not addon.db["portalHideMissing"] or (addon.db["portalHideMissing"] and knownX))
 						if not showX and addon.db.teleportFavoritesIgnoreFilters and favorites[spellID] then

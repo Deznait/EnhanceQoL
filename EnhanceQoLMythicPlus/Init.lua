@@ -559,7 +559,7 @@ addon.MythicPlus.variables.portalCompendium = {
 			[159902] = { text = "UBRS", cId = { [167] = true } },
 			[163830] = { text = "ENGI", isToy = true, toyID = 112059, isEngineering = true },
 			[171253] = { text = "GARR", isToy = true, toyID = 110560, isHearthstone = true },
-			[189838] = { text = "GARR", isItem = true, itemID = 128353, isHearthstone = true },
+			[189838] = { text = "GARR", isItem = true, itemID = 128353, icon = 134234, isHearthstone = true },
 			[132621] = { text = "VALE", isClassTP = "MAGE", faction = FACTION_ALLIANCE },
 			[132620] = { text = "VALE", isMagePortal = true, faction = FACTION_ALLIANCE },
 			[132627] = { text = "VALE", isClassTP = "MAGE", faction = FACTION_HORDE },
@@ -614,10 +614,10 @@ addon.MythicPlus.variables.portalCompendium = {
 			[80256] = { text = "DH", isItem = true, itemID = 58487, isHearthstone = true, icon = 463898 },
 			[59317] = { text = "VC", isToy = true, toyID = 43824, isHearthstone = true, icon = 133743, map = 125 },
 
-			[54406] = { text = "HS", isItem = true, itemID = { 40585, 48957, 45691, 51557 }, isHearthstone = true, icon = 133415, equipSlot = 11 },
+			[54406] = { text = "DALA", isItem = true, itemID = { 40585, 48957, 45691, 51557 }, isHearthstone = true, icon = 133415, equipSlot = 11 },
 
-			[89597] = { text = "HS", isItem = true, itemID = 63379, isHearthstone = true, icon = 456571, faction = FACTION_HORDE, equipSlot = 19 },
-			[89598] = { text = "HS", isItem = true, itemID = 63378, isHearthstone = true, icon = 456564, faction = FACTION_ALLIANCE, equipSlot = 19 },
+			[89597] = { text = "HS", isItem = true, itemID = 63379, isHearthstone = true, icon = 456571, faction = FACTION_ALLIANCE, equipSlot = 19 },
+			[89598] = { text = "HS", isItem = true, itemID = 63378, isHearthstone = true, icon = 456564, faction = FACTION_HORDE, equipSlot = 19 },
 		},
 	},
 	[40] = {
@@ -648,8 +648,17 @@ addon.MythicPlus.variables.portalCompendium = {
 			[36890] = { text = "ENGI", isToy = true, toyID = 30542, isEngineering = true, isGoblin = true },
 
 			[41234] = { text = "HS", isItem = true, itemID = 32757, isHearthstone = true, icon = 133279, equipSlot = 2 },
-			[28148] = { text = "KARA", isItem = true, itemID = { 22589, 22632, 22630, 22631 }, isHearthstone = true, icon = 133279, equipSlot = 16 },
-			[39937] = { text = "KARA", isItem = true, itemID = 28585, isHearthstone = true, icon = 135226, equipSlot = 8 },
+			-- Atiesh variants are class-specific: map IDs by class so we can pick the right one
+			[28148] = {
+				text = "KARA",
+				isItem = true,
+				itemID = { 22589, 22632, 22630, 22631 },
+				classItemID = { MAGE = 22589, DRUID = 22632, WARLOCK = 22630, PRIEST = 22631 },
+				isHearthstone = true,
+				icon = 135226,
+				equipSlot = 16,
+			},
+			[39937] = { text = "KARA", isItem = true, itemID = 28585, isHearthstone = true, icon = 132566, equipSlot = 8 },
 		},
 	},
 	[20] = {
@@ -683,7 +692,7 @@ addon.MythicPlus.variables.portalCompendium = {
 			[1221357] = { text = "OG", isItem = true, itemID = 63207, isHearthstone = true, icon = 461814, equipSlot = 15, faction = FACTION_HORDE },
 
 			[49844] = { text = "HS", isItem = true, itemID = 37863, isHearthstone = true, icon = 133015 }, -- Grim Guzzler
-			[71436] = { text = "HS", isItem = true, itemID = 50287, isHearthstone = true, icon = 133015, equipSlot = 8 }, -- Boots of the Bay
+			[71436] = { text = "HS", isItem = true, itemID = 50287, isHearthstone = true, icon = 132578, equipSlot = 8 }, -- Boots of the Bay
 
 			[139437] = { text = "BP", isItem = true, itemID = 95051, isHearthstone = true, icon = 133345, faction = FACTION_ALLIANCE, equipSlot = 11 },
 			[139432] = { text = "BA", isItem = true, itemID = 95050, isHearthstone = true, icon = 133345, faction = FACTION_HORDE, equipSlot = 11 },
