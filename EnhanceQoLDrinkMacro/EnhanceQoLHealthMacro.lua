@@ -19,6 +19,8 @@ local CreateMacro = CreateMacro
 
 local healthMacroName = "EnhanceQoLHealthMacro"
 
+-- TODO completely remove healthAllowOther
+-- TODO always reorder by cooldown and remove the setting (more convinient)
 -- DB defaults
 addon.functions.InitDBValue("healthMacroEnabled", false)
 addon.functions.InitDBValue("healthUseBoth", false)

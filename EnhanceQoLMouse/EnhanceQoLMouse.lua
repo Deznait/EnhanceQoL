@@ -394,6 +394,7 @@ local function addGeneralFrame(container)
 	end
 end
 
+-- TODO Remove the general child and pack all into the main tree "mouse"
 addon.variables.statusTable.groups["mouse"] = true
 addon.functions.addToTree(nil, {
 	value = "mouse",

@@ -309,6 +309,7 @@ local function addGeneralFrame(container)
 	scroll:DoLayout()
 end
 
+-- TODO remove the general subtree and pack all to the rootnode so we have less menues to walk
 function addon.CombatMeter.functions.treeCallback(container, group)
 	container:ReleaseChildren()
 	if group == "combatmeter\001general" then addGeneralFrame(container) end

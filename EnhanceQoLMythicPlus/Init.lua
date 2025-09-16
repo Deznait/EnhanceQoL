@@ -6,6 +6,7 @@ else
 	error(parentAddonName .. " is not loaded")
 end
 
+-- TODO remove the option for "NewUI" and make it default, when people enable Keystone helper, remove all old code referencing the "non new"
 -- PullTimer
 addon.functions.InitDBValue("enableKeystoneHelper", true)
 addon.functions.InitDBValue("enableKeystoneHelperNewUI", true)
@@ -47,6 +48,7 @@ addon.functions.InitDBValue("groupfinderSkipRoleSelect", false)
 addon.functions.InitDBValue("groupfinderSkipRoleSelectOption", 1)
 addon.functions.InitDBValue("groupfinderShowDungeonScoreFrame", false)
 
+-- TODO turn ignoreMythic, heroic, normal and timewalking into a dropdown so we safe room and can easily extent it.
 -- Misc
 addon.functions.InitDBValue("autoMarkTankInDungeon", false)
 addon.functions.InitDBValue("autoMarkTankInDungeonMarker", 6)

@@ -136,7 +136,6 @@ end
 
 local function createBRFrame()
 	removeBRFrame()
-	-- if not addon.db["mythicPlusBRTrackerEnabled"] then return end
 	brButton = CreateFrame("Button", nil, UIParent)
 	brButton:SetSize(defaultButtonSize, defaultButtonSize)
 	brButton:SetPoint("TOP", UIParent, "TOP", 0, -100)

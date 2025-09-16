@@ -585,6 +585,7 @@ addon.functions.addToTree(nil, {
 	},
 }, true)
 
+-- TODO pack addGeneralFrame directory into the root node, so we don't need another sub general node
 function addon.Vendor.functions.treeCallback(container, group)
 	lastEbox = nil
 	container:ReleaseChildren() -- Entfernt vorherige Inhalte
