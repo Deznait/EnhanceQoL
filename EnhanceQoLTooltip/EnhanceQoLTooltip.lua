@@ -946,6 +946,7 @@ function addon.Tooltip.functions.treeCallback(container, group)
 	container:ReleaseChildren() -- Entfernt vorherige Inhalte
 	-- Root-Ansicht von Tooltip zeigt alle außer Unit zusammen
 	if group == "tooltip" then
+		-- TODO we have to check after each ReleaseContainer + readd them, that we update the layout, because some field overlap when we remove and don't readd or removed and readd later, so we have overlaps
 		local scroll = addon.functions.createContainer("ScrollFrame", "Flow")
 		container:AddChild(scroll)
 		local inner = addon.functions.createContainer("SimpleGroup", "Flow")

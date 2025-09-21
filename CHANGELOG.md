@@ -1,6 +1,6 @@
 # Changelog
 
-## [4.17.0] – 2025-09-13
+## [5.0.0] – 2025-09-30
 
 ### ✨ Added
 
@@ -49,6 +49,10 @@
   - On flyouts, the comparison uses the **actual items** in your inventory (e.g., evaluates both trinket slots), not just the equipped slot
 
 - **Health Macro:** Option to use **combat potions** in combat
+
+### 🔄 Changed
+
+- **Declutter:** Removed some old and obsolete options, changed the position and category of some options and made it more "übersichtlich?"
 
 ### 🐛 Fixed
 

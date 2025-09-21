@@ -20,9 +20,6 @@ addon.variables.statusTable.groups["combatmeter"] = true
 addon.functions.addToTree(nil, {
 	value = "combatmeter",
 	text = L["Combat Meter"],
-	children = {
-		{ value = "general", text = GENERAL },
-	},
 })
 
 local function addGeneralFrame(container)
@@ -311,7 +308,7 @@ end
 
 function addon.CombatMeter.functions.treeCallback(container, group)
 	container:ReleaseChildren()
-	if group == "combatmeter\001general" then addGeneralFrame(container) end
+	if group == "combatmeter" then addGeneralFrame(container) end
 end
 
 addon.functions.InitDBValue("combatMeterEnabled", false)

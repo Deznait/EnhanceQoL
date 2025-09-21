@@ -25,6 +25,7 @@ addon.functions.addToTree(nil, {
 	},
 })
 
+-- TODO add an information dialog to the root node with informations and a discord link for "minimal Auras in M+ etc."
 function addon.Aura.functions.treeCallback(container, group)
 	container:ReleaseChildren()
 	if group == "aura\001resourcebar" then

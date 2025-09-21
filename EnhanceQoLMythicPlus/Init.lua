@@ -6,6 +6,7 @@ else
 	error(parentAddonName .. " is not loaded")
 end
 
+-- TODO remove the option for "NewUI" and make it default, when people enable Keystone helper, remove all old code referencing the "non new"
 -- PullTimer
 addon.functions.InitDBValue("enableKeystoneHelper", true)
 addon.functions.InitDBValue("enableKeystoneHelperNewUI", true)
@@ -47,6 +48,7 @@ addon.functions.InitDBValue("groupfinderSkipRoleSelect", false)
 addon.functions.InitDBValue("groupfinderSkipRoleSelectOption", 1)
 addon.functions.InitDBValue("groupfinderShowDungeonScoreFrame", false)
 
+-- TODO turn ignoreMythic, heroic, normal and timewalking into a dropdown so we safe room and can easily extent it.
 -- Misc
 addon.functions.InitDBValue("autoMarkTankInDungeon", false)
 addon.functions.InitDBValue("autoMarkTankInDungeonMarker", 6)
@@ -618,10 +620,10 @@ addon.MythicPlus.variables.portalCompendium = {
 			[424142] = { text = "TOTT", cId = { [456] = true } },
 			[410080] = { text = "VP", cId = { [438] = true } },
 			-- Tol Barad (Cata)
-			[88344] = { text = "TolB", isClassTP = "MAGE", faction = FACTION_ALLIANCE },
-			[88345] = { text = "TolB", isMagePortal = true, faction = FACTION_ALLIANCE },
-			[88346] = { text = "TolB", isClassTP = "MAGE", faction = FACTION_HORDE },
-			[88347] = { text = "TolB", isMagePortal = true, faction = FACTION_HORDE },
+			[88342] = { text = "TolB", isClassTP = "MAGE", faction = FACTION_ALLIANCE },
+			[88346] = { text = "TolB", isMagePortal = true, faction = FACTION_ALLIANCE },
+			[88344] = { text = "TolB", isClassTP = "MAGE", faction = FACTION_HORDE },
+			[88345] = { text = "TolB", isMagePortal = true, faction = FACTION_HORDE },
 
 			[80256] = { text = "DH", isItem = true, itemID = 58487, isHearthstone = true, icon = 463898 },
 			[59317] = { text = "VC", isToy = true, toyID = 43824, isHearthstone = true, icon = 133743, map = 125 },

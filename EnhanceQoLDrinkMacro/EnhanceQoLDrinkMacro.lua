@@ -113,6 +113,9 @@ else
 	addon.db["minManaFoodValue"] = initialValue
 end
 
+-- TODO combine allowRecuoerate with useRecuperateWithDrinks --> User don't need to "allow" it doubled
+-- TODO automatically ignore Gems for earthen, there don't need to be a setting for that, just make a small information, that gems will be ignored automatically
+-- TODO always ignore buff food, just "disable" this setting for now, when any person says he needs it, we will be enabling it again, but for now less clutter
 addon.functions.InitDBValue("preferMageFood", true)
 addon.functions.InitDBValue("ignoreBuffFood", true)
 addon.functions.InitDBValue("ignoreGemsEarthen", true)
@@ -318,6 +321,7 @@ local function addDrinkFrame(container)
 	groupCore:AddChild(resetReminderPos)
 end
 
+-- TODO put all the options from HealthMacro into the same menu of DrinkMacro and remove the subtree node "health"
 function addon.Drinks.functions.treeCallback(container, group)
 	container:ReleaseChildren() -- Entfernt vorherige Inhalte
 	-- Prüfen, welche Gruppe ausgewählt wurde

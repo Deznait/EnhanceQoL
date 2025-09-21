@@ -802,6 +802,7 @@ local function addTeleportFrame(container)
 	wrapper:DoLayout()
 end
 
+-- TODO after the other TODOs where we change some frames and pack them into this, go and optimize the "ReleaseChildren" and addAutoMarkFrame so we have less frame garbage collecting
 local function addAutoMarkFrame(container)
 	local scroll = addon.functions.createContainer("ScrollFrame", "Flow")
 	scroll:SetFullWidth(true)
@@ -1282,6 +1283,7 @@ function addon.MythicPlus.functions.treeCallback(container, group)
 		addKeystoneFrame(container)
 	elseif group == "mythicplus\001potiontracker" then
 		addPotionTrackerFrame(container)
+		-- TODO rename automark to Dungeon and put brtracker into that frame, each in his own group in the container
 	elseif group == "mythicplus\001automark" then
 		addAutoMarkFrame(container)
 	elseif group == "mythicplus\001teleports" then
@@ -1292,8 +1294,10 @@ function addon.MythicPlus.functions.treeCallback(container, group)
 		addRatingFrame(container)
 	elseif group == "mythicplus\001talents" then
 		addTalentFrame(container)
+		-- TODO pack groupfilter also to the new "Dungeon" container to have less clutter
 	elseif group == "mythicplus\001groupfilter" then
 		addGroupFilterFrame(container)
+		-- TODO pack objectivetracker also to the new "Dungeon" container
 	elseif group == "mythicplus\001objectivetracker" then
 		addObjectiveTrackerFrame(container)
 	end
