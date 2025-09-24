@@ -1395,45 +1395,68 @@ local function addChatFrame(container)
 end
 
 local function addMinimapFrame(container)
-	local data = {
-		{
-			parent = "",
-			var = "enableLootspecQuickswitch",
-			type = "CheckBox",
-			desc = L["enableLootspecQuickswitchDesc"],
-			callback = function(self, _, value)
-				addon.db["enableLootspecQuickswitch"] = value
-				if value then
-					addon.functions.createLootspecFrame()
-				else
-					addon.functions.removeLootspecframe()
-				end
-			end,
-		},
-		{
-			parent = "",
-			var = "enableMinimapButtonBin",
-			type = "CheckBox",
-			desc = L["enableMinimapButtonBinDesc"],
-			callback = function(self, _, value)
-				addon.db["enableMinimapButtonBin"] = value
-				addon.functions.toggleButtonSink()
-				container:ReleaseChildren()
-				addMinimapFrame(container)
-			end,
-		},
-		{
-			parent = "",
-			var = "enableSquareMinimap",
-			text = L["enableSquareMinimap"],
-			desc = L["enableSquareMinimapDesc"],
-			type = "CheckBox",
-			callback = function(self, _, value)
-				addon.db["enableSquareMinimap"] = value
-				addon.variables.requireReload = true
-				addon.functions.checkReloadFrame()
-			end,
-		},
+    local data = {
+        {
+            parent = "",
+            var = "enableLootspecQuickswitch",
+            type = "CheckBox",
+            desc = L["enableLootspecQuickswitchDesc"],
+            callback = function(self, _, value)
+                addon.db["enableLootspecQuickswitch"] = value
+                if value then
+                    addon.functions.createLootspecFrame()
+                else
+                    addon.functions.removeLootspecframe()
+                end
+            end,
+        },
+        {
+            parent = "",
+            var = "enableMinimapButtonBin",
+            type = "CheckBox",
+            desc = L["enableMinimapButtonBinDesc"],
+            callback = function(self, _, value)
+                addon.db["enableMinimapButtonBin"] = value
+                addon.functions.toggleButtonSink()
+                container:ReleaseChildren()
+                addMinimapFrame(container)
+            end,
+        },
+        {
+            parent = "",
+            var = "enableSquareMinimap",
+            text = L["enableSquareMinimap"],
+            desc = L["enableSquareMinimapDesc"],
+            type = "CheckBox",
+            callback = function(self, _, value)
+                addon.db["enableSquareMinimap"] = value
+                addon.variables.requireReload = true
+                addon.functions.checkReloadFrame()
+            end,
+        },
+        -- Multi-select dropdown: Hide minimap elements
+        {
+            parent = "",
+            var = "minimapHideElements",
+            type = "Dropdown",
+            text = L["minimapHideElements"],
+            list = {
+                Tracking = L["minimapHideElements_Tracking"],
+                ZoneInfo = L["minimapHideElements_ZoneInfo"],
+                Clock = L["minimapHideElements_Clock"],
+                Calendar = L["minimapHideElements_Calendar"],
+                Mail = L["minimapHideElements_Mail"],
+                AddonCompartment = L["minimapHideElements_AddonCompartment"],
+            },
+            order = { "Tracking", "ZoneInfo", "Clock", "Calendar", "Mail", "AddonCompartment" },
+            displayOrder = 1000,
+            gv = "minimapHideElementsDD",
+            callback = function(widget, _, key, checked)
+                addon.db.hiddenMinimapElements = addon.db.hiddenMinimapElements or {}
+                addon.db.hiddenMinimapElements[key] = checked and true or false
+                if addon.functions.ApplyMinimapElementVisibility then addon.functions.ApplyMinimapElementVisibility() end
+            end,
+        },
         {
             parent = "",
             var = "showInstanceDifficulty",
@@ -1681,6 +1704,15 @@ local function addMinimapFrame(container)
 
 	-- Build UI
 	local wrapper = addon.functions.createWrapperData(data, container, L)
+
+    -- Configure the multi-select dropdown after creation
+    local dd = addon.elements and addon.elements["minimapHideElementsDD"]
+    if dd then
+        dd:SetMultiselect(true)
+        if type(addon.db.hiddenMinimapElements) == "table" then
+            for k, v in pairs(addon.db.hiddenMinimapElements) do if v then dd:SetItemValue(k, true) end end
+        end
+    end
 end
 
 local function addUnitFrame(container)
@@ -4825,6 +4857,7 @@ local function initUI()
 	addon.functions.InitDBValue("minimapSinkHoleData", {})
 	addon.functions.InitDBValue("hideQuickJoinToast", false)
 	addon.functions.InitDBValue("enableSquareMinimap", false)
+	addon.functions.InitDBValue("hiddenMinimapElements", addon.db["hiddenMinimapElements"] or {})
 	addon.functions.InitDBValue("persistAuctionHouseFilter", false)
 	addon.functions.InitDBValue("alwaysUserCurExpAuctionHouse", false)
 	addon.functions.InitDBValue("hideDynamicFlightBar", false)
@@ -4949,6 +4982,62 @@ local function initUI()
 		end
 	end
 	addon.functions.toggleQuickJoinToastButton(addon.db["hideQuickJoinToast"])
+
+	-- Hide/show specific minimap elements based on multi-select
+    local function getMinimapElementFrames()
+        local t = {}
+        -- Tracking icon
+        t.Tracking = {}
+        if MinimapCluster and MinimapCluster.Tracking then table.insert(t.Tracking, MinimapCluster.Tracking) end
+        if _G["MiniMapTracking"] then table.insert(t.Tracking, _G["MiniMapTracking"]) end
+        -- Zone info (package)
+        t.ZoneInfo = {}
+        if MinimapCluster then
+            if MinimapCluster.BorderTop then table.insert(t.ZoneInfo, MinimapCluster.BorderTop) end
+            if MinimapCluster.ZoneTextButton then table.insert(t.ZoneInfo, MinimapCluster.ZoneTextButton) end
+        end
+        -- Clock
+        t.Clock = {}
+        if _G["TimeManagerClockButton"] then table.insert(t.Clock, _G["TimeManagerClockButton"]) end
+        -- Calendar
+        t.Calendar = {}
+        if _G["GameTimeFrame"] then table.insert(t.Calendar, _G["GameTimeFrame"]) end
+        -- Mail
+        t.Mail = {}
+        if MinimapCluster and MinimapCluster.IndicatorFrame and MinimapCluster.IndicatorFrame.MailFrame then
+            table.insert(t.Mail, MinimapCluster.IndicatorFrame.MailFrame)
+        end
+        if _G["MiniMapMailFrame"] then table.insert(t.Mail, _G["MiniMapMailFrame"]) end
+        if _G["MinimapMailFrame"] then table.insert(t.Mail, _G["MinimapMailFrame"]) end
+        -- Addon compartment
+        t.AddonCompartment = {}
+        if _G["AddonCompartmentFrame"] then table.insert(t.AddonCompartment, _G["AddonCompartmentFrame"]) end
+        return t
+    end
+
+	function addon.functions.ApplyMinimapElementVisibility()
+		local cfg = addon.db and addon.db.hiddenMinimapElements or {}
+		local elems = getMinimapElementFrames()
+		for key, frames in pairs(elems) do
+			local shouldHide = cfg and cfg[key]
+			for _, f in ipairs(frames) do
+				if shouldHide then f:Hide() else f:Show() end
+				if not f._eqolMinimapHideHooked then
+					f._eqolMinimapHideHooked = true
+					local hookKey = key
+					f:HookScript("OnShow", function(self)
+						local c = addon.db and addon.db.hiddenMinimapElements
+						if c and c[hookKey] then self:Hide() end
+					end)
+				end
+			end
+		end
+	end
+
+	-- Apply on load with a tiny delay to ensure frames exist
+	C_Timer.After(0, function()
+		if addon.functions.ApplyMinimapElementVisibility then addon.functions.ApplyMinimapElementVisibility() end
+	end)
 
 	-- Apply merchant extension on load if enabled
 	if addon.db["enableExtendedMerchant"] and addon.Merchant and addon.Merchant.Enable then addon.Merchant:Enable() end

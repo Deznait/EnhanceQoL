@@ -24,6 +24,8 @@
 
 - **Castbars:** Option to hide Player, Target and Focus-castbar
 
+- **Minimap hiding:** Option to hide some icons on the minimap
+
 ### 🔄 Changed
 
 - **Declutter:** Removed some old and obsolete options, changed the position and category of some options and made it more "übersichtlich?"
