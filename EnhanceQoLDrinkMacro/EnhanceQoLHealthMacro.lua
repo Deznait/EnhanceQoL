@@ -198,18 +198,12 @@ local function buildResetToken()
 end
 
 local function buildMacro()
-    local useBoth = addon.db.healthUseBoth
-
     local stone = getBestAvailableByType("stone")
     local nonCombatPotion = getBestNonCombatPotion()
     local combatPotion = addon.db.healthUseCombatPotions and getBestCombatPotion() or nil
     local spells = getKnownCustomSpells()
 
-    -- optionally include other healing items
-    local other
-    if addon.db.healthAllowOther then other = getBestAvailableByType("other") end
-
-    -- Priority-based sequence (if configured), otherwise fallback to legacy behavior
+    -- Priority-based sequence (always)
     local seqCandidates = {}
 
     local function bestOf(list)
@@ -235,7 +229,6 @@ local function buildMacro()
                 if cat == "stone" and v.type == "stone" then table.insert(ret, v) end
                 if cat == "potion" and v.type == "potion" and not isCombatPotionItem(v) then table.insert(ret, v) end
                 if cat == "combatpotion" and v.type == "potion" and isCombatPotionItem(v) then table.insert(ret, v) end
-                if cat == "other" and v.type == "other" then table.insert(ret, v) end
             end
         end
         return ret
@@ -261,55 +254,21 @@ local function buildMacro()
     order = normalizeOrder(order)
     addon.db.healthPriorityOrder = order
 
-    -- If any non-none category is configured, ignore legacy useBoth/legacy prefs
-    local prioActive = false
+    -- Build according to priority order (ignore legacy useBoth/other)
     for i = 1, 4 do
-        if order[i] and order[i] ~= "none" then prioActive = true break end
-    end
-
-    if prioActive then
-        for i = 1, 4 do
-            local cat = order[i]
-            if cat and cat ~= "none" then
-                if cat == "combatpotion" then
-                    if addon.db.healthUseCombatPotions then
-                        local cand = bestOf(getCatList(cat))
-                        if cand then table.insert(seqCandidates, cand) end
-                    end
-                elseif cat == "spell" then
-                    local cand = bestOf(getCatList(cat))
-                    if cand then table.insert(seqCandidates, cand) end
-                else
+        local cat = order[i]
+        if cat and cat ~= "none" then
+            if cat == "combatpotion" then
+                if addon.db.healthUseCombatPotions then
                     local cand = bestOf(getCatList(cat))
                     if cand then table.insert(seqCandidates, cand) end
                 end
+            else
+                local cand = bestOf(getCatList(cat))
+                if cat == "spell" and not addon.db.healthUseCustomSpells then cand = nil end
+                if cand then table.insert(seqCandidates, cand) end
             end
         end
-    else
-        -- Fallback to legacy: a) optional spell, b) items depending on useBoth, c) combat potion optional
-        if addon.db.healthUseCustomSpells then
-            local bestSpell = bestOf(spells)
-            if bestSpell then table.insert(seqCandidates, bestSpell) end
-        end
-        local potion = nonCombatPotion
-        if useBoth then
-            if not stone and addon.db.healthAllowOther then stone = other end
-            if not potion and addon.db.healthAllowOther then
-                local sid = numericId(stone)
-                local oid = numericId(other)
-                if not sid or not oid or sid ~= oid then potion = other end
-            end
-            if stone then table.insert(seqCandidates, stone) end
-            if potion then table.insert(seqCandidates, potion) end
-        else
-            local itemCands = {}
-            if stone then table.insert(itemCands, stone) end
-            if potion then table.insert(itemCands, potion) end
-            if addon.db.healthAllowOther and other then table.insert(itemCands, other) end
-            local bestItem = bestOf(itemCands)
-            if bestItem then table.insert(seqCandidates, bestItem) end
-        end
-        if addon.db.healthUseCombatPotions and combatPotion then table.insert(seqCandidates, combatPotion) end
     end
 
     -- Deduplicate by actual macro token (getId)
@@ -442,13 +401,7 @@ function addon.Health.functions.addHealthFrame(container)
 	-- If disabled, render nothing else
 	if not addon.db["healthMacroEnabled"] then return end
 
-	local cbBoth = addon.functions.createCheckboxAce(L["Use Healthstone and Potion"], addon.db["healthUseBoth"], function(_, _, value)
-		addon.db["healthUseBoth"] = value
-		addon.Health.functions.updateHealthMacro(false)
-		container:ReleaseChildren()
-		addon.Health.functions.addHealthFrame(container)
-	end)
-	group:AddChild(cbBoth)
+	-- Use Healthstone and Potion is superseded by priority UI; hidden
 
 	-- Recuperate option (casts Recuperate out of combat)
 	local cbRecup = addon.functions.createCheckboxAce(L["Use Recuperate out of combat"], addon.db["healthUseRecuperate"], function(_, _, value)
@@ -463,6 +416,19 @@ function addon.Health.functions.addHealthFrame(container)
         addon.db["healthUseCombatPotions"],
         function(_, _, value)
             addon.db["healthUseCombatPotions"] = value
+            -- Auto-add/remove category in priority when toggled
+            addon.db.healthPriorityOrder = addon.db.healthPriorityOrder or { "stone", "potion", value and "combatpotion" or "none", "none" }
+            if value then
+                local exists = false
+                for i = 1, 4 do if addon.db.healthPriorityOrder[i] == "combatpotion" then exists = true break end end
+                if not exists then
+                    for i = 1, 4 do
+                        if addon.db.healthPriorityOrder[i] == "none" then addon.db.healthPriorityOrder[i] = "combatpotion" break end
+                    end
+                end
+            else
+                for i = 1, 4 do if addon.db.healthPriorityOrder[i] == "combatpotion" then addon.db.healthPriorityOrder[i] = "none" end end
+            end
             addon.Health.functions.updateHealthMacro(false)
         end
     )
@@ -475,10 +441,9 @@ function addon.Health.functions.addHealthFrame(container)
             stone = L["CategoryHealthstones"] or (L["Prefer Healthstone first"] or "Healthstones"),
             potion = L["CategoryPotions"] or "Potions",
             combatpotion = L["CategoryCombatPotions"] or (L["Use Combat potions for health macro"] or "Combat potions"),
-            other = L["CategoryOther"] or "Other",
             none = L["None"] or "None",
         }
-        local baseOrder = { "stone", "potion", "combatpotion", "spell", "other" }
+        local baseOrder = { "stone", "potion", "combatpotion", "spell" }
 
         -- Ensure DB exists
         addon.db.healthPriorityOrder = addon.db.healthPriorityOrder or { "stone", "potion", addon.db.healthUseCombatPotions and "combatpotion" or "none", "none" }
@@ -579,6 +544,19 @@ function addon.Health.functions.addHealthFrame(container)
     group:AddChild(addon.functions.createSpacerAce())
     local cbUseSpells = addon.functions.createCheckboxAce(L["Use custom spells"] or "Use custom spells", addon.db["healthUseCustomSpells"], function(_, _, value)
         addon.db["healthUseCustomSpells"] = value
+        -- Auto-add/remove 'spell' in priority list when toggled
+        addon.db.healthPriorityOrder = addon.db.healthPriorityOrder or { "stone", "potion", addon.db.healthUseCombatPotions and "combatpotion" or "none", "none" }
+        if value then
+            local exists = false
+            for i = 1, 4 do if addon.db.healthPriorityOrder[i] == "spell" then exists = true break end end
+            if not exists then
+                for i = 1, 4 do
+                    if addon.db.healthPriorityOrder[i] == "none" then addon.db.healthPriorityOrder[i] = "spell" break end
+                end
+            end
+        else
+            for i = 1, 4 do if addon.db.healthPriorityOrder[i] == "spell" then addon.db.healthPriorityOrder[i] = "none" end end
+        end
         addon.Health.functions.updateHealthMacro(false)
         container:ReleaseChildren()
         addon.Health.functions.addHealthFrame(container)
