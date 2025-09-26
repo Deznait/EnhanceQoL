@@ -1305,10 +1305,10 @@ for _, child in ipairs(mpChildren) do
 end
 
 -- Place Group Filter under Party
-addon.functions.addToTree("general\001combat\001party", { value = "groupfilter", text = L["groupFilter"] }, true)
+addon.functions.addToTree("general\001combat", { value = "groupfilter", text = L["groupFilter"] }, true)
 
 -- Place Potion Tracker under Party (works everywhere)
-addon.functions.addToTree("general\001combat\001party", { value = "potiontracker", text = L["Potion Tracker"] }, true)
+addon.functions.addToTree("general\001combat", { value = "potiontracker", text = L["Potion Tracker"] }, true)
 
 -- Place Teleports under Map & Navigation
 addon.functions.addToTree("general\001nav", { value = "teleports", text = L["Teleports"] }, true)

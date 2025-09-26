@@ -1878,6 +1878,17 @@ local function addUnitFrame(container)
 	end, nil)
 	groupCoreUF:AddChild(cbRaidFrameBuffHide)
 
+	-- Moved from Combat -> Party: leader icon on party frames
+	local cbLeaderIcon = addon.functions.createCheckboxAce(L["showLeaderIconRaidFrame"], addon.db["showLeaderIconRaidFrame"], function(self, _, value)
+		addon.db["showLeaderIconRaidFrame"] = value
+		if value == true then
+			setLeaderIcon()
+		else
+			removeLeaderIcon()
+		end
+	end, nil)
+	groupCoreUF:AddChild(cbLeaderIcon)
+
 	local cbPartyFrameSolo = addon.functions.createCheckboxAce(L["showPartyFrameInSoloContent"], addon.db["showPartyFrameInSoloContent"], function(self, _, value)
 		addon.db["showPartyFrameInSoloContent"] = value
 		addon.variables.requireReload = true
@@ -3691,6 +3702,34 @@ local function addSocialFrame(container)
 		local cb = addon.functions.createCheckboxAce(checkboxData.text, addon.db[checkboxData.var], checkboxData.callback, desc)
 		groupCore:AddChild(cb)
 	end
+
+	-- Inline section for auto-accept invites
+	local groupInv = addon.functions.createContainer("InlineGroup", "List")
+	groupInv:SetTitle(L["autoAcceptGroupInvite"]) -- Section title
+	wrapper:AddChild(groupInv)
+
+	local cbMain = addon.functions.createCheckboxAce(L["autoAcceptGroupInvite"], addon.db["autoAcceptGroupInvite"], function(self, _, value)
+		addon.db["autoAcceptGroupInvite"] = value
+		container:ReleaseChildren()
+		addSocialFrame(container)
+	end)
+	groupInv:AddChild(cbMain)
+
+	if addon.db["autoAcceptGroupInvite"] then
+		local lbl = addon.functions.createLabelAce("|cffffd700" .. L["autoAcceptGroupInviteOptions"] .. "|r", nil, nil, 12)
+		lbl:SetFullWidth(true)
+		groupInv:AddChild(lbl)
+
+		local cbGuild = addon.functions.createCheckboxAce(L["autoAcceptGroupInviteGuildOnly"], addon.db["autoAcceptGroupInviteGuildOnly"], function(self, _, value)
+			addon.db["autoAcceptGroupInviteGuildOnly"] = value
+		end)
+		groupInv:AddChild(cbGuild)
+
+		local cbFriends = addon.functions.createCheckboxAce(L["autoAcceptGroupInviteFriendOnly"], addon.db["autoAcceptGroupInviteFriendOnly"], function(self, _, value)
+			addon.db["autoAcceptGroupInviteFriendOnly"] = value
+		end)
+		groupInv:AddChild(cbFriends)
+	end
 	if addon.db["ignoreTooltipNote"] then
 		local sliderMaxChars = addon.functions.createSliderAce(
 			L["IgnoreTooltipMaxChars"] .. ": " .. addon.db["ignoreTooltipMaxChars"],
@@ -3724,6 +3763,10 @@ local function addSocialFrame(container)
 	local labelHeadline = addon.functions.createLabelAce("|cffffd700" .. L["IgnoreDesc"], nil, nil, 14)
 	labelHeadline:SetFullWidth(true)
 	groupCore:AddChild(labelHeadline)
+	container:DoLayout()
+	wrapper:DoLayout()
+	groupCore:DoLayout()
+	groupInv:DoLayout()
 end
 
 local function buildDatapanelFrame(container)
@@ -6170,7 +6213,6 @@ local function CreateUI()
 				value = "combat",
 				text = L["CombatDungeons"],
 				children = {
-					{ value = "party", text = PARTY },
 				},
 			},
 			-- Map & Navigation
@@ -6260,18 +6302,9 @@ local function CreateUI()
 			addMoneyFrame(container)
 		-- Combat & Dungeons
 		elseif group == "general\001combat" then
-			addDungeonFrame(container, true)
-		elseif group == "general\001combat\001party" then
-			addPartyFrame(container)
+			addCategoryIntro(container, "CombatDungeons", "CombatDungeonsIntro")
 		-- Forward former Dungeon (Mythic+) subpages directly under Combat
-		elseif
-			string.sub(group, 1, string.len("general\001combat\001")) == "general\001combat\001"
-			and string.sub(group, 1, string.len("general\001combat\001party")) ~= "general\001combat\001party"
-		then
-			addon.MythicPlus.functions.treeCallback(container, group)
-		elseif group == "general\001combat\001party\001groupfilter" then
-			addon.MythicPlus.functions.treeCallback(container, group)
-		elseif group == "general\001combat\001party\001potiontracker" then
+		elseif string.sub(group, 1, string.len("general\001combat\001")) == "general\001combat\001" then
 			addon.MythicPlus.functions.treeCallback(container, group)
 		-- Map & Navigation
 		elseif group == "general\001nav" then
