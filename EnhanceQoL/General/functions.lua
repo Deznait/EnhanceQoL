@@ -311,46 +311,77 @@ function addon.functions.createWrapperData(data, container, L)
 end
 
 function addon.functions.addToTree(parentValue, newElement, noSort)
-	-- Sortiere die Knoten alphabetisch nach `text`, rekursiv für alle Kinder
-	local function sortChildrenRecursively(children)
-		if noSort then return end
-		table.sort(children, function(a, b) return string.lower(a.text) < string.lower(b.text) end)
-		for _, child in ipairs(children) do
-			if child.children then sortChildrenRecursively(child.children) end
-		end
-	end
+    -- Sortiere die Knoten alphabetisch nach `text`, rekursiv für alle Kinder
+    local function sortChildrenRecursively(children)
+        if noSort then return end
+        table.sort(children, function(a, b) return string.lower(a.text) < string.lower(b.text) end)
+        for _, child in ipairs(children) do
+            if child.children then sortChildrenRecursively(child.children) end
+        end
+    end
 
-	-- Durchlaufe die Baumstruktur, um den Parent-Knoten zu finden
-	local function addToTree(tree)
-		for _, node in ipairs(tree) do
-			if node.value == parentValue then
-				node.children = node.children or {}
-				table.insert(node.children, newElement)
-				sortChildrenRecursively(node.children) -- Sortiere die Kinder nach dem Hinzufügen
-				return true
-			elseif node.children then
-				if addToTree(node.children) then return true end
-			end
-		end
-		return false
-	end
+    -- Hilfsfunktion: finde einen Knoten per Pfad (value1\001value2 ...)
+    local function findNodeByPath(tree, path)
+        local segments = {}
+        for seg in string.gmatch(path, "[^\001]+") do table.insert(segments, seg) end
+        if #segments == 0 then return nil end
 
-	-- Prüfen, ob parentValue `nil` ist (neuer Parent wird benötigt)
-	if not parentValue then
-		-- Füge einen neuen Parent-Knoten hinzu
-		table.insert(addon.treeGroupData, newElement)
-		sortChildrenRecursively(addon.treeGroupData) -- Sortiere die oberste Ebene
-		addon.treeGroup:SetTree(addon.treeGroupData) -- Aktualisiere die TreeGroup mit der neuen Struktur
-		addon.treeGroup:RefreshTree()
-		return
-	end
+        local function findIn(children, idx)
+            for _, node in ipairs(children) do
+                if node.value == segments[idx] then
+                    if idx == #segments then
+                        return node
+                    elseif node.children then
+                        local found = findIn(node.children, idx + 1)
+                        if found then return found end
+                    end
+                end
+            end
+            return nil
+        end
 
-	-- Versuche, das Element als Child eines bestehenden Parent-Knotens hinzuzufügen
-	if addToTree(addon.treeGroupData) then
-		sortChildrenRecursively(addon.treeGroupData) -- Sortiere alle Ebenen nach Änderungen
-		addon.treeGroup:SetTree(addon.treeGroupData) -- Aktualisiere die TreeGroup mit der neuen Struktur
-	end
-	addon.treeGroup:RefreshTree()
+        return findIn(tree, 1)
+    end
+
+    -- Durchlaufe die Baumstruktur, um den Parent-Knoten zu finden (mit optionalem Pfad)
+    local function addToTreeSimple(tree)
+        for _, node in ipairs(tree) do
+            if node.value == parentValue then
+                node.children = node.children or {}
+                table.insert(node.children, newElement)
+                sortChildrenRecursively(node.children)
+                return true
+            elseif node.children then
+                if addToTreeSimple(node.children) then return true end
+            end
+        end
+        return false
+    end
+
+    -- Prüfen, ob parentValue `nil` ist (neuer Parent wird benötigt)
+    if not parentValue then
+        table.insert(addon.treeGroupData, newElement)
+        sortChildrenRecursively(addon.treeGroupData)
+        addon.treeGroup:SetTree(addon.treeGroupData)
+        addon.treeGroup:RefreshTree()
+        return
+    end
+
+    -- Versuche zuerst, per Pfad exakten Knoten zu finden
+    local parentNode
+    if string.find(parentValue, "\001", 1, true) then parentNode = findNodeByPath(addon.treeGroupData, parentValue) end
+    if parentNode then
+        parentNode.children = parentNode.children or {}
+        table.insert(parentNode.children, newElement)
+        sortChildrenRecursively(parentNode.children)
+    else
+        -- Fallback: alte Logik (suche ersten Treffer per value)
+        addToTreeSimple(addon.treeGroupData)
+    end
+
+    sortChildrenRecursively(addon.treeGroupData)
+    addon.treeGroup:SetTree(addon.treeGroupData)
+    addon.treeGroup:RefreshTree()
 end
 
 local tooltipCache = {}

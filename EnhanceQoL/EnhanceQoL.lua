@@ -6296,6 +6296,9 @@ local function CreateUI()
 			addPartyFrame(container)
 		elseif group == "general\001combat\001dungeon" then
 			addDungeonFrame(container, true)
+		elseif string.sub(group, 1, string.len("general\001combat\001dungeon\001")) == "general\001combat\001dungeon\001" then
+			-- Forward dungeon subpages (e.g., keystone, automark) to Mythic+ UI
+			addon.MythicPlus.functions.treeCallback(container, group)
 		-- Map & Navigation
 			elseif group == "general\001nav" then
 				addCategoryIntro(container, "MapNavigation", "MapNavigationIntro")
@@ -6340,7 +6343,7 @@ local function CreateUI()
 			addon.Vendor.functions.treeCallback(container, group)
 		elseif string.match(group, "^drink") then
 			addon.Drinks.functions.treeCallback(container, group)
-		elseif string.match(group, "^mythicplus") then
+		elseif string.find(group, "mythicplus", 1, true) then
 			addon.MythicPlus.functions.treeCallback(container, group)
 		elseif string.match(group, "^aura") then
 			addon.Aura.functions.treeCallback(container, group)

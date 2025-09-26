@@ -1269,32 +1269,48 @@ local function addTalentFrame(container)
 	end
 end
 function addon.MythicPlus.functions.refreshTalentFrameIfOpen()
-	if activeTalentContainer and addon.variables.statusTable.selected == "mythicplus\001talents" then
+	if not activeTalentContainer then return end
+    local sel = addon.variables.statusTable.selected or ""
+    local pos = sel:find("mythicplus\001talents", 1, true)
+    if pos == 1 or sel:find("general\001mythicplus\001talents", 1, true) or sel:find("general\001combat\001dungeon\001talents", 1, true) then
 		activeTalentContainer:ReleaseChildren()
 		addTalentFrame(activeTalentContainer)
 	end
 end
 
-addon.variables.statusTable.groups["mythicplus"] = true
-addon.functions.addToTree(nil, {
-	value = "mythicplus",
-	text = L["Mythic Plus"],
-	children = {
-		{ value = "keystone", text = L["Keystone"] },
-		{ value = "automark", text = L["AutoMark"] },
-		{ value = "potiontracker", text = L["Potion Tracker"] },
-		{ value = "teleports", text = L["Teleports"] },
-		{ value = "brtracker", text = L["BRTracker"] },
-		{ value = "rating", text = DUNGEON_SCORE },
-		{ value = "talents", text = L["TalentReminder"] },
-		{ value = "objectivetracker", text = HUD_EDIT_MODE_OBJECTIVE_TRACKER_LABEL },
-		{ value = "groupfilter", text = L["groupFilter"] },
-	},
-})
+-- Register Mythic+ panels under General -> Combat & Dungeons -> Dungeon
+addon.variables.statusTable.groups["general\001combat"] = true
+addon.variables.statusTable.groups["general\001combat\001dungeon"] = true
+
+local mpChildren = {
+    { value = "keystone", text = L["Keystone"] },
+    { value = "automark", text = L["AutoMark"] },
+    { value = "potiontracker", text = L["Potion Tracker"] },
+    { value = "teleports", text = L["Teleports"] },
+    { value = "brtracker", text = L["BRTracker"] },
+    { value = "rating", text = DUNGEON_SCORE },
+    { value = "talents", text = L["TalentReminder"] },
+    { value = "objectivetracker", text = HUD_EDIT_MODE_OBJECTIVE_TRACKER_LABEL },
+    { value = "groupfilter", text = L["groupFilter"] },
+}
+
+for _, child in ipairs(mpChildren) do
+    addon.functions.addToTree("general\001combat\001dungeon", child, true)
+end
 
 function addon.MythicPlus.functions.treeCallback(container, group)
 	container:ReleaseChildren() -- Entfernt vorherige Inhalte
 	-- Prüfen, welche Gruppe ausgewählt wurde
+    -- Normalize path so both previous and embedded paths work
+    -- Supported suffixes after either "mythicplus\001" or "...\001dungeon\001"
+    local pos = group:find("mythicplus\001", 1, true)
+    if pos then
+        group = group:sub(pos)
+    else
+        local dpos = group:find("dungeon\001", 1, true)
+        if dpos then group = "mythicplus\001" .. group:sub(dpos + #("dungeon\001")) end
+    end
+
 	if group == "mythicplus\001keystone" then
 		addKeystoneFrame(container)
 	elseif group == "mythicplus\001potiontracker" then
