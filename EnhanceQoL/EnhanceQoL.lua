@@ -1973,20 +1973,21 @@ local function addUnitFrame(container)
 end
 
 local function addDynamicFlightFrame(container)
-	local data = {
-		{
-			parent = "",
-			var = "hideDynamicFlightBar",
-			text = L["hideDynamicFlightBar"]:format(DYNAMIC_FLIGHT),
-			type = "CheckBox",
-			callback = function(self, _, value)
-				addon.db["hideDynamicFlightBar"] = value
-				addon.functions.toggleDynamicFlightBar(addon.db["hideDynamicFlightBar"])
-			end,
-		},
-	}
+	local wrapper = addon.functions.createContainer("SimpleGroup", "Flow")
+	container:AddChild(wrapper)
 
-	local wrapper = addon.functions.createWrapperData(data, container, L)
+	local groupCore = addon.functions.createContainer("InlineGroup", "List")
+	wrapper:AddChild(groupCore)
+
+	local cb = addon.functions.createCheckboxAce(
+		L["hideDynamicFlightBar"]:format(DYNAMIC_FLIGHT),
+		addon.db["hideDynamicFlightBar"],
+		function(self, _, value)
+			addon.db["hideDynamicFlightBar"] = value
+			addon.functions.toggleDynamicFlightBar(addon.db["hideDynamicFlightBar"])
+		end
+	)
+	groupCore:AddChild(cb)
 end
 
 local function addAuctionHouseFrame(container)
@@ -6185,9 +6186,7 @@ local function CreateUI()
 				value = "nav",
 				text = L["MapNavigation"],
 				children = {
-					{ value = "map", text = WORLD_MAP },
 					{ value = "minimap", text = MINIMAP_LABEL },
-					{ value = "dynamicflight", text = DYNAMIC_FLIGHT },
 				},
 			},
 			-- UI & Input
@@ -6289,13 +6288,19 @@ local function CreateUI()
 			addon.MythicPlus.functions.treeCallback(container, group)
 		-- Map & Navigation
 		elseif group == "general\001nav" then
-			addCategoryIntro(container, "MapNavigation", "MapNavigationIntro")
-		elseif group == "general\001nav\001map" then
-			addMapFrame(container)
+			-- Flatten simple subpages: create a single scroll wrapper, then render both sections
+			local scroll = addon.functions.createContainer("ScrollFrame", "Flow")
+			scroll:SetFullWidth(true)
+			scroll:SetFullHeight(true)
+			container:AddChild(scroll)
+
+			local wrapper = addon.functions.createContainer("SimpleGroup", "Flow")
+			scroll:AddChild(wrapper)
+
+			addMapFrame(wrapper)
+			addDynamicFlightFrame(wrapper)
 		elseif group == "general\001nav\001minimap" then
 			addMinimapFrame(container)
-		elseif group == "general\001nav\001dynamicflight" then
-			addDynamicFlightFrame(container)
 		elseif group == "general\001nav\001teleports" then
 			addon.MythicPlus.functions.treeCallback(container, group)
 		-- UI & Input
