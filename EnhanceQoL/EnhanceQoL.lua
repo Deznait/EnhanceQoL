@@ -2172,22 +2172,30 @@ local function addVendorMainFrame2(container)
 	local function doLayout()
 		if scroll and scroll.DoLayout then scroll:DoLayout() end
 	end
+	wrapper:PauseLayout()
+
+	local groups = {}
+	local ahCore
 
 	local function ensureGroup(key, title)
-		local g = wrapper["_g_" .. key]
-		if not g then
+		local g, known
+		if groups[key] then
+			g = groups[key]
+			groups[key]:PauseLayout()
+			groups[key]:ReleaseChildren()
+			known = true
+		else
 			g = addon.functions.createContainer("InlineGroup", "List")
 			g:SetTitle(title)
-			wrapper["_g_" .. key] = g
 			wrapper:AddChild(g)
+			groups[key] = g
 		end
-		g:ReleaseChildren()
-		g:SetTitle(title)
-		return g
+
+		return g, known
 	end
 
 	local function buildAHCore()
-		local g = ensureGroup("ahcore", BUTTON_LAG_AUCTIONHOUSE)
+		local g, known = ensureGroup("ahcore", BUTTON_LAG_AUCTIONHOUSE)
 		local items = {
 			{
 				text = L["persistAuctionHouseFilter"],
@@ -2208,11 +2216,14 @@ local function addVendorMainFrame2(container)
 			local w = addon.functions.createCheckboxAce(it.text, addon.db[it.var], it.func, it.desc)
 			g:AddChild(w)
 		end
-		doLayout()
+		if known then
+			g:ResumeLayout()
+			doLayout()
+		end
 	end
 
 	local function buildConvenience()
-		local g = ensureGroup("conv", L["Convenience"])
+		local g, known = ensureGroup("conv", L["Convenience"])
 		local items = {
 			{
 				var = "autoRepair",
@@ -2235,11 +2246,15 @@ local function addVendorMainFrame2(container)
 			local w = addon.functions.createCheckboxAce(it.text, addon.db[it.var], it.func, it.desc)
 			g:AddChild(w)
 		end
-		doLayout()
+
+		if known then
+			g:ResumeLayout()
+			doLayout()
+		end
 	end
 
 	local function buildMerchant()
-		local g = ensureGroup("merchant", MERCHANT)
+		local g, known = ensureGroup("merchant", MERCHANT)
 		local w = addon.functions.createCheckboxAce(L["enableExtendedMerchant"], addon.db["enableExtendedMerchant"], function(_, _, value)
 			addon.db["enableExtendedMerchant"] = value
 			if addon.Merchant then
@@ -2253,11 +2268,15 @@ local function addVendorMainFrame2(container)
 			end
 		end, L["enableExtendedMerchantDesc"])
 		g:AddChild(w)
-		doLayout()
+
+		if known then
+			g:ResumeLayout()
+			doLayout()
+		end
 	end
 
 	local function buildMailbox()
-		local g = ensureGroup("mail", MINIMAP_TRACKING_MAILBOX)
+		local g, known = ensureGroup("mail", MINIMAP_TRACKING_MAILBOX)
 		local w = addon.functions.createCheckboxAce(L["enableMailboxAddressBook"], addon.db["enableMailboxAddressBook"], function(_, _, value)
 			addon.db["enableMailboxAddressBook"] = value
 			if addon.Mailbox then
@@ -2302,11 +2321,15 @@ local function addVendorMainFrame2(container)
 			end)
 			sub:AddChild(btn)
 		end
-		doLayout()
+		if known then
+			g:ResumeLayout()
+			doLayout()
+		end
 	end
 
 	local function buildMoney()
-		local g = ensureGroup("money", MONEY)
+		local g, known = ensureGroup("money", MONEY)
+
 		local cbEnable = addon.functions.createCheckboxAce(L["enableMoneyTracker"], addon.db["enableMoneyTracker"], function(_, _, v)
 			addon.db["enableMoneyTracker"] = v
 			buildMoney()
@@ -2351,7 +2374,10 @@ local function addVendorMainFrame2(container)
 			sub:AddChild(dropRemove)
 			sub:AddChild(btnRemove)
 		end
-		doLayout()
+		if known then
+			g:ResumeLayout()
+			doLayout()
+		end
 	end
 
 	buildAHCore()
@@ -2359,6 +2385,8 @@ local function addVendorMainFrame2(container)
 	buildMerchant()
 	buildMailbox()
 	buildMoney()
+	wrapper:ResumeLayout()
+	doLayout()
 end
 
 -- Mailbox address book options
