@@ -2634,11 +2634,12 @@ function addon.Aura.functions.addBuffTrackerOptions(container)
 				direction = "RIGHT",
 				buffs = {},
 			}
-			addon.db["buffTrackerEnabled"][newId] = true
+			addon.db["buffTrackerEnabled"][newId] = false
 			addon.db["buffTrackerLocked"][newId] = false
 			addon.db["buffTrackerSounds"][newId] = {}
 			addon.db["buffTrackerSoundsEnabled"][newId] = {}
 			ensureAnchor(newId)
+			applyLockState()
 			refreshTree(newId)
 			return -- don’t build options for pseudo‑node
 		elseif value == "IMPORT_CATEGORY" then
