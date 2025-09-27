@@ -1800,7 +1800,8 @@ local function addUnitFrame(container)
 	groupHT:SetTitle(L["Health Text"] or "Health Text")
 	wrapper:AddChild(groupHT)
 
-	local htExplainText = string.format(L["HealthTextExplain"] or "%s follows Blizzard 'Status Text'. Any other mode shows your chosen format for Player, Target, and Boss frames.", VIDEO_OPTIONS_DISABLED)
+	local htExplainText =
+		string.format(L["HealthTextExplain"] or "%s follows Blizzard 'Status Text'. Any other mode shows your chosen format for Player, Target, and Boss frames.", VIDEO_OPTIONS_DISABLED)
 	local labelHTExplain = addon.functions.createLabelAce("|cffffd700" .. htExplainText .. "|r", nil, nil, 10)
 	labelHTExplain:SetFullWidth(true)
 	groupHT:AddChild(labelHTExplain)
@@ -2059,7 +2060,8 @@ local function addUnitFrame2(container)
 		local list = { OFF = VIDEO_OPTIONS_DISABLED, PERCENT = STATUS_TEXT_PERCENT, ABS = STATUS_TEXT_VALUE, BOTH = STATUS_TEXT_BOTH }
 		local order = { "OFF", "PERCENT", "ABS", "BOTH" }
 
-		local htExplainText = string.format(L["HealthTextExplain"] or "%s follows Blizzard 'Status Text'. Any other mode shows your chosen format for Player, Target, and Boss frames.", VIDEO_OPTIONS_DISABLED)
+		local htExplainText =
+			string.format(L["HealthTextExplain"] or "%s follows Blizzard 'Status Text'. Any other mode shows your chosen format for Player, Target, and Boss frames.", VIDEO_OPTIONS_DISABLED)
 		local lbl = addon.functions.createLabelAce("|cffffd700" .. htExplainText .. "|r", nil, nil, 10)
 		lbl:SetFullWidth(true)
 		g:AddChild(lbl)
@@ -6579,6 +6581,7 @@ local function CreateUI()
 				or group:find("combat\001bufftracker", 1, true)
 				or group:find("combat\001casttracker", 1, true)
 				or group:find("combat\001cooldownnotify", 1, true)
+				or group:find("combat\001combatassist", 1, true)
 			then
 				addon.Aura.functions.treeCallback(container, group)
 			elseif string.find(group, "\001drink", 1, true) or string.sub(group, 1, 5) == "drink" or group:find("combat\001drink", 1, true) then

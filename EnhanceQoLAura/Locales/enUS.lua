@@ -2,6 +2,7 @@ local L = LibStub("AceLocale-3.0"):NewLocale("EnhanceQoL_Aura", "enUS", true) --
 
 L["Aura"] = "Aura"
 L["DragToPosition"] = "Drag me\n%s"
+L["CombatAssist"] = "Combat Assist"
 L["BuffTracker"] = "Aura Tracker"
 L["CastTracker"] = "Cast Tracker"
 L["CooldownNotify"] = "Cooldown Notify"
