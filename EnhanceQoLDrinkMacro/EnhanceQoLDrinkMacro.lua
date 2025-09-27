@@ -22,7 +22,8 @@ local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_DrinkMacro")
 local LSM = LibStub("LibSharedMedia-3.0")
 
 local function createMacroIfMissing()
-	-- Guard against protected calls while in combat lockdown
+	-- Respect enable toggle and guard against protected calls while in combat lockdown
+	if not addon.db.drinkMacroEnabled then return end
 	if InCombatLockdown and InCombatLockdown() then return end
 	if GetMacroInfo(drinkMacroName) == nil then CreateMacro(drinkMacroName, "INV_Misc_QuestionMark") end
 end
@@ -45,9 +46,7 @@ local function buildMacroString(drinkItem, manaPotionItem)
 	local resetType = "combat"
 	local recuperateString = ""
 
-    if addon.db.allowRecuperate and addon.Recuperate and addon.Recuperate.name and addon.Recuperate.known then
-        recuperateString = "\n/cast " .. addon.Recuperate.name
-    end
+	if addon.db.allowRecuperate and addon.Recuperate and addon.Recuperate.name and addon.Recuperate.known then recuperateString = "\n/cast " .. addon.Recuperate.name end
 
 	local parts = { "#showtooltip" }
 
@@ -88,20 +87,21 @@ local function addDrinks()
 	local manaItem = nil
 	if addon.db.useManaPotionInCombat and unitHasMana() then manaItem = findBestManaPotion() end
 
-    if foundItem ~= lastItemPlaced or manaItem ~= lastManaPotionPlaced or addon.db.allowRecuperate ~= lastAllowRecuperate or addon.db.allowRecuperate ~= lastUseRecuperate then
+	if foundItem ~= lastItemPlaced or manaItem ~= lastManaPotionPlaced or addon.db.allowRecuperate ~= lastAllowRecuperate or addon.db.allowRecuperate ~= lastUseRecuperate then
 		-- Avoid protected EditMacro during combat lockdown
 		if InCombatLockdown and InCombatLockdown() then return end
 		EditMacro(drinkMacroName, drinkMacroName, nil, buildMacroString(foundItem, manaItem))
 		lastItemPlaced = foundItem
 		lastManaPotionPlaced = manaItem
-        lastAllowRecuperate = addon.db.allowRecuperate
-        lastUseRecuperate = addon.db.allowRecuperate
-    end
+		lastAllowRecuperate = addon.db.allowRecuperate
+		lastUseRecuperate = addon.db.allowRecuperate
+	end
 end
 
 function addon.functions.updateAvailableDrinks(ignoreCombat)
-    if UnitAffectingCombat("player") and ignoreCombat == false then return end
-    if unitHasMana() == false and not addon.db.allowRecuperate then return end
+	if not addon.db.drinkMacroEnabled then return end
+	if UnitAffectingCombat("player") and ignoreCombat == false then return end
+	if unitHasMana() == false and not addon.db.allowRecuperate then return end
 	createMacroIfMissing()
 	addDrinks()
 end
@@ -117,6 +117,7 @@ end
 -- TODO automatically ignore Gems for earthen, there don't need to be a setting for that, just make a small information, that gems will be ignored automatically
 -- TODO always ignore buff food, just "disable" this setting for now, when any person says he needs it, we will be enabling it again, but for now less clutter
 addon.functions.InitDBValue("preferMageFood", true)
+addon.functions.InitDBValue("drinkMacroEnabled", false)
 addon.functions.InitDBValue("allowRecuperate", true)
 addon.functions.InitDBValue("useManaPotionInCombat", false)
 addon.functions.updateAllowedDrinks()
@@ -162,163 +163,197 @@ frameLoad:SetScript("OnEvent", eventHandler)
 
 -- Place Drink Macro under Combat & Dungeons
 addon.functions.addToTree("combat", { value = "drink", text = MACROS })
+addon.functions.addToTree("combat\001drink", { value = "drinks", text = L["Drinks & Food"] or "Drinks & Food" })
 
 -- Add child entry for Health Macro under Drink Macro
 addon.functions.addToTree("combat\001drink", {
-    value = "health",
-    text = L["Health Macro"],
+	value = "health",
+	text = L["Health Macro"],
 })
 addon.variables.statusTable.groups["drink"] = true
 
 local function addDrinkFrame(container)
+	local scroll = addon.functions.createContainer("ScrollFrame", "Flow")
+	scroll:SetFullWidth(true)
+	scroll:SetFullHeight(true)
+	container:AddChild(scroll)
+
 	local wrapper = addon.functions.createContainer("SimpleGroup", "Flow")
-	container:AddChild(wrapper)
+	scroll:AddChild(wrapper)
 
-	local groupCore = addon.functions.createContainer("InlineGroup", "List")
-	wrapper:AddChild(groupCore)
+	local function doLayout()
+		if scroll and scroll.DoLayout then scroll:DoLayout() end
+	end
+	wrapper:PauseLayout()
+	local groups = {}
+	local function ensureGroup(key, title)
+		local g, known
+		if groups[key] then
+			g = groups[key]
+			g:PauseLayout()
+			g:ReleaseChildren()
+			known = true
+		else
+			g = addon.functions.createContainer("InlineGroup", "List")
+			if title and title ~= "" then g:SetTitle(title) end
+			wrapper:AddChild(g)
+			groups[key] = g
+		end
+		return g, known
+	end
 
-    local data = {
-        { text = L["Prefer mage food"], var = "preferMageFood" },
-		{
-			text = L["allowRecuperate"],
-			var = "allowRecuperate",
-			desc = L["allowRecuperateDesc"],
-			func = function(self, _, value)
-				addon.db["allowRecuperate"] = value
+	local function buildCore()
+		local g, known = ensureGroup("core", L["Drink Macro"]) -- title
+
+		-- Always put the enable toggle first
+		local cbEnable = addon.functions.createCheckboxAce(L["Enable Drink Macro"], addon.db.drinkMacroEnabled, function(_, _, v)
+			addon.db.drinkMacroEnabled = v
+			-- Build lists and macro content immediately to avoid empty macro body
+			addon.functions.updateAllowedDrinks()
+			addon.functions.updateAvailableDrinks(false)
+			buildCore()
+		end)
+		g:AddChild(cbEnable)
+
+		-- Child group for core settings (only visible if enabled)
+		if addon.db.drinkMacroEnabled then
+			local sub = addon.functions.createContainer("InlineGroup", "List")
+			g:AddChild(sub)
+
+			local cbPreferMage = addon.functions.createCheckboxAce(L["Prefer mage food"], addon.db.preferMageFood, function(_, _, v)
+				addon.db.preferMageFood = v
 				addon.functions.updateAllowedDrinks()
 				addon.functions.updateAvailableDrinks(false)
-				container:ReleaseChildren()
-				addDrinkFrame(container)
-			end,
-		},
-		{
-			text = L["useManaPotionInCombat"],
-			var = "useManaPotionInCombat",
-			desc = L["useManaPotionInCombatDesc"],
-			func = function(self, _, value)
-				addon.db["useManaPotionInCombat"] = value
+			end)
+			sub:AddChild(cbPreferMage)
+
+			local cbRecup = addon.functions.createCheckboxAce(L["allowRecuperate"], addon.db.allowRecuperate, function(_, _, v)
+				addon.db.allowRecuperate = v
+				addon.functions.updateAllowedDrinks()
 				addon.functions.updateAvailableDrinks(false)
-				container:ReleaseChildren()
-				addDrinkFrame(container)
-			end,
-		},
-		{
-			text = L["mageFoodReminder"],
-			var = "mageFoodReminder",
-			desc = L["mageFoodReminderDesc2"],
-			func = function(self, _, value)
-				addon.db["mageFoodReminder"] = value
-				addon.Drinks.functions.updateRole()
-			end,
-		},
-		{
-			text = L["mageFoodReminderSound"],
-			var = "mageFoodReminderSound",
-			func = function(self, _, value)
-				addon.db["mageFoodReminderSound"] = value
-				addon.Drinks.functions.updateRole()
-				container:ReleaseChildren()
-				addDrinkFrame(container)
-			end,
-		},
-	}
+			end, L["allowRecuperateDesc"])
+			sub:AddChild(cbRecup)
 
-    -- Using Recuperate is always combined with drinks if allowed; no separate option
+			local cbUseMana = addon.functions.createCheckboxAce(L["useManaPotionInCombat"], addon.db.useManaPotionInCombat, function(_, _, v)
+				addon.db.useManaPotionInCombat = v
+				addon.functions.updateAvailableDrinks(false)
+			end, L["useManaPotionInCombatDesc"])
+			sub:AddChild(cbUseMana)
 
-    table.sort(data, function(a, b) return a.text < b.text end)
-
-	for _, cbData in ipairs(data) do
-		local uFunc = function(self, _, value)
-			addon.db[cbData.var] = value
-			addon.functions.updateAllowedDrinks()
-			addon.functions.updateAvailableDrinks(false)
+			local sliderManaMinimum = addon.functions.createSliderAce(
+				L["Minimum mana restore for food"] .. ": " .. addon.db.minManaFoodValue .. "%",
+				addon.db.minManaFoodValue,
+				0,
+				100,
+				1,
+				function(self, _, v)
+					addon.db.minManaFoodValue = v
+					addon.functions.updateAllowedDrinks()
+					addon.functions.updateAvailableDrinks(false)
+					self:SetLabel(L["Minimum mana restore for food"] .. ": " .. v .. "%")
+				end
+			)
+			sub:AddChild(sliderManaMinimum)
 		end
-		if cbData.func then uFunc = cbData.func end
-		local cbElement = addon.functions.createCheckboxAce(cbData.text, addon.db[cbData.var], uFunc, cbData.desc)
-		groupCore:AddChild(cbElement)
-	end
 
-	if addon.db["mageFoodReminderSound"] then
-		local cbCustomReminderSound = addon.functions.createCheckboxAce(L["mageFoodReminderUseCustomSound"], addon.db["mageFoodReminderUseCustomSound"], function(self, _, value)
-			addon.db["mageFoodReminderUseCustomSound"] = value
-			container:ReleaseChildren()
-			addDrinkFrame(container)
-		end)
-		groupCore:AddChild(cbCustomReminderSound)
-
-		if addon.db["mageFoodReminderUseCustomSound"] then
-			local soundList = {}
-			if addon.ChatIM and addon.ChatIM.BuildSoundTable and not addon.ChatIM.availableSounds then addon.ChatIM:BuildSoundTable() end
-			local soundTable = (addon.ChatIM and addon.ChatIM.availableSounds) or LSM:HashTable("sound")
-			for name in pairs(soundTable or {}) do
-				soundList[name] = name
-			end
-			local list, order = addon.functions.prepareListForDropdown(soundList)
-			local dropJoin = addon.functions.createDropdownAce(L["mageFoodReminderJoinSound"], list, order, function(self, _, val)
-				addon.db["mageFoodReminderJoinSoundFile"] = val
-				self:SetValue(val)
-				local file = soundTable and soundTable[val]
-				if file then PlaySoundFile(file, "Master") end
-			end)
-			dropJoin:SetValue(addon.db["mageFoodReminderJoinSoundFile"])
-			groupCore:AddChild(dropJoin)
-
-			local dropLeave = addon.functions.createDropdownAce(L["mageFoodReminderLeaveSound"], list, order, function(self, _, val)
-				addon.db["mageFoodReminderLeaveSoundFile"] = val
-				self:SetValue(val)
-				local file = soundTable and soundTable[val]
-				if file then PlaySoundFile(file, "Master") end
-			end)
-			dropLeave:SetValue(addon.db["mageFoodReminderLeaveSoundFile"])
-			groupCore:AddChild(dropLeave)
-
-			groupCore:AddChild(addon.functions.createSpacerAce())
+		if known then
+			g:ResumeLayout()
+			doLayout()
 		end
 	end
 
-	-- Mana Potion list is curated in Drinks.lua; no additional UI needed
+	local function buildReminder()
+		local g, known = ensureGroup("reminder", L["MageFoodReminderHeadline"] or "Mage food reminder for Healer")
 
-	local sliderManaMinimum = addon.functions.createSliderAce(
-		L["Minimum mana restore for food"] .. ": " .. addon.db["minManaFoodValue"] .. "%",
-		addon.db["minManaFoodValue"],
-		0,
-		100,
-		1,
-		function(self, _, value2)
-			addon.db["minManaFoodValue"] = value2
-			addon.functions.updateAllowedDrinks()
-			addon.functions.updateAvailableDrinks(false)
-			self:SetLabel(L["Minimum mana restore for food"] .. ": " .. value2 .. "%")
-		end
-	)
-	groupCore:AddChild(sliderManaMinimum)
-
-	local sliderReminderSize = addon.functions.createSliderAce(
-		L["mageFoodReminderSize"] .. ": " .. addon.db["mageFoodReminderScale"],
-		addon.db["mageFoodReminderScale"],
-		0.5,
-		2,
-		0.05,
-		function(self, _, value2)
-			addon.db["mageFoodReminderScale"] = value2
+		local cbReminder = addon.functions.createCheckboxAce(L["mageFoodReminder"], addon.db.mageFoodReminder, function(_, _, v)
+			addon.db.mageFoodReminder = v
 			addon.Drinks.functions.updateRole()
-			self:SetLabel(L["mageFoodReminderSize"] .. ": " .. value2)
-		end
-	)
-	groupCore:AddChild(sliderReminderSize)
+			buildReminder()
+		end, L["mageFoodReminderDesc2"])
+		g:AddChild(cbReminder)
 
-	local resetReminderPos = addon.functions.createButtonAce(L["mageFoodReminderReset"], 150, function()
-		addon.db["mageFoodReminderPos"] = { point = "TOP", x = 0, y = -100 }
-		addon.Drinks.functions.updateRole()
-	end)
-	groupCore:AddChild(resetReminderPos)
+		if addon.db.mageFoodReminder then
+			local cbSound = addon.functions.createCheckboxAce(L["mageFoodReminderSound"], addon.db.mageFoodReminderSound, function(_, _, v)
+				addon.db.mageFoodReminderSound = v
+				addon.Drinks.functions.updateRole()
+				buildReminder()
+			end)
+			g:AddChild(cbSound)
+
+			if addon.db.mageFoodReminderSound then
+				local cbCustom = addon.functions.createCheckboxAce(L["mageFoodReminderUseCustomSound"], addon.db.mageFoodReminderUseCustomSound, function(_, _, v)
+					addon.db.mageFoodReminderUseCustomSound = v
+					buildReminder()
+				end)
+				g:AddChild(cbCustom)
+
+				if addon.db.mageFoodReminderUseCustomSound then
+					local soundList = {}
+					if addon.ChatIM and addon.ChatIM.BuildSoundTable and not addon.ChatIM.availableSounds then addon.ChatIM:BuildSoundTable() end
+					local soundTable = (addon.ChatIM and addon.ChatIM.availableSounds) or LSM:HashTable("sound")
+					for name in pairs(soundTable or {}) do
+						soundList[name] = name
+					end
+					local list, order = addon.functions.prepareListForDropdown(soundList)
+
+					local dropJoin = addon.functions.createDropdownAce(L["mageFoodReminderJoinSound"], list, order, function(self, _, val)
+						addon.db.mageFoodReminderJoinSoundFile = val
+						self:SetValue(val)
+						local f = soundTable and soundTable[val]
+						if f then PlaySoundFile(f, "Master") end
+					end)
+					dropJoin:SetValue(addon.db.mageFoodReminderJoinSoundFile)
+					g:AddChild(dropJoin)
+
+					local dropLeave = addon.functions.createDropdownAce(L["mageFoodReminderLeaveSound"], list, order, function(self, _, val)
+						addon.db.mageFoodReminderLeaveSoundFile = val
+						self:SetValue(val)
+						local f = soundTable and soundTable[val]
+						if f then PlaySoundFile(f, "Master") end
+					end)
+					dropLeave:SetValue(addon.db.mageFoodReminderLeaveSoundFile)
+					g:AddChild(dropLeave)
+				end
+			end
+
+			local sliderReminderSize = addon.functions.createSliderAce(
+				L["mageFoodReminderSize"] .. ": " .. addon.db.mageFoodReminderScale,
+				addon.db.mageFoodReminderScale,
+				0.5,
+				2,
+				0.05,
+				function(self, _, v)
+					addon.db.mageFoodReminderScale = v
+					addon.Drinks.functions.updateRole()
+					self:SetLabel(L["mageFoodReminderSize"] .. ": " .. v)
+				end
+			)
+			g:AddChild(sliderReminderSize)
+
+			local resetReminderPos = addon.functions.createButtonAce(L["mageFoodReminderReset"], 150, function()
+				addon.db.mageFoodReminderPos = { point = "TOP", x = 0, y = -100 }
+				addon.Drinks.functions.updateRole()
+			end)
+			g:AddChild(resetReminderPos)
+		end
+
+		if known then
+			g:ResumeLayout()
+			doLayout()
+		end
+	end
+
+	buildCore()
+	buildReminder()
+	wrapper:ResumeLayout()
+	doLayout()
 end
 
 -- TODO put all the options from HealthMacro into the same menu of DrinkMacro and remove the subtree node "health"
 function addon.Drinks.functions.treeCallback(container, group)
 	container:ReleaseChildren() -- Entfernt vorherige Inhalte
 	-- Prüfen, welche Gruppe ausgewählt wurde
-	if group == "drink" then
+	if group == "drink" or group == "drink\001drinks" then
 		addDrinkFrame(container)
 	elseif group == "drink\001health" then
 		if addon.Health and addon.Health.functions and addon.Health.functions.addHealthFrame then addon.Health.functions.addHealthFrame(container) end
