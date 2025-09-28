@@ -237,8 +237,12 @@ L["unitFrameTruncateNames"] = "Truncate unit names"
 L["unitFrameMaxNameLength"] = "Maximum name length"
 L["unitFrameScaleEnable"] = "Enable frame scale adjustment"
 L["unitFrameScale"] = "Frame scale"
-L["UnitFrameUFExplain"] = "Applies to RAID and Party Frames"
+L["UnitFrameUFExplain"] = "Applies to %s, %s and %s Frames"
 L["BossHealthText"] = "Boss health text"
+
+-- Unit Frames: Resting visuals
+L["hideRestingGlow"] = "Hide resting animation and glow"
+L["hideRestingGlowDesc"] = "Removes the 'ZZZ' status texture and the resting glow on the player frame while resting"
 
 -- Health Text (player/target/boss)
 L["Health Text"] = "Health Text"

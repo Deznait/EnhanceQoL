@@ -1848,7 +1848,7 @@ local function addUnitFrame(container)
 	local groupCoreUF = addon.functions.createContainer("InlineGroup", "List")
 	wrapper:AddChild(groupCoreUF)
 
-	local labelHeadlineUF = addon.functions.createLabelAce("|cffffd700" .. L["UnitFrameUFExplain"] .. "|r", nil, nil, 14)
+	local labelHeadlineUF = addon.functions.createLabelAce("|cffffd700" .. (L["UnitFrameUFExplain"]:format(_G.RAID or "RAID", _G.PARTY or "Party", _G.PLAYER or "Player")) .. "|r", nil, nil, 14)
 	labelHeadlineUF:SetFullWidth(true)
 	groupCoreUF:AddChild(labelHeadlineUF)
 	groupCoreUF:AddChild(addon.functions.createSpacerAce())
@@ -1886,6 +1886,18 @@ local function addUnitFrame(container)
 		addon.functions.togglePartyFrameTitle(value)
 	end, nil)
 	groupCoreUF:AddChild(cbPartyFrameTitle)
+
+	-- Hide resting animation and glow on the Player frame
+	local cbRestOld = addon.functions.createCheckboxAce(
+		L["hideRestingGlow"] or "Hide resting animation and glow",
+		addon.db["hideRestingGlow"],
+		function(_, _, value)
+			addon.db["hideRestingGlow"] = value
+			if addon.functions.ApplyRestingVisuals then addon.functions.ApplyRestingVisuals() end
+		end,
+		L["hideRestingGlowDesc"] or "Removes the 'ZZZ' status texture and the resting glow on the player frame while resting."
+	)
+	groupCoreUF:AddChild(cbRestOld)
 
 	local sliderName
 	local cbTruncate = addon.functions.createCheckboxAce(L["unitFrameTruncateNames"], addon.db.unitFrameTruncateNames, function(self, _, v)
@@ -2110,7 +2122,7 @@ local function addUnitFrame2(container)
 
 	local function buildCoreUF()
 		local g, known = ensureGroup("coreUF", "")
-		local labelHeadlineUF = addon.functions.createLabelAce("|cffffd700" .. L["UnitFrameUFExplain"] .. "|r", nil, nil, 14)
+		local labelHeadlineUF = addon.functions.createLabelAce("|cffffd700" .. (L["UnitFrameUFExplain"]:format(_G.RAID or "RAID", _G.PARTY or "Party", _G.PLAYER or "Player")) .. "|r", nil, nil, 14)
 		labelHeadlineUF:SetFullWidth(true)
 		g:AddChild(labelHeadlineUF)
 		g:AddChild(addon.functions.createSpacerAce())
@@ -2146,6 +2158,18 @@ local function addUnitFrame2(container)
 			addon.functions.togglePartyFrameTitle(value)
 		end)
 		g:AddChild(cbTitle)
+
+		-- Hide resting animation and glow on the Player frame
+		local cbRest = addon.functions.createCheckboxAce(
+			L["hideRestingGlow"] or "Hide resting animation and glow",
+			addon.db["hideRestingGlow"],
+			function(_, _, value)
+				addon.db["hideRestingGlow"] = value
+				if addon.functions.ApplyRestingVisuals then addon.functions.ApplyRestingVisuals() end
+			end,
+			L["hideRestingGlowDesc"] or "Removes the 'ZZZ' status texture and the resting glow on the player frame while resting."
+		)
+		g:AddChild(cbRest)
 
 		local sliderName
 		local cbTrunc = addon.functions.createCheckboxAce(L["unitFrameTruncateNames"], addon.db.unitFrameTruncateNames, function(_, _, v)
@@ -5085,6 +5109,8 @@ end
 local function initUnitFrame()
 	addon.functions.InitDBValue("hideHitIndicatorPlayer", false)
 	addon.functions.InitDBValue("hideHitIndicatorPet", false)
+	-- Player resting visuals (ZZZ + glow)
+	addon.functions.InitDBValue("hideRestingGlow", false)
 	addon.functions.InitDBValue("hidePlayerFrame", false)
 	addon.functions.InitDBValue("hideRaidFrameBuffs", false)
 	addon.functions.InitDBValue("hidePartyFrameTitle", false)
@@ -5103,6 +5129,56 @@ local function initUnitFrame()
 	if PetHitIndicator then hooksecurefunc(PetHitIndicator, "Show", function(self)
 		if addon.db["hideHitIndicatorPet"] then PetHitIndicator:Hide() end
 	end) end
+
+	-- Hide resting ZZZ texture and resting glow loop (opt-in, perf-safe)
+	local function ApplyRestingVisuals()
+		if not PlayerFrame or not PlayerFrame.PlayerFrameContent then return end
+		local content = PlayerFrame.PlayerFrameContent
+		local main = content.PlayerFrameContentMain
+		local contextual = content.PlayerFrameContentContextual
+		local statusTexture = main and main.StatusTexture
+		local playerRestLoop = contextual and contextual.PlayerRestLoop
+		if addon.db["hideRestingGlow"] and IsResting() then
+			if statusTexture and statusTexture.Hide then statusTexture:Hide() end
+			if playerRestLoop and playerRestLoop.Hide then
+				playerRestLoop:Hide()
+				if playerRestLoop.PlayerRestLoopAnim and playerRestLoop.PlayerRestLoopAnim.Stop then playerRestLoop.PlayerRestLoopAnim:Stop() end
+			end
+		else
+			-- Let Blizzard refresh according to current resting state
+			if PlayerFrame_UpdateStatus then PlayerFrame_UpdateStatus(PlayerFrame) end
+		end
+	end
+
+	if PlayerFrame_UpdateStatus then
+		hooksecurefunc("PlayerFrame_UpdateStatus", function(self)
+			if not addon.db or not addon.db["hideRestingGlow"] then return end
+			if IsResting() then
+				local content = PlayerFrame.PlayerFrameContent
+				local main = content and content.PlayerFrameContentMain
+				local statusTexture = main and main.StatusTexture
+				if statusTexture and statusTexture.Hide then statusTexture:Hide() end
+				if PlayerFrame_UpdatePlayerRestLoop then PlayerFrame_UpdatePlayerRestLoop(true) end
+			end
+		end)
+	end
+
+	if PlayerFrame_UpdatePlayerRestLoop then
+		hooksecurefunc("PlayerFrame_UpdatePlayerRestLoop", function(state)
+			if not addon.db or not addon.db["hideRestingGlow"] then return end
+			if state then
+				local content = PlayerFrame.PlayerFrameContent
+				local contextual = content and content.PlayerFrameContentContextual
+				local playerRestLoop = contextual and contextual.PlayerRestLoop
+				if playerRestLoop and playerRestLoop.Hide then
+					playerRestLoop:Hide()
+					if playerRestLoop.PlayerRestLoopAnim and playerRestLoop.PlayerRestLoopAnim.Stop then playerRestLoop.PlayerRestLoopAnim:Stop() end
+				end
+			end
+		end)
+	end
+
+	addon.functions.ApplyRestingVisuals = ApplyRestingVisuals
 
 	function addon.functions.togglePlayerFrame(value)
 		if addon.db["showPartyFrameInSoloContent"] and value then
@@ -5227,6 +5303,8 @@ local function initUnitFrame()
 	if addon.db["hideRaidFrameBuffs"] then addon.functions.updateRaidFrameBuffs() end
 	if addon.db["unitFrameTruncateNames"] then addon.functions.updateUnitFrameNames() end
 	if addon.db["unitFrameScaleEnabled"] then addon.functions.updatePartyFrameScale() end
+	-- Apply resting visuals if option is enabled
+	if addon.db["hideRestingGlow"] and addon.functions.ApplyRestingVisuals then addon.functions.ApplyRestingVisuals() end
 	-- Initialize HealthText module
 	if addon.HealthText then
 		if addon.HealthText.SetMode then
