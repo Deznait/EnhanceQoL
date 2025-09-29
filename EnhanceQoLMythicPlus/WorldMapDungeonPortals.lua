@@ -49,35 +49,37 @@ local function IsToyUsable(id)
 end
 
 local function BuildSpellEntries()
-    if not addon or not addon.MythicPlus or not addon.MythicPlus.functions then return {} end
-    if not addon.MythicPlus.functions.BuildTeleportCompendiumSections then return {} end
-    return addon.MythicPlus.functions.BuildTeleportCompendiumSections()
+	if not addon or not addon.MythicPlus or not addon.MythicPlus.functions then return {} end
+	if not addon.MythicPlus.functions.BuildTeleportCompendiumSections then return {} end
+	return addon.MythicPlus.functions.BuildTeleportCompendiumSections()
 end
 
 local function BuildSeasonSection()
-    if not addon or not addon.MythicPlus or not addon.MythicPlus.functions then return nil end
-    if not addon.MythicPlus.functions.BuildCurrentSeasonTeleportSection then return nil end
-    return addon.MythicPlus.functions.BuildCurrentSeasonTeleportSection()
+	if not addon or not addon.MythicPlus or not addon.MythicPlus.functions then return nil end
+	if not addon.MythicPlus.functions.BuildCurrentSeasonTeleportSection then return nil end
+	return addon.MythicPlus.functions.BuildCurrentSeasonTeleportSection()
 end
 
 -- Open World Map to a mapID and create a user waypoint pin at x,y (0..1)
 local function OpenMapAndCreatePin(mapID, x, y)
-    if not mapID or not x or not y then return end
-    if WorldMapFrame and WorldMapFrame.SetMapID then
-        if not WorldMapFrame:IsShown() then
-            if ToggleMap then ToggleMap() else ShowUIPanel(WorldMapFrame) end
-        end
-        WorldMapFrame:SetMapID(mapID)
-    end
-    if C_Map and C_Map.SetUserWaypoint and UiMapPoint and UiMapPoint.CreateFromCoordinates then
-        local point = UiMapPoint.CreateFromCoordinates(mapID, x, y)
-        if point then
-            C_Map.SetUserWaypoint(point)
-            if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then
-                C_SuperTrack.SetSuperTrackedUserWaypoint(true)
-            end
-        end
-    end
+	if not mapID or not x or not y then return end
+	if WorldMapFrame and WorldMapFrame.SetMapID then
+		if not WorldMapFrame:IsShown() then
+			if ToggleMap then
+				ToggleMap()
+			else
+				ShowUIPanel(WorldMapFrame)
+			end
+		end
+		WorldMapFrame:SetMapID(mapID)
+	end
+	if C_Map and C_Map.SetUserWaypoint and UiMapPoint and UiMapPoint.CreateFromCoordinates then
+		local point = UiMapPoint.CreateFromCoordinates(mapID, x, y)
+		if point then
+			C_Map.SetUserWaypoint(point)
+			if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then C_SuperTrack.SetSuperTrackedUserWaypoint(true) end
+		end
+	end
 end
 
 -- Cooldown helpers ---------------------------------------------------------
@@ -311,25 +313,25 @@ local function CreateSecureSpellButton(parent, entry)
 
 	-- Favorite toggle after secure click resolves
 	b:RegisterForClicks("AnyDown", "AnyUp")
-    b:SetScript("PostClick", function(self, btn)
-        if btn == "RightButton" then
-            if IsShiftKeyDown() then
-                local favs = addon.db.teleportFavorites or {}
-                if favs[self.entry.spellID] then
-                    favs[self.entry.spellID] = nil
-                else
-                    favs[self.entry.spellID] = true
-                end
-                addon.db.teleportFavorites = favs
-                f:RefreshPanel()
-            else
-                local entry = self.entry or {}
-                local locID = entry.locID
-                local x, y = entry.x, entry.y
-                if locID and x and y then OpenMapAndCreatePin(locID, x, y) end
-            end
-        end
-    end)
+	b:SetScript("PostClick", function(self, btn)
+		if btn == "RightButton" then
+			if IsShiftKeyDown() then
+				local favs = addon.db.teleportFavorites or {}
+				if favs[self.entry.spellID] then
+					favs[self.entry.spellID] = nil
+				else
+					favs[self.entry.spellID] = true
+				end
+				addon.db.teleportFavorites = favs
+				f:RefreshPanel()
+			else
+				local entry = self.entry or {}
+				local locID = entry.locID
+				local x, y = entry.x, entry.y
+				if locID and x and y then OpenMapAndCreatePin(locID, x, y) end
+			end
+		end
+	end)
 
 	b:SetScript("OnEnter", function(self)
 		if not addon.db["portalShowTooltip"] then return end
@@ -398,16 +400,16 @@ local function CreateLegendRowButton(parent, entry, width, height)
 	label:SetText(entry.text or "")
 	b.Label = label
 
-    -- full-row highlight (lockable) using the same atlas as MapLegend
-    local hl = b:CreateTexture(nil, "HIGHLIGHT")
-    hl:SetAllPoints(b)
-    if hl.SetAtlas then
-        hl:SetAtlas("Options_List_Active", true)
-        if hl.SetBlendMode then hl:SetBlendMode("ADD") end
-    else
-        hl:SetColorTexture(1, 1, 1, 0.08)
-    end
-    b:SetHighlightTexture(hl)
+	-- full-row highlight (lockable) using the same atlas as MapLegend
+	local hl = b:CreateTexture(nil, "HIGHLIGHT")
+	hl:SetAllPoints(b)
+	if hl.SetAtlas then
+		hl:SetAtlas("Options_List_Active", true)
+		if hl.SetBlendMode then hl:SetBlendMode("ADD") end
+	else
+		hl:SetColorTexture(1, 1, 1, 0.08)
+	end
+	b:SetHighlightTexture(hl)
 
 	-- Casting setup (Left click) — mirror compendium logic
 	if entry.isToy then
@@ -445,45 +447,53 @@ local function CreateLegendRowButton(parent, entry, width, height)
 
 	-- Right click: toggle favorite after secure click resolves
 	b:RegisterForClicks("AnyDown", "AnyUp")
-    b:SetScript("PostClick", function(self, btn)
-        if btn == "RightButton" then
-            if IsShiftKeyDown() then
-                local favs = addon.db.teleportFavorites or {}
-                if favs[self.entry.spellID] then
-                    favs[self.entry.spellID] = nil
-                else
-                    favs[self.entry.spellID] = true
-                end
-                addon.db.teleportFavorites = favs
-                f:RefreshPanel()
-            else
-                local entry = self.entry or {}
-                local locID = entry.locID
-                local x, y = entry.x, entry.y
-                if locID and x and y then OpenMapAndCreatePin(locID, x, y) end
-            end
-        end
-    end)
+	b:SetScript("PostClick", function(self, btn)
+		if btn == "RightButton" then
+			if IsShiftKeyDown() then
+				local favs = addon.db.teleportFavorites or {}
+				if favs[self.entry.spellID] then
+					favs[self.entry.spellID] = nil
+				else
+					favs[self.entry.spellID] = true
+				end
+				addon.db.teleportFavorites = favs
+				f:RefreshPanel()
+			else
+				local entry = self.entry or {}
+				local locID = entry.locID
+				local x, y = entry.x, entry.y
+				if locID and x and y then OpenMapAndCreatePin(locID, x, y) end
+			end
+		end
+	end)
 
-    -- Tooltip + highlight lock on hover (mirrors MapLegend feel)
-    b:SetScript("OnEnter", function(self)
-        if self.SetHighlightLocked then self:SetHighlightLocked(true) else self:LockHighlight() end
-        if addon.db["portalShowTooltip"] then
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            if entry.isToy then
-                GameTooltip:SetToyByItemID(entry.toyID)
-            elseif entry.isItem then
-                GameTooltip:SetItemByID(entry.itemID)
-            else
-                GameTooltip:SetSpellByID(entry.spellID)
-            end
-            GameTooltip:Show()
-        end
-    end)
-    b:SetScript("OnLeave", function(self)
-        if self.SetHighlightLocked then self:SetHighlightLocked(false) else self:UnlockHighlight() end
-        GameTooltip:Hide()
-    end)
+	-- Tooltip + highlight lock on hover (mirrors MapLegend feel)
+	b:SetScript("OnEnter", function(self)
+		if self.SetHighlightLocked then
+			self:SetHighlightLocked(true)
+		else
+			self:LockHighlight()
+		end
+		if addon.db["portalShowTooltip"] then
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			if entry.isToy then
+				GameTooltip:SetToyByItemID(entry.toyID)
+			elseif entry.isItem then
+				GameTooltip:SetItemByID(entry.itemID)
+			else
+				GameTooltip:SetSpellByID(entry.spellID)
+			end
+			GameTooltip:Show()
+		end
+	end)
+	b:SetScript("OnLeave", function(self)
+		if self.SetHighlightLocked then
+			self:SetHighlightLocked(false)
+		else
+			self:UnlockHighlight()
+		end
+		GameTooltip:Hide()
+	end)
 
 	-- Unknown visual state: keep hover for tooltip, but block casting
 	if not entry.isKnown then
@@ -492,9 +502,7 @@ local function CreateLegendRowButton(parent, entry, width, height)
 			b.Icon:SetAlpha(0.5)
 		end
 		-- Make label clearly appear unavailable
-		if b.Label and b.Label.SetTextColor then
-			b.Label:SetTextColor(0.6, 0.6, 0.6)
-		end
+		if b.Label and b.Label.SetTextColor then b.Label:SetTextColor(0.6, 0.6, 0.6) end
 		-- Allow mouse for tooltip/right-click favorite, but prevent left-click actions
 		b:EnableMouse(true)
 		b:SetAttribute("type1", nil)
@@ -506,9 +514,7 @@ local function CreateLegendRowButton(parent, entry, width, height)
 			b.Icon:SetAlpha(1)
 		end
 		-- Restore normal label color for known/owned teleports (gold-like)
-		if b.Label and b.Label.SetTextColor then
-			b.Label:SetTextColor(1.0, 0.82, 0.0)
-		end
+		if b.Label and b.Label.SetTextColor then b.Label:SetTextColor(1.0, 0.82, 0.0) end
 		b:EnableMouse(true)
 	end
 
@@ -528,43 +534,45 @@ local function PopulatePanel()
 	if not panel then return end
 	ClearContent()
 
-    -- keep references for lightweight cooldown refresh
-    panel._allButtons = {}
+	-- keep references for lightweight cooldown refresh
+	panel._allButtons = {}
 
-    -- Combine sections with preferred order: Favorites, HOME, Season, then others
-    local combined = {}
-    local comp = BuildSpellEntries() or {}
-    local favoritesSec, homeSec
-    local others = {}
-    for _, sec in ipairs(comp) do
-        local t = sec and sec.title
-        if t == FAVORITES then
-            favoritesSec = sec
-        elseif t == HOME then
-            homeSec = sec
-        else
-            table.insert(others, sec)
-        end
-    end
+	-- Combine sections with preferred order: Favorites, HOME, Season, then others
+	local combined = {}
+	local comp = BuildSpellEntries() or {}
+	local favoritesSec, homeSec
+	local others = {}
+	for _, sec in ipairs(comp) do
+		local t = sec and sec.title
+		if t == FAVORITES then
+			favoritesSec = sec
+		elseif t == HOME then
+			homeSec = sec
+		else
+			table.insert(others, sec)
+		end
+	end
 
-    if favoritesSec then table.insert(combined, favoritesSec) end
-    if homeSec then table.insert(combined, homeSec) end
+	if favoritesSec then table.insert(combined, favoritesSec) end
+	if homeSec then table.insert(combined, homeSec) end
 
-    if addon.db and addon.db["teleportsWorldMapShowSeason"] then
-        local seasonSec = BuildSeasonSection()
-        if seasonSec and seasonSec.items and #seasonSec.items > 0 then table.insert(combined, seasonSec) end
-    end
+	if addon.db and addon.db["teleportsWorldMapShowSeason"] then
+		local seasonSec = BuildSeasonSection()
+		if seasonSec and seasonSec.items and #seasonSec.items > 0 then table.insert(combined, seasonSec) end
+	end
 
-    for _, sec in ipairs(others) do table.insert(combined, sec) end
+	for _, sec in ipairs(others) do
+		table.insert(combined, sec)
+	end
 
-    if not combined or #combined == 0 then
-        local msg = (L["teleportCompendiumHeadline"] or "Teleports") .. ": None available"
-        local label = scrollBox:CreateFontString(nil, "OVERLAY", "GameFontDisable")
-        label:SetPoint("TOPLEFT", 10, -10)
-        label:SetText(msg)
-        scrollBox:SetHeight(40)
-        return
-    end
+	if not combined or #combined == 0 then
+		local msg = (L["teleportCompendiumHeadline"] or "Teleports") .. ": None available"
+		local label = scrollBox:CreateFontString(nil, "OVERLAY", "GameFontDisable")
+		label:SetPoint("TOPLEFT", 10, -10)
+		label:SetText(msg)
+		scrollBox:SetHeight(40)
+		return
+	end
 
 	-- Layout metrics similar to MapLegendScrollFrame
 	local leftPadding = 12
@@ -581,7 +589,7 @@ local function PopulatePanel()
 	local colWidth = math.floor((usableWidth - 0) / stride) -- no horizontal spacing requested
 
 	local yOffset = -topPadding
-    for _, section in ipairs(combined) do
+	for _, section in ipairs(combined) do
 		-- category container
 		local category = CreateFrame("Frame", nil, scrollBox)
 		category:SetPoint("TOPLEFT", leftPadding, yOffset)
@@ -628,9 +636,24 @@ end
 
 -- Tab creation -------------------------------------------------------------
 local tabButton
+
+-- Prefer anchoring below WorldQuestTab's custom tab if present
+local function GetPreferredTabAnchor()
+	local wqtTab = _G and _G["WQT_QuestMapTab"]
+	if wqtTab and wqtTab.GetObjectType and wqtTab:GetObjectType() then return wqtTab end
+	return QuestMapFrame and (QuestMapFrame.MapLegendTab or QuestMapFrame.QuestsTab or (QuestMapFrame.DetailsFrame and QuestMapFrame.DetailsFrame.BackFrame)) or nil
+end
+
 local function EnsureTab(parent, anchorTo)
 	if tabButton and tabButton:GetParent() ~= parent then tabButton:SetParent(parent) end
-	if tabButton then return tabButton end
+	-- If the tab already exists, still allow re-anchoring when a better anchor shows up later
+	if tabButton then
+		if anchorTo then
+			tabButton:ClearAllPoints()
+			tabButton:SetPoint("TOP", anchorTo, "BOTTOM", 0, -15)
+		end
+		return tabButton
+	end
 
 	-- Use Blizzard QuestLog tab template for a perfect visual match
 	tabButton = CreateFrame("Button", "EQOLWorldMapDungeonPortalsTab", parent, "QuestLogTabButtonTemplate")
@@ -722,13 +745,13 @@ end
 
 -- Glue into World Map ------------------------------------------------------
 function f:TryInit()
-    -- Only ensure injection when enabled
-    if not QuestMapFrame then return end
-    if not addon.db or not addon.db["teleportsWorldMapEnabled"] then
-        if panel then panel:Hide() end
-        if tabButton then tabButton:Hide() end
-        return
-    end
+	-- Only ensure injection when enabled
+	if not QuestMapFrame then return end
+	if not addon.db or not addon.db["teleportsWorldMapEnabled"] then
+		if panel then panel:Hide() end
+		if tabButton then tabButton:Hide() end
+		return
+	end
 
 	local parent = QuestMapFrame
 	EnsurePanel(parent)
@@ -767,9 +790,27 @@ function f:TryInit()
 		QuestMapFrame.ContentsAnchor._eqolSizeHook = true
 	end
 
-	-- Anchor the tab under the Map Legend tab if we can find it
-	local anchor = QuestMapFrame.MapLegendTab or QuestMapFrame.QuestsTab or (QuestMapFrame.DetailsFrame and QuestMapFrame.DetailsFrame.BackFrame)
+	-- Anchor the tab under the preferred tab (WorldQuestTab if present)
+	local anchor = GetPreferredTabAnchor()
 	EnsureTab(parent, anchor)
+
+	-- If WorldQuestTab is enabled but its tab isn't created yet, try re-anchoring shortly after
+	if C_AddOns and C_AddOns.GetAddOnEnableState and pcall(C_AddOns.GetAddOnEnableState, "WorldQuestTab") and C_AddOns.GetAddOnEnableState("WorldQuestTab") == 2 then
+		C_Timer.After(0, function()
+			local wqt = _G and _G["WQT_QuestMapTab"]
+			if wqt then
+				EnsureTab(parent, wqt)
+				if QuestMapFrame and QuestMapFrame.ValidateTabs then QuestMapFrame:ValidateTabs() end
+			end
+		end)
+		C_Timer.After(0.2, function()
+			local wqt = _G and _G["WQT_QuestMapTab"]
+			if wqt then
+				EnsureTab(parent, wqt)
+				if QuestMapFrame and QuestMapFrame.ValidateTabs then QuestMapFrame:ValidateTabs() end
+			end
+		end)
+	end
 
 	-- Inject our panel into ContentFrames so SetDisplayMode can manage visibility
 	if QuestMapFrame.ContentFrames then
@@ -815,13 +856,13 @@ function f:TryInit()
 end
 
 function f:RefreshPanel()
-    if not addon.db or not addon.db["teleportsWorldMapEnabled"] then
-        if panel then panel:Hide() end
-        if tabButton then tabButton:Hide() end
-        return
-    end
-    if not panel or not panel:IsShown() then return end
-    PopulatePanel()
+	if not addon.db or not addon.db["teleportsWorldMapEnabled"] then
+		if panel then panel:Hide() end
+		if tabButton then tabButton:Hide() end
+		return
+	end
+	if not panel or not panel:IsShown() then return end
+	PopulatePanel()
 end
 
 -- Only recompute and apply cooldowns for existing buttons
@@ -834,35 +875,45 @@ end
 
 -- Events to build/refresh --------------------------------------------------
 f:SetScript("OnEvent", function(self, event, arg1)
-    if event == "ADDON_LOADED" and arg1 == "Blizzard_WorldMap" then
-        -- Late-load: attach our OnShow hook once the World Map exists
-        if WorldMapFrame and not WorldMapFrame._eqolTeleportHook then
-            WorldMapFrame:HookScript("OnShow", function()
-                if addon.db and addon.db["teleportsWorldMapEnabled"] then
-                    f:TryInit()
-                    if QuestMapFrame and QuestMapFrame.ValidateTabs then QuestMapFrame:ValidateTabs() end
-                    if f._selectOnNextShow and QuestMapFrame and QuestMapFrame.SetDisplayMode then
-                        QuestMapFrame:SetDisplayMode(DISPLAY_MODE)
-                        f._selectOnNextShow = nil
-                    end
-                    C_Timer.After(0, function() f:RefreshPanel() end)
-                else
-                    if panel then panel:Hide() end
-                    if tabButton then tabButton:Hide() end
-                end
-            end)
-            WorldMapFrame._eqolTeleportHook = true
-        end
-        return
-    end
+	if event == "ADDON_LOADED" and arg1 == "Blizzard_WorldMap" then
+		-- Late-load: attach our OnShow hook once the World Map exists
+		if WorldMapFrame and not WorldMapFrame._eqolTeleportHook then
+			WorldMapFrame:HookScript("OnShow", function()
+				if addon.db and addon.db["teleportsWorldMapEnabled"] then
+					f:TryInit()
+					if QuestMapFrame and QuestMapFrame.ValidateTabs then QuestMapFrame:ValidateTabs() end
+					if f._selectOnNextShow and QuestMapFrame and QuestMapFrame.SetDisplayMode then
+						QuestMapFrame:SetDisplayMode(DISPLAY_MODE)
+						f._selectOnNextShow = nil
+					end
+					C_Timer.After(0, function() f:RefreshPanel() end)
+				else
+					if panel then panel:Hide() end
+					if tabButton then tabButton:Hide() end
+				end
+			end)
+			WorldMapFrame._eqolTeleportHook = true
+		end
+		return
+	elseif event == "ADDON_LOADED" and arg1 == "WorldQuestTab" then
+		-- WorldQuestTab just loaded; if its map tab exists, re-anchor below it
+		if QuestMapFrame and WorldMapFrame then
+			local wqt = _G and _G["WQT_QuestMapTab"]
+			if wqt then
+				EnsureTab(QuestMapFrame, wqt)
+				if QuestMapFrame and QuestMapFrame.ValidateTabs then QuestMapFrame:ValidateTabs() end
+			end
+		end
+		-- Do not return here; allow further processing when map is shown
+	end
 
 	-- Only refresh when the map is actually visible; avoid work while hidden
 	if not WorldMapFrame or not WorldMapFrame:IsShown() then return end
 	if event == "SPELL_UPDATE_COOLDOWN" or event == "BAG_UPDATE_COOLDOWN" then
 		f:UpdateCooldowns()
-    elseif event == "SPELLS_CHANGED" or event == "BAG_UPDATE_DELAYED" or event == "TOYS_UPDATED" then
-        if addon.db and addon.db["teleportsWorldMapEnabled"] then f:RefreshPanel() end
-    end
+	elseif event == "SPELLS_CHANGED" or event == "BAG_UPDATE_DELAYED" or event == "TOYS_UPDATED" then
+		if addon.db and addon.db["teleportsWorldMapEnabled"] then f:RefreshPanel() end
+	end
 end)
 
 f:RegisterEvent("ADDON_LOADED")
@@ -874,73 +925,73 @@ f:RegisterEvent("BAG_UPDATE_COOLDOWN")
 
 -- make sure we also initialize when the WorldMap opens
 if WorldMapFrame and not WorldMapFrame._eqolTeleportHook then
-    WorldMapFrame:HookScript("OnShow", function()
-        if addon.db and addon.db["teleportsWorldMapEnabled"] then
-            f:TryInit()
-            if QuestMapFrame and QuestMapFrame.ValidateTabs then QuestMapFrame:ValidateTabs() end
-            if f._selectOnNextShow and QuestMapFrame and QuestMapFrame.SetDisplayMode then
-                QuestMapFrame:SetDisplayMode(DISPLAY_MODE)
-                f._selectOnNextShow = nil
-            end
-            C_Timer.After(0, function() f:RefreshPanel() end)
-        else
-            if panel then panel:Hide() end
-            if tabButton then tabButton:Hide() end
-        end
-    end)
-    WorldMapFrame._eqolTeleportHook = true
+	WorldMapFrame:HookScript("OnShow", function()
+		if addon.db and addon.db["teleportsWorldMapEnabled"] then
+			f:TryInit()
+			if QuestMapFrame and QuestMapFrame.ValidateTabs then QuestMapFrame:ValidateTabs() end
+			if f._selectOnNextShow and QuestMapFrame and QuestMapFrame.SetDisplayMode then
+				QuestMapFrame:SetDisplayMode(DISPLAY_MODE)
+				f._selectOnNextShow = nil
+			end
+			C_Timer.After(0, function() f:RefreshPanel() end)
+		else
+			if panel then panel:Hide() end
+			if tabButton then tabButton:Hide() end
+		end
+	end)
+	WorldMapFrame._eqolTeleportHook = true
 end
 
 -- Export a small helper so options code can trigger a live refresh
 function addon.MythicPlus.functions.RefreshWorldMapTeleportPanel()
-    if not addon or not addon.db then return end
+	if not addon or not addon.db then return end
 
-    -- Proactively load the World Map addon so our hooks exist
-    if not WorldMapFrame then pcall(UIParentLoadAddOn, "Blizzard_WorldMap") end
+	-- Proactively load the World Map addon so our hooks exist
+	if not WorldMapFrame then pcall(UIParentLoadAddOn, "Blizzard_WorldMap") end
 
-    if WorldMapFrame then
-        -- Ensure our OnShow hook is installed even if we missed initial load timing
-        if not WorldMapFrame._eqolTeleportHook then
-            WorldMapFrame:HookScript("OnShow", function()
-                if addon.db and addon.db["teleportsWorldMapEnabled"] then
-                    f:TryInit()
-                    if QuestMapFrame and QuestMapFrame.ValidateTabs then QuestMapFrame:ValidateTabs() end
-                    if f._selectOnNextShow and QuestMapFrame and QuestMapFrame.SetDisplayMode then
-                        QuestMapFrame:SetDisplayMode(DISPLAY_MODE)
-                        f._selectOnNextShow = nil
-                    end
-                    C_Timer.After(0, function() f:RefreshPanel() end)
-                else
-                    if panel then panel:Hide() end
-                    if tabButton then tabButton:Hide() end
-                end
-            end)
-            WorldMapFrame._eqolTeleportHook = true
-        end
+	if WorldMapFrame then
+		-- Ensure our OnShow hook is installed even if we missed initial load timing
+		if not WorldMapFrame._eqolTeleportHook then
+			WorldMapFrame:HookScript("OnShow", function()
+				if addon.db and addon.db["teleportsWorldMapEnabled"] then
+					f:TryInit()
+					if QuestMapFrame and QuestMapFrame.ValidateTabs then QuestMapFrame:ValidateTabs() end
+					if f._selectOnNextShow and QuestMapFrame and QuestMapFrame.SetDisplayMode then
+						QuestMapFrame:SetDisplayMode(DISPLAY_MODE)
+						f._selectOnNextShow = nil
+					end
+					C_Timer.After(0, function() f:RefreshPanel() end)
+				else
+					if panel then panel:Hide() end
+					if tabButton then tabButton:Hide() end
+				end
+			end)
+			WorldMapFrame._eqolTeleportHook = true
+		end
 
-        -- Always ensure our UI is injected and tabs validated, even if hidden
-        f:TryInit()
-        if QuestMapFrame and QuestMapFrame.ValidateTabs then QuestMapFrame:ValidateTabs() end
+		-- Always ensure our UI is injected and tabs validated, even if hidden
+		f:TryInit()
+		if QuestMapFrame and QuestMapFrame.ValidateTabs then QuestMapFrame:ValidateTabs() end
 
-        if not addon.db["teleportsWorldMapEnabled"] then
-            if QuestMapFrame and QuestMapFrame.GetDisplayMode and QuestMapFrame:GetDisplayMode() == DISPLAY_MODE then
-                if QuestMapFrame.MapLegendTab and QuestMapFrame.MapLegendTab.Click then
-                    QuestMapFrame.MapLegendTab:Click()
-                elseif QuestMapFrame.QuestsTab and QuestMapFrame.QuestsTab.Click then
-                    QuestMapFrame.QuestsTab:Click()
-                end
-            end
-            if panel then panel:Hide() end
-            if tabButton then tabButton:Hide() end
-            return
-        end
+		if not addon.db["teleportsWorldMapEnabled"] then
+			if QuestMapFrame and QuestMapFrame.GetDisplayMode and QuestMapFrame:GetDisplayMode() == DISPLAY_MODE then
+				if QuestMapFrame.MapLegendTab and QuestMapFrame.MapLegendTab.Click then
+					QuestMapFrame.MapLegendTab:Click()
+				elseif QuestMapFrame.QuestsTab and QuestMapFrame.QuestsTab.Click then
+					QuestMapFrame.QuestsTab:Click()
+				end
+			end
+			if panel then panel:Hide() end
+			if tabButton then tabButton:Hide() end
+			return
+		end
 
-        if WorldMapFrame:IsShown() then
-            if tabButton then tabButton:Show() end
-            if QuestMapFrame and QuestMapFrame.SetDisplayMode then QuestMapFrame:SetDisplayMode(DISPLAY_MODE) end
-            f:RefreshPanel()
-        else
-            f._selectOnNextShow = true
-        end
-    end
+		if WorldMapFrame:IsShown() then
+			if tabButton then tabButton:Show() end
+			if QuestMapFrame and QuestMapFrame.SetDisplayMode then QuestMapFrame:SetDisplayMode(DISPLAY_MODE) end
+			f:RefreshPanel()
+		else
+			f._selectOnNextShow = true
+		end
+	end
 end

@@ -12,6 +12,10 @@
 - Removed obsolete UI pages and unused tree callbacks (old Unitframe page, confirmations/mailbox stubs).
 - Dropped no-op Bank hook and other dead helpers to reduce noise and maintenance.
 
+### 🐛 Fixed
+
+- While using World Quest Tab the Map icon was on the wrong position
+
 ---
 
 ## [5.0.0] – 2025-09-28
