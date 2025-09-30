@@ -268,7 +268,7 @@ checkCurrencies = function(s)
 				lines[#lines + 1] = ""
 				lines[#lines + 1] = CURRENCY_TOTAL:format(HIGHLIGHT_FONT_COLOR_CODE, BreakUpLargeNumbers(qty)) .. FONT_COLOR_CODE_CLOSE
 				if info.useTotalEarnedForMaxQty then
-					local earnedRaw = info.trackedQuantity or info.totalEarned or 0
+					local earnedRaw = info.totalEarned or info.trackedQuantity or 0
 					local earned = BreakUpLargeNumbers(earnedRaw)
 					if info.maxQuantity and info.maxQuantity > 0 then
 						local colorCode2 = earnedRaw >= info.maxQuantity and RED_FONT_COLOR_CODE or HIGHLIGHT_FONT_COLOR_CODE
@@ -311,7 +311,7 @@ updateCurrency = function(s, id)
 	local qty = info.quantity or 0
 	local colorCode = HIGHLIGHT_FONT_COLOR_CODE
 	if info.useTotalEarnedForMaxQty and info.maxQuantity and info.maxQuantity > 0 then
-		local earnedRaw = info.trackedQuantity or info.totalEarned or 0
+		local earnedRaw = info.totalEarned or info.trackedQuantity or 0
 		if earnedRaw >= info.maxQuantity then colorCode = RED_FONT_COLOR_CODE end
 	elseif info.maxQuantity and info.maxQuantity > 0 and qty >= info.maxQuantity then
 		colorCode = RED_FONT_COLOR_CODE
@@ -327,7 +327,7 @@ updateCurrency = function(s, id)
 		lines[#lines + 1] = ""
 		lines[#lines + 1] = CURRENCY_TOTAL:format(HIGHLIGHT_FONT_COLOR_CODE, BreakUpLargeNumbers(qty)) .. FONT_COLOR_CODE_CLOSE
 		if info.useTotalEarnedForMaxQty then
-			local earnedRaw = info.trackedQuantity or info.totalEarned or 0
+			local earnedRaw = info.totalEarned or info.trackedQuantity or 0
 			local earned = BreakUpLargeNumbers(earnedRaw)
 			if info.maxQuantity and info.maxQuantity > 0 then
 				local colorCode2 = earnedRaw >= info.maxQuantity and RED_FONT_COLOR_CODE or HIGHLIGHT_FONT_COLOR_CODE
