@@ -1,11 +1,20 @@
 # Changelog
 
-## [5.2.0] – 2025-10-01
+## [5.2.0] – 2025-10-06
 
 ### ✨ Added
 
 - Items & Inventory → Bags: Option “Close bags when opening Auction House”.
   - Disabled by default. Enable to automatically close all bags when the Auction House opens.
+
+### 🐛 Fixed
+
+- Delve-O-Bot 7001 and Delver's Mana-Bound Ethergate were not working on all chars with the new Teleport World Map
+- Fixed a lua error with the chat frame when you quick-reply and post an achivement into the chat frame
+- Cooldown time in potiontracker for Draught of Silent Footfalls was wrong
+- Fontsize wasn't restored after reload on Datapanels
+
+---
 
 ## [5.1.1] – 2025-10-01
 

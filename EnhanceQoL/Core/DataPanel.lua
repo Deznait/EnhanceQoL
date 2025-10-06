@@ -330,9 +330,10 @@ function DataPanel.Create(id, name, existingOnly)
 				end
 			end
 
-			if payload.fontSize and data.fontSize ~= payload.fontSize then
-				data.text:SetFont(font, payload.fontSize, "OUTLINE")
-				data.fontSize = payload.fontSize
+			local newSize = payload.fontSize or data.fontSize
+			if newSize and data.fontSize ~= newSize then
+				data.text:SetFont(font, newSize, "OUTLINE")
+				data.fontSize = newSize
 				if not payload.parts then
 					local width = data.text:GetStringWidth()
 					if width ~= data.lastWidth then
