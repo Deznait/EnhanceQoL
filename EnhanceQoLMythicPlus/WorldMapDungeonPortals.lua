@@ -153,12 +153,6 @@ local function EnsurePanel(parent)
 	panel:EnableMouseWheel(true)
 	panel:SetAlpha(0)
 
-	-- Simple label for combat-lockdown notice
-	panel.CombatLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontDisable")
-	panel.CombatLabel:SetPoint("TOPLEFT", 10, -10)
-	panel.CombatLabel:SetText("")
-	panel.CombatLabel:Hide()
-
 	-- Border & Title are positioned after Scroll creation
 
 	-- Scroll area
@@ -558,23 +552,15 @@ end
 local function PopulatePanel()
 	if not panel then return end
 
-	-- Avoid modifying secure frames during combat; show a notice instead
+	-- Avoid modifying secure frames during combat
 	if InCombat() then
 		panel._allButtons = {}
-		if panel.CombatLabel then
-			panel.CombatLabel:SetText(ERR_AFFECTING_COMBAT)
-			panel.CombatLabel:Show()
-			scrollBox:SetHeight(40)
-			if panel.Scroll and panel.Scroll.UpdateScrollChildRect then panel.Scroll:UpdateScrollChildRect() end
-		end
+		scrollBox:SetHeight(40)
+		if panel.Scroll and panel.Scroll.UpdateScrollChildRect then panel.Scroll:UpdateScrollChildRect() end
 		return
 	end
 
 	ClearContent()
-	if panel.CombatLabel then
-		panel.CombatLabel:SetText("")
-		panel.CombatLabel:Hide()
-	end
 
 	-- keep references for lightweight cooldown refresh
 	panel._allButtons = {}
@@ -771,10 +757,7 @@ local function EnsureTab(parent, anchorTo)
 
 	tabButton:SetScript("OnMouseUp", function(self, button, upInside)
 		if button ~= "LeftButton" or not upInside then return end
-		if InCombat() then
-			if UIErrorsFrame and UIErrorsFrame.AddMessage then UIErrorsFrame:AddMessage(ERR_NOT_IN_COMBAT or "Not while in combat.") end
-			return
-		end
+		if InCombat() then return end
 		if not panel then return end
 		if QuestMapFrame and QuestMapFrame.SetDisplayMode then
 			QuestMapFrame:SetDisplayMode(DISPLAY_MODE_EQOL)
@@ -938,10 +921,6 @@ f:SetScript("OnEvent", function(self, event, arg1)
 			for _, b in ipairs(panel._allButtons) do
 				if b and b.Disable then b:Disable() end
 			end
-		end
-		if panel and panel.CombatLabel and panel:IsShown() then
-			panel.CombatLabel:SetText(((L and L["Teleports"]) or "Teleports") .. ": Not available in combat")
-			panel.CombatLabel:Show()
 		end
 
 		return
