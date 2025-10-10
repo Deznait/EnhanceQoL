@@ -608,7 +608,7 @@ addon.MythicPlus.variables.portalCompendium = {
 			[224869] = { text = "DalB", isClassTP = "MAGE", locID = 627, x = 0.6042, y = 0.4440, zoneID = 627 },
 			[224871] = { text = "DalB", isMagePortal = true, locID = 627, x = 0.6042, y = 0.4440, zoneID = 627 },
 
-			[227334] = { text = "FMW", isItem = true, itemID = 141605, isHearthstone = true, icon = 132161 },
+			[227334] = { text = "FMW", isToy = true, toyID = 141605, isHearthstone = true, icon = 132161 },
 			[82674] = { text = addon.MythicPlus.variables.hearthstoneName or "HS", isItem = true, itemID = 64457, isHearthstone = true, icon = 458240 },
 			[223444] = {
 				text = addon.MythicPlus.variables.hearthstoneName or "HS",
