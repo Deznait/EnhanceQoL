@@ -594,6 +594,7 @@ addon.MythicPlus.variables.portalCompendium = {
 		},
 	},
 	[80] = {
+		timerunner = 2,
 		headline = EXPANSION_NAME6,
 		spells = {
 			[424153] = { text = "BRH", cId = { [199] = true }, locID = 641, x = 0.3711, y = 0.5028, zoneID = 751 },
@@ -911,8 +912,11 @@ addon.MythicPlus.variables.portalCompendium = {
 		},
 	},
 	[10] = {
+		ignoreTimerunner = true,
 		headline = CLASS,
 		spells = {
+			[1225967] = { text = "Infinite Bazaar", timerunnerID = 2, isItem = true, itemID = 238727, isHearthstone = true, icon = 134491, locID = 619, x = 0.4560, y = 0.6743, zoneID = 619 },
+
 			[193759] = { text = "CLASS", isClassTP = "MAGE", x = 0.5731, y = 0.8669, zoneID = 734, locID = 734 },
 			[193753] = { text = "CLASS", isClassTP = "DRUID", x = 0.5492, y = 0.6276, zoneID = 715, locID = 715 },
 			[50977] = { text = "CLASS", isClassTP = "DEATHKNIGHT", x = 0.2706, y = 0.2994, zoneID = 648, locID = 648 },

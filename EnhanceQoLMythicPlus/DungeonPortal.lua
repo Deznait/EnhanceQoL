@@ -97,7 +97,7 @@ end
 
 local function getCurrentSeasonPortal()
 	-- Timerunners have no current-season portals; skip population
-	if addon and addon.functions and addon.functions.IsTimerunner and addon.functions.IsTimerunner() then return end
+	local timerunnerID = _G.PlayerGetTimerunningSeasonID and _G.PlayerGetTimerunningSeasonID() or nil
 
 	local cModeIDs = C_ChallengeMode.GetMapTable()
 	local cModeIDLookup = {}
@@ -110,23 +110,33 @@ local function getCurrentSeasonPortal()
 	local filteredMapID = {}
 
 	for _, section in pairs(addon.MythicPlus.variables.portalCompendium) do
-		for spellID, data in pairs(section.spells) do
-			if data.cId then
-				for cId in pairs(data.cId) do
-					local mapInfoText = data.textID and data.textID[cId] or data.text
-					if cModeIDLookup[cId] then
-						local mapName, _, _, texture, backgroundTexture = C_ChallengeMode.GetMapUIInfo(cId)
-						filteredPortalSpells[spellID] = {
-							text = data.text,
-							iconID = data.iconID,
-							-- pass through optional map pin metadata if present (use only locID)
-							locID = data.locID,
-							x = data.x,
-							y = data.y,
-						}
-						if data.faction then
-							filteredPortalSpells[spellID].faction = data.faction
-							if data.faction == faction then
+		if (timerunnerID ~= nil and timerunnerID == section.timerunner) or (timerunnerID == nil) then
+			for spellID, data in pairs(section.spells) do
+				if data.cId then
+					for cId in pairs(data.cId) do
+						local mapInfoText = data.textID and data.textID[cId] or data.text
+						if cModeIDLookup[cId] then
+							local mapName, _, _, texture, backgroundTexture = C_ChallengeMode.GetMapUIInfo(cId)
+							filteredPortalSpells[spellID] = {
+								text = data.text,
+								iconID = data.iconID,
+								-- pass through optional map pin metadata if present (use only locID)
+								locID = data.locID,
+								x = data.x,
+								y = data.y,
+							}
+							if data.faction then
+								filteredPortalSpells[spellID].faction = data.faction
+								if data.faction == faction then
+									filteredMapInfo[cId] = {
+										text = mapInfoText,
+										spellId = spellID,
+										mapName = mapName,
+										texture = texture,
+										background = backgroundTexture,
+									}
+								end
+							else
 								filteredMapInfo[cId] = {
 									text = mapInfoText,
 									spellId = spellID,
@@ -135,34 +145,26 @@ local function getCurrentSeasonPortal()
 									background = backgroundTexture,
 								}
 							end
-						else
-							filteredMapInfo[cId] = {
-								text = mapInfoText,
-								spellId = spellID,
-								mapName = mapName,
-								texture = texture,
-								background = backgroundTexture,
-							}
-						end
-						if data.mapID then
-							if type(data.mapID) == "table" then
-								for _, mID in pairs(data.mapID) do
-									filteredMapID[mID] = cId
+							if data.mapID then
+								if type(data.mapID) == "table" then
+									for _, mID in pairs(data.mapID) do
+										filteredMapID[mID] = cId
+									end
+								else
+									filteredMapID[data.mapID] = cId
 								end
-							else
-								filteredMapID[data.mapID] = cId
 							end
 						end
 					end
 				end
+				allSpells[spellID] = {
+					spellID = spellID,
+					isToy = data.isToy or false,
+					toyID = data.toyID,
+					isItem = data.isItem or false,
+					itemID = data.itemID,
+				}
 			end
-			allSpells[spellID] = {
-				spellID = spellID,
-				isToy = data.isToy or false,
-				toyID = data.toyID,
-				isItem = data.isItem or false,
-				itemID = data.itemID,
-			}
 		end
 	end
 	portalSpells = filteredPortalSpells
@@ -551,19 +553,23 @@ function addon.MythicPlus.functions.BuildTeleportCompendiumSections()
 	local baseComp = addon.MythicPlus.variables.portalCompendium or {}
 	local FAVORITES_SECTION_KEY = 10000 -- keep separate from HOME (9999)
 
+	local timerunnerID = _G.PlayerGetTimerunningSeasonID and _G.PlayerGetTimerunningSeasonID() or nil
+
 	-- Split out favourites into a separate section, no expansion-level hide anymore
 	local working = {}
 	local favSpells = {}
 	for k, section in pairs(baseComp) do
-		local newSpells = {}
-		for spellID, data in pairs(section.spells) do
-			if favorites[spellID] then
-				favSpells[spellID] = data
-			else
-				newSpells[spellID] = data
+		if (timerunnerID ~= nil and timerunnerID == section.timerunner) or (timerunnerID == nil) or section.ignoreTimerunner then
+			local newSpells = {}
+			for spellID, data in pairs(section.spells) do
+				if favorites[spellID] then
+					favSpells[spellID] = data
+				else
+					newSpells[spellID] = data
+				end
 			end
+			working[k] = { headline = section.headline, spells = newSpells }
 		end
-		working[k] = { headline = section.headline, spells = newSpells }
 	end
 	if next(favSpells) then working[FAVORITES_SECTION_KEY] = { headline = FAVORITES, spells = favSpells } end
 
@@ -623,6 +629,7 @@ function addon.MythicPlus.functions.BuildTeleportCompendiumSections()
 						and (not data.isClassTP or (addon.variables and addon.variables.unitClass == data.isClassTP))
 						and (not data.isRaceTP or (addon.variables and addon.variables.unitRace == data.isRaceTP))
 						and (not data.isMagePortal or (addon.variables and addon.variables.unitClass == "MAGE"))
+						and (not data.timerunnerID or (data.timerunnerID == timerunnerID))
 
 					for _, iid in ipairs(allowedIDs) do
 						local knownX = C_Item.GetItemCount(iid) > 0

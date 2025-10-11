@@ -1,6 +1,18 @@
 # Changelog
 
-## [5.3.0] – 2025-10-07
+## [5.4.0] – 2025-10-12
+
+### ✨ Added
+
+- Legion Remix to the Infinite Bazaar for remix characters
+
+### 🔄 Changed
+
+- Portal Compendium shows only timerunner related spells as remix character
+
+---
+
+## [5.3.0] – 2025-10-10
 
 ### 🔄 Changed
 
