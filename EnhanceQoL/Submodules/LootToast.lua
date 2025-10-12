@@ -234,6 +234,7 @@ end
 local DEFAULT_ANCHOR = { point = "BOTTOM", relativePoint = "BOTTOM", x = 0, y = 240 }
 LootToast.anchorFrame = LootToast.anchorFrame
 LootToast.defaultAlertAnchor = LootToast.defaultAlertAnchor
+local GroupLootContainer = _G.GroupLootContainer
 LootToast.defaultGroupLootAnchor = LootToast.defaultGroupLootAnchor
 
 local function RememberDefaultAnchors()

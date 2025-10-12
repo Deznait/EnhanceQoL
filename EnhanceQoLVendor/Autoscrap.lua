@@ -14,6 +14,9 @@ local Autoscrap = addon.Vendor.Autoscrap
 
 local tinsert = table.insert
 
+local RunNextFrame = _G.RunNextFrame
+local C_ScrappingMachineUI = _G.C_ScrappingMachineUI
+
 local MAX_SCRAP_SLOTS = 9
 local MAX_ACTIVATION_ATTEMPTS = 60
 

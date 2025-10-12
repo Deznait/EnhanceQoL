@@ -4063,7 +4063,7 @@ local function buildDatapanelFrame(container)
 	scroll:DoLayout()
 end
 
-local TooltipUtil = TooltipUtil
+local TooltipUtil = _G.TooltipUtil
 
 local function merchantItemIsKnown(itemIndex)
 	if not C_TooltipInfo or not C_TooltipInfo.GetMerchantItem then return false end
