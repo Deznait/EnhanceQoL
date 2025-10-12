@@ -16,6 +16,31 @@ local BUTTON_SIZE = 48
 local PREVIEW_ICON = "Interface\\Icons\\INV_Misc_Bag_10"
 local DEFAULT_ANCHOR = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -200 }
 
+local ITEM_CLASS = Enum and Enum.ItemClass
+local MISC_SUBCLASS = Enum and Enum.ItemMiscellaneousSubclass
+local TOOLTIP_CLASS_FILTER = {}
+
+if ITEM_CLASS then
+	if ITEM_CLASS.Consumable then TOOLTIP_CLASS_FILTER[ITEM_CLASS.Consumable] = true end
+	if ITEM_CLASS.Container then TOOLTIP_CLASS_FILTER[ITEM_CLASS.Container] = true end
+	if ITEM_CLASS.Miscellaneous then
+		if MISC_SUBCLASS then
+			local whitelist = {}
+			if MISC_SUBCLASS.Other then whitelist[MISC_SUBCLASS.Other] = true end
+			if MISC_SUBCLASS.Junk then whitelist[MISC_SUBCLASS.Junk] = true end
+			if MISC_SUBCLASS.Holiday then whitelist[MISC_SUBCLASS.Holiday] = true end
+			if MISC_SUBCLASS.Reagent then whitelist[MISC_SUBCLASS.Reagent] = true end
+			if next(whitelist) then
+				TOOLTIP_CLASS_FILTER[ITEM_CLASS.Miscellaneous] = whitelist
+			else
+				TOOLTIP_CLASS_FILTER[ITEM_CLASS.Miscellaneous] = true
+			end
+		else
+			TOOLTIP_CLASS_FILTER[ITEM_CLASS.Miscellaneous] = true
+		end
+	end
+end
+
 local function InCombat() return InCombatLockdown and InCombatLockdown() end
 
 local function FormatAnchorPoint(data)
@@ -176,6 +201,9 @@ function ContainerActions:Init()
 	self.initialized = true
 	self.itemCache = self.itemCache or {}
 	self.secureItems = {}
+	self.openableCache = self.openableCache or {}
+	self._safe = self._safe or {}
+	self._secure = self._secure or {}
 	self.pendingItem = nil
 	self.pendingVisibility = nil
 	self.awaitingRefresh = nil
@@ -379,29 +407,24 @@ function ContainerActions:ApplyButtonEntry(entry)
 		return
 	end
 	if entry then
+		local prev = button.entry
+		local changed = (not prev) or (prev.bag ~= entry.bag) or (prev.slot ~= entry.slot)
+
 		button.entry = entry
 		SetButtonIconTexture(button, entry.icon or PREVIEW_ICON)
 		button.itemLink = entry.link
 
-		if not button.entry or button.entry.bag ~= entry.bag or button.entry.slot ~= entry.slot then
-			local macroText = string.format("/use %d %d", entry.bag, entry.slot)
-
-			button:SetAttribute("*type*", "macro") -- wirkt auf alle Maustasten
-			button:SetAttribute("macrotext", macroText) -- eine Quelle reicht
+		if changed then
 			local macroText = ("/use %d %d"):format(entry.bag, entry.slot)
+			button:SetAttribute("*type*", "macro")
+			button:SetAttribute("macrotext", macroText)
+			button:SetAttribute("item", nil) -- Sicherheitsreset
 		end
-
-		button:SetAttribute("item", nil) -- (Sicherheits-)Reset
 	else
 		button.entry = nil
 		SetButtonIconTexture(button, nil)
 		button.itemLink = nil
 		button:SetAttribute("macrotext", nil)
-		button:SetAttribute("macrotext1", nil)
-		button:SetAttribute("macrotext2", nil)
-		button:SetAttribute("type", nil)
-		button:SetAttribute("type1", nil)
-		button:SetAttribute("type2", nil)
 		button:SetAttribute("*type*", nil)
 		button:SetAttribute("item", nil)
 	end
@@ -444,14 +467,50 @@ function ContainerActions:UpdateItems(list)
 	end
 end
 
-function ContainerActions:IsTooltipOpenable(bag, slot)
+function ContainerActions:ShouldInspectTooltip(itemID)
+	if not itemID then return false end
+	if not ITEM_CLASS then return true end
+
+	local classID, subclassID, _
+	if C_Item and C_Item.GetItemInfoInstant then
+		_, _, _, _, _, _, _, classID, subclassID = C_Item.GetItemInfoInstant(itemID)
+	end
+	if (not classID or not subclassID) and GetItemInfoInstant then
+		_, _, _, _, _, classID, subclassID = GetItemInfoInstant(itemID)
+	end
+
+	if not classID then return true end
+
+	local rule = TOOLTIP_CLASS_FILTER[classID]
+	if not rule then return false end
+	if rule == true then return true end
+	if type(rule) == "table" then
+		if not next(rule) then return true end
+		if not subclassID then return true end
+		return rule[subclassID] == true
+	end
+	return false
+end
+
+function ContainerActions:IsTooltipOpenable(bag, slot, info)
+	info = info or C_Container.GetContainerItemInfo(bag, slot)
+	if not info or not info.itemID then return false end
+
+	local itemID = info.itemID
+	if self.openableCache[itemID] ~= nil then return self.openableCache[itemID] end
+	if not self:ShouldInspectTooltip(itemID) then return false end
+
 	local tooltip = C_TooltipInfo.GetBagItem(bag, slot)
 	if not tooltip or not tooltip.lines then return false end
 	for _, line in ipairs(tooltip.lines) do
 		if line and line.leftText then
-			if line.leftText == ITEM_COSMETIC_LEARN or line.leftText == ITEM_OPENABLE then return true end
+			if line.leftText == ITEM_COSMETIC_LEARN or line.leftText == ITEM_OPENABLE then
+				self.openableCache[itemID] = true
+				return true
+			end
 		end
 	end
+	self.openableCache[itemID] = false
 	return false
 end
 
@@ -473,7 +532,9 @@ end
 
 function ContainerActions:ScanBags()
 	self:Init()
-	local safeItems, secureItems = {}, {}
+	local safeItems, secureItems = self._safe, self._secure
+	if #safeItems > 0 then wipe(safeItems) end
+	if #secureItems > 0 then wipe(secureItems) end
 	if not self:IsEnabled() then return safeItems, secureItems end
 	for bag = 0, NUM_TOTAL_EQUIPPED_BAG_SLOTS do
 		local slotCount = C_Container.GetContainerNumSlots(bag)
@@ -497,7 +558,7 @@ function ContainerActions:ScanBags()
 							end
 						end
 					else
-						if self:IsTooltipOpenable(bag, slot) then table.insert(safeItems, { bag = bag, slot = slot }) end
+						if self:IsTooltipOpenable(bag, slot, info) then safeItems[#safeItems + 1] = { bag = bag, slot = slot } end
 					end
 				end
 			end
