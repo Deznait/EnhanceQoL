@@ -222,6 +222,9 @@ function ContainerActions:OnCombatEnd()
 		self.previewRestoreAfterCombat = nil
 		self:ShowAnchorPreview()
 	end
+	if self.pendingVisibility == nil and self.desiredVisibility ~= nil then
+		self:RequestVisibility(self.desiredVisibility)
+	end
 end
 
 function ContainerActions:ShowAnchorPreview()
@@ -245,6 +248,9 @@ function ContainerActions:ShowAnchorPreview()
 	button:SetAttribute("type1", nil)
 	button:SetAttribute("macrotext1", nil)
 	button:SetAttribute("type", nil)
+	button:SetAttribute("*type*", nil)
+	button:SetAttribute("macrotext2", nil)
+	button:SetAttribute("type2", nil)
 	button.entry = nil
 	self:RequestVisibility(true)
 end
@@ -309,36 +315,55 @@ function ContainerActions:ApplyButtonEntry(entry)
 		button.entry = entry
 		SetButtonIconTexture(button, entry.icon or PREVIEW_ICON)
 		button.itemLink = entry.link
-		local macroText = string.format("/use item:%d", entry.itemID)
+		local macroText = string.format("/use %d %d", entry.bag, entry.slot)
 
-		button:EnableMouse(true)
-		button:SetAttribute("*type*", "item")
-		button:SetAttribute("item", string.format("%d %d", entry.bag, entry.slot))
-		button:SetAttribute("unit", nil) -- optional; set to "player" for self-targeting items
-		button:SetAttribute("macrotext", nil) -- ensure no stale macro remains
+		button:SetAttribute("*type*", nil)
+		button:SetAttribute("type", "macro")
+		button:SetAttribute("macrotext", macroText)
+		button:SetAttribute("type1", "macro")
+		button:SetAttribute("macrotext1", macroText)
+		button:SetAttribute("type2", nil)
+		button:SetAttribute("macrotext2", nil)
+		button:SetAttribute("item", nil)
 	else
 		button.entry = nil
 		SetButtonIconTexture(button, nil)
 		button.itemLink = nil
 		button:SetAttribute("macrotext", nil)
 		button:SetAttribute("macrotext1", nil)
+		button:SetAttribute("macrotext2", nil)
 		button:SetAttribute("type", nil)
 		button:SetAttribute("type1", nil)
+		button:SetAttribute("type2", nil)
+		button:SetAttribute("*type*", nil)
 		button:SetAttribute("item", nil)
 	end
 	self:UpdateCount()
 end
 
 function ContainerActions:RequestVisibility(show)
+	self.desiredVisibility = show and true or false
+	local button = self:EnsureButton()
 	if self.previewActive then show = true end
 	if InCombat() then
 		self.pendingVisibility = show and true or false
+		if not show and not self.previewActive then
+			button:SetAlpha(0)
+			button:EnableMouse(false)
+		end
 		return
 	end
-	local button = self:EnsureButton()
 	if show then
+		if not self.previewActive then
+			button:SetAlpha(1)
+			button:EnableMouse(true)
+		end
 		if not button:IsShown() then button:Show() end
 	else
+		if not self.previewActive then
+			button:SetAlpha(0)
+			button:EnableMouse(false)
+		end
 		if button:IsShown() then button:Hide() end
 	end
 end
@@ -372,13 +397,17 @@ function ContainerActions:IsTooltipOpenable(bag, slot)
 	return false
 end
 
-function ContainerActions:BuildEntry(bag, slot, info)
+function ContainerActions:BuildEntry(bag, slot, info, overrides)
+	overrides = overrides or {}
 	return {
 		bag = bag,
 		slot = slot,
 		itemID = info.itemID,
 		icon = info.iconFileID,
-		count = info.stackCount or 1,
+		count = overrides.count or info.stackCount or 1,
+		stackCount = info.stackCount or 1,
+		chunk = overrides.chunk,
+		meta = overrides.meta,
 		link = C_Container.GetContainerItemLink(bag, slot),
 	}
 end
@@ -393,8 +422,20 @@ function ContainerActions:ScanBags()
 			for slot = 1, slotCount do
 				local info = C_Container.GetContainerItemInfo(bag, slot)
 				if info and info.itemID and not info.isLocked then
-					if addon.general and addon.general.variables and addon.general.variables.autoOpen and addon.general.variables.autoOpen[info.itemID] then
-						table.insert(secureItems, self:BuildEntry(bag, slot, info))
+					local autoConfig = addon.general and addon.general.variables and addon.general.variables.autoOpen and addon.general.variables.autoOpen[info.itemID]
+					if autoConfig then
+						if type(autoConfig) == "table" then
+							local chunk = autoConfig.chunk or autoConfig.stackSize or autoConfig.minStack or 1
+							local minStack = autoConfig.minStack or chunk
+							local stack = info.stackCount or 1
+							local uses = 0
+							if stack >= minStack and chunk > 0 then uses = math.floor(stack / chunk) end
+							if uses > 0 then
+								table.insert(secureItems, self:BuildEntry(bag, slot, info, { count = uses, chunk = chunk, meta = autoConfig }))
+							end
+						else
+							table.insert(secureItems, self:BuildEntry(bag, slot, info))
+						end
 					else
 						if self:IsTooltipOpenable(bag, slot) then table.insert(safeItems, { bag = bag, slot = slot }) end
 					end

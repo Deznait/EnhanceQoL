@@ -21,6 +21,10 @@ addon.general.variables.autoOpen = {
 	[249787] = true, -- Court of Farondis Champion's Insignia (2k Rep)
 	[249782] = true, -- Valarjar Champion's Insignia (2k Rep)
 	[249785] = true, -- Highmountain Tribe Champion's Insignia (2k Rep)
+	[253224] = {
+		minStack = 10,
+		chunk = 10,
+	}, -- Remix: Chromatic Essence (usable in bundles of 10)
 }
 
 local AceLocale = LibStub("AceLocale-3.0")
