@@ -1,6 +1,10 @@
 # Changelog
 
-## [5.7.1] – 2025-10-17
+## [5.8.0] – 2025-10-17
+
+### ✨ Added
+
+- Options window now has a scale slider so you can resize the custom config panel without reloading.
 
 ### 🐛 Fixed
 

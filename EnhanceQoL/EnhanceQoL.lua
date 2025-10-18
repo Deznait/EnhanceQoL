@@ -14,10 +14,37 @@ local AceDB = LibStub("AceDB-3.0")
 local AceConfig = LibStub("AceConfig-3.0")
 local AceConfigDlg = LibStub("AceConfigDialog-3.0")
 local AceDBOptions = LibStub("AceDBOptions-3.0")
-local defaults = { profile = { dataPanels = {}, cvarOverrides = {}, cvarPersistenceEnabled = false } }
+local defaults = {
+	profile = {
+		dataPanels = {},
+		cvarOverrides = {},
+		cvarPersistenceEnabled = false,
+		optionsFrameScale = 1,
+	},
+}
 
 addon.AceGUI = AceGUI
 local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL")
+
+addon.functions = addon.functions or {}
+
+local OPTIONS_FRAME_MIN_SCALE = 0.5
+local OPTIONS_FRAME_MAX_SCALE = 2
+
+function addon.functions.applyOptionsFrameScale(scale)
+	local db = addon.db
+	local desired = tonumber(scale)
+	if not desired then desired = (db and db["optionsFrameScale"]) or 1.0 end
+	if desired < OPTIONS_FRAME_MIN_SCALE then desired = OPTIONS_FRAME_MIN_SCALE end
+	if desired > OPTIONS_FRAME_MAX_SCALE then desired = OPTIONS_FRAME_MAX_SCALE end
+
+	desired = math.floor(desired * 100 + 0.5) / 100
+
+	if db then db["optionsFrameScale"] = desired end
+
+	if addon.aceFrame and addon.aceFrame.SetScale then addon.aceFrame:SetScale(desired) end
+	return desired
+end
 
 local LFGListFrame = _G.LFGListFrame
 local GetContainerItemInfo = C_Container.GetContainerItemInfo
@@ -2973,6 +3000,21 @@ local function addUIFrame(container)
 				addon.functions.toggleRaidTools(addon.db["hideRaidTools"], _G.CompactRaidFrameManager)
 			end,
 		},
+		{
+			parent = "",
+			var = "optionsFrameScale",
+			type = "Slider",
+			text = L["optionsFrameScale"],
+			value = addon.db["optionsFrameScale"] or 1.0,
+			min = OPTIONS_FRAME_MIN_SCALE,
+			max = OPTIONS_FRAME_MAX_SCALE,
+			step = 0.05,
+			labelFormatter = function(val) return string.format("%.2f", val) end,
+			callback = function(widget, _, val)
+				local applied = addon.functions.applyOptionsFrameScale(val)
+				if math.abs(applied - val) > 0.0001 then widget:SetValue(applied) end
+			end,
+		},
 		-- Game Menu scaling toggle
 		{
 			parent = MAINMENU_BUTTON,
@@ -3007,9 +3049,15 @@ local function addUIFrame(container)
 			min = 0.5,
 			max = 2.0,
 			step = 0.05,
-			callback = function(_, _, val)
-				addon.db["gameMenuScale"] = val
-				addon.functions.applyGameMenuScale()
+			labelFormatter = function(val) return string.format("%.2f", val) end,
+			callback = function(widget, _, val)
+				local rounded = math.floor(val * 100 + 0.5) / 100
+				addon.db["gameMenuScale"] = rounded
+				if math.abs(rounded - val) > 0.0001 then
+					widget:SetValue(rounded)
+				else
+					addon.functions.applyGameMenuScale()
+				end
 			end,
 		})
 	end
@@ -6096,6 +6144,8 @@ local function initUI()
 	-- Game Menu (ESC) scaling
 	addon.functions.InitDBValue("gameMenuScaleEnabled", false)
 	addon.functions.InitDBValue("gameMenuScale", 1.0)
+	addon.functions.InitDBValue("optionsFrameScale", 1.0)
+	addon.functions.applyOptionsFrameScale(addon.db["optionsFrameScale"])
 
 	-- Mailbox address book
 	addon.functions.InitDBValue("enableMailboxAddressBook", false)
@@ -7104,6 +7154,7 @@ local function CreateUI()
 	-- Create the main frame
 	local frame = AceGUI:Create("Frame")
 	addon.aceFrame = frame.frame
+	addon.functions.applyOptionsFrameScale()
 	frame:SetTitle("EnhanceQoL")
 	frame:SetWidth(800)
 	frame:SetHeight(600)
@@ -7111,7 +7162,10 @@ local function CreateUI()
 
 	-- Frame wiederherstellen und überprfen, wenn das Addon geladen wird
 	frame.frame:Hide()
-	frame.frame:SetScript("OnShow", function(self) RestorePosition(self) end)
+	frame.frame:SetScript("OnShow", function(self)
+		addon.functions.applyOptionsFrameScale()
+		RestorePosition(self)
+	end)
 	frame.frame:SetScript("OnHide", function(self)
 		local point, _, _, xOfs, yOfs = self:GetPoint()
 		addon.db.point = point

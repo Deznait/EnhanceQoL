@@ -293,11 +293,14 @@ function addon.functions.createWrapperData(data, container, L)
 				widget = AceGUI:Create("Slider")
 				local value = checkboxData.value or 0
 				local labelBase = checkboxData.text or ""
+				local labelFormatter = checkboxData.labelFormatter
 				local function setLabel(val)
 					if checkboxData.showValue == false then
 						widget:SetLabel(labelBase)
 					else
-						widget:SetLabel(string.format("%s: %s", labelBase, tostring(val)))
+						local formatted = val
+						if labelFormatter then formatted = labelFormatter(val) end
+						widget:SetLabel(string.format("%s: %s", labelBase, tostring(formatted)))
 					end
 				end
 				setLabel(value)

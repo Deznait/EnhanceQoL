@@ -45,6 +45,7 @@ L["home|world"] = "home | world"
 
 L["Hide Raid Tools"] = "Hide Raid Tools in Party"
 L["hideRaidTools"] = "Hide Raid Tools in Party"
+L["optionsFrameScale"] = "Options window scale"
 L["repairCost"] = "Repaired items for "
 L["autoRepair"] = "Automatically repair all items"
 L["autoRepairDesc"] = "Repairs your equipment automatically when you visit a merchant"
