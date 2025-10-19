@@ -382,8 +382,8 @@ local CATEGORY_DATA = {
 		groups = {
 			{ type = "set_mixed", cost = 15000, items = { 4403, 4414, 4415, 4416 } },
 			{ type = "set_mixed", cost = 15000, items = { 4406, 4417, 4418, 4419 } },
-			{ type = "set_mixed", cost = 15000, items = { 4420, 4421, 4422 } },
-			{ type = "set_mixed", cost = 15000, items = { 4412, 4411, 4423, 4424, 4425 } },
+			{ type = "set_mixed", cost = 15000, items = { 4420, 4421, 4422, 4408 } },
+			{ type = "set_mixed", cost = 15000, items = { 4411, 4423, 4424, 4425 } },
 		},
 	},
 	{
@@ -393,7 +393,7 @@ local CATEGORY_DATA = {
 			{ type = "set_mixed", cost = 15000, items = { 160, 4402, 4404, 4465, 4466, 4467, 4468, 4485, 4330, 4481 } },
 			{ type = "set_mixed", cost = 15000, items = { 159, 4405, 4407, 4469, 4470, 4471, 4472, 4486, 4399, 4482, 4458 } },
 			{ type = "set_mixed", cost = 15000, items = { 158, 4409, 4410, 4473, 4474, 4475, 4476, 4487, 4400, 4483 } },
-			{ type = "set_mixed", cost = 15000, items = { 157, 4412, 4413, 4477, 4478, 4479, 4480, 4488, 4401, 4490, 4484, 5301, 5300 } },
+			{ type = "set_mixed", cost = 15000, items = { 157, 4412, 4413, 4477, 4478, 4479, 4480, 4488, 4401, 4490, 4484, 5301, 5300, 5302, 5303, 5304 } },
 		},
 	},
 	{
@@ -406,8 +406,11 @@ local CATEGORY_DATA = {
 			{ type = "set_mixed", cost = 7500, items = { 4452, 4453, 4460, 2656, 5270 } },
 			{ type = "set_mixed", cost = 2500, items = { 5294 } },
 			{ type = "set_mixed", cost = 7500, items = { 4331, 4462, 4463, 4464 } },
-			{ type = "set_mixed", cost = 2500, items = { 5291, 5295, 5296, 5297, 5298, 5299 } },
+			{ type = "set_mixed", cost = 2500, items = { 5291, 5295, 5296, 5297, 5298 } },
 			{ type = "set_mixed", cost = 7500, items = { 5292, 5293 } },
+			-- Gems of the Lightforged Draenei not yet implemented
+			-- { type = "set_mixed", cost = 7500, items = { 5299 } },
+			-- Odyns Spear has no appearanceID the items are: 255153, 255152
 		},
 	},
 	{
@@ -428,6 +431,15 @@ local CATEGORY_DATA = {
 		},
 	},
 }
+
+for i, v in pairs({}) do
+	local inf = C_TransmogSets.GetSetInfo(v)
+	if inf then
+		print(v, inf.name)
+	else
+		print(v, "not found")
+	end
+end
 
 local function normalizePhaseKind(kind)
 	if kind == "mount" then return "mount" end

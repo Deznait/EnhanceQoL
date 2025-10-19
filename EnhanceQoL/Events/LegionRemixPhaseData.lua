@@ -353,6 +353,145 @@ EnhanceQoLLegionRemixPhaseData = {
 		[253273] = 4, -- Scythe of the Unmaker (Set)
 	},
 	set = {
+		-- Dungeon Ensembles → Phase
+		-- Phase 1 (Bild 1)
+		[4415] = 1, -- Sanguine Oath Vestments
+		[4403] = 1, -- Seawitch's Terrorcloth
+		[4414] = 1, -- Vesture of Borrowed Souls
+
+		[4417] = 1, -- Bindings of Hungering Flesh
+		[4406] = 1, -- Nighthide Coat
+		[4418] = 1, -- Thirsting Hides
+
+		[4420] = 1, -- Armor of the Skyfather's Chosen
+		[4408] = 1, -- Chains of Nightmare's Embrace
+		[4421] = 1, -- Ravensteel Mail
+
+		[4424] = 1, -- Bloodforged Battleplate
+		[4423] = 1, -- Honorforged Valorplate
+		[4411] = 1, -- Suramar Silver Plating
+
+		-- Phase 3 (Bild 3)
+		[4416] = 3, -- Raiment of Night Eternal
+		[4419] = 3, -- Guise of the Nightstalker
+		[4422] = 3, -- Scalemail of Devouring Night
+		[4425] = 3, -- Nightforged Felplate
+
+		-- Lost and Found
+		[4440] = 1,
+		[4442] = 1,
+		[4446] = 1,
+		[4454] = 1,
+		[4456] = 1,
+		[4449] = 1, -- Earthbraker Draconscales
+		[4492] = 1,
+
+		-- Unicus: Exclusive Ensembles (Phase-Mapping)
+		-- Phase 1 (Bild 1)
+		[4427] = 1, -- Blazing Dreamscribed Robes
+		[4428] = 1, -- Dreamwatcher Vestments
+		[4429] = 1, -- Dreamseeker Vestments
+		[4430] = 1, -- Nightrune Robes
+		[4431] = 1, -- Earthrune Robes
+		[4432] = 1, -- Skyrune Robes
+		[4491] = 1, -- Verdant Dreamscribed Robes
+
+		[4433] = 1, -- Slayer's Golden Scarguards
+		[4434] = 1, -- Slayer's Silver Scarguards
+		[4435] = 1, -- Fel-Bloodied Battlegear
+		[4436] = 1, -- Searaider's Battlegarb
+		[4437] = 1, -- Gladeraider's Battlegarb
+		[4438] = 1, -- Barkbinds of the Archdruid's Nightmare  (aus deinem ID-Dump)
+
+		[4443] = 1, -- Jarl's Battlescales
+		[4444] = 1, -- Ruby Drake Hunter's Kit
+		[4447] = 1, -- Highpeak Dragonscale
+		[4448] = 1, -- Dreamweald Dragonscale
+		[4450] = 1, -- Firewurm Dragonscale
+
+		[2656] = 1, -- Dream Defender's Emerald Guardplate
+		[4452] = 1, -- Jarl's Battlehorns
+		[4453] = 1, -- Storm Champion's Warharness
+		[5270] = 1, -- Tidesoaked Champion's Battlegear
+
+		-- Back & Shoulders (Bild 1)
+		[5294] = 1, -- Mantles of the Nightwell
+		[5291] = 1, -- Tideskorn Hunter's Munitions
+		[5292] = 1, -- Windrunner Quivers
+
+		-- Weapons (Bild 1)
+		[5293] = 1, -- Arms of the Felforged Knight
+		[5295] = 1, -- Mo'arg Swords
+		[5296] = 1, -- Bone Scythes
+		[5297] = 1, -- Immortal Maces
+		[5298] = 1, -- Mo'arg Hornmaces
+		[5299] = 1, -- Gems of the Lightforged Draenei
+		-- (Odyn's Spears ist im Screen 1, aber die SetID war nicht im ID-Screenshot. Gib sie mir, dann ergänze ich sie.)
+
+		-- Phase 4 (Bild 2)
+		[4489] = 4, -- Stygian Silks
+		[4457] = 4, -- Argussian Demonsbane Armor
+		[4459] = 4, -- Vestments of Eredathian Sacrifice
+		[4460] = 4, -- Antoran Guard's Golden Battleplate
+
+		-- Heritage (Bild 2)
+		[4331] = 4, -- Heritage of the Lightforged - Crimson Vengeance
+		[4462] = 4, -- Heritage of the Lightforged - Hologemmed
+		[4463] = 4, -- Heritage of the Lightforged - Holy Gold
+		[4464] = 4, -- Heritage of the Shal'dorei - Vineyard Red
+
+		--open world
+		[4412] = 1, -- Jandvik Diver's Metal
+		[4413] = 1, -- Leyline Defender's Sunplate Armor
+		[4477] = 1, -- Thunderpeak Boneguards
+		[4478] = 1, -- Nar'thalas Graduate's Trim
+		[4479] = 1, -- Kal'delar Battleplate
+		[4480] = 1, -- Vrykul Funereal Regalia
+		[158] = 1, -- Fel-Chain Mail Armor
+		[4409] = 1, -- Chains of Helheim
+		[4410] = 1, -- Darkwatcher Bindings
+		[4473] = 1, -- Dreadthorn Battlegear
+		[4474] = 1, -- Scales of Remembered Eternity
+		[4475] = 1, -- Stormborn Laminar Armor
+		[4476] = 1, -- Highmountain Riverscales
+		[159] = 1, -- Felshroud Armor
+		[4405] = 1, -- Battlegear of the Dreadhide Stalker
+		[4407] = 1, -- Ambervale Bonehide
+		[4469] = 1, -- Highmountain Hides
+		[4470] = 1, -- Haustvelt Leathers
+		[4471] = 1, -- Sablehide Vestments
+		[4472] = 1, -- Llothien Prowler's Kit
+		[160] = 1, -- Fel-Infused Cloth Armor
+		[4402] = 1, -- Vestments of the Manasworn
+		[4404] = 1, -- Moonfall Robes
+		[4465] = 1, -- Regalia of the Hrydshal Runespeaker
+		[4466] = 1, -- Crescent Vale Raiment
+		[4467] = 1, -- Wine-dark Royal Robes
+		[4468] = 1, -- Leyline Scholar's Regalia
+		[157] = 1, -- Felforged Plate Armor
+
+		[4488] = 3, -- Moonshatter Warplate
+		[4401] = 3, -- Xorothian Plate Armor
+		[4487] = 3, -- Shrinebreaker's Battlegear
+		[4400] = 3, -- Ered'ruin Scalemail
+		[4486] = 3, -- Lunarlight Leathers
+		[4399] = 3, -- Netherfiend Battlegear
+		[4485] = 3, -- Riven Priesthood Regalia
+		[4330] = 3, -- Vileweave Vestments
+
+		[4490] = 4, -- Garothi Battleplate
+		[4484] = 4, -- Praetorium Guard's Plate Armor
+		[5304] = 4, -- Triumvirate High Guard’s Plate
+		[5303] = 4, -- Forgotten Conservatory Clothes
+		[5302] = 4, -- Eredath Lightseeker’s Regalia
+		[5301] = 4, -- Zealous Felslingers Battle Armor
+		[5300] = 4, -- World-Defiler's Battle Armor
+		[4483] = 4, -- Oronaar Disciple's Mail Armor
+		[4482] = 4, -- Arinor Keeper's Leather Armor
+		[4458] = 4, -- Stygian Hides
+		[4481] = 4, -- Doomsinger's Cloth Armor
+
+		--cloaks
 		-- 1) Skies of Fire (Default für alle nicht genannten)
 		[4502] = 1,
 		[4500] = 1,
@@ -370,7 +509,7 @@ EnhanceQoLLegionRemixPhaseData = {
 		[4501] = 1,
 		[4499] = 1,
 		[4497] = 1,
-		
+
 		-- 3) Legionfall
 		[4506] = 3,
 
