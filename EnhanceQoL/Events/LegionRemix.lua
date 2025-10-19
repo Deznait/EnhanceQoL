@@ -61,24 +61,72 @@ function LegionRemix:GetAllPhases()
 	return phases
 end
 
-function LegionRemix:GetActivePhaseFilterSet()
+function LegionRemix:GetPhaseReleaseTimes()
+	local releaseTimes = {}
+	local patchInfo = addon and addon.variables and addon.variables.patchInformations
+	if type(patchInfo) == "table" then
+		for key, value in pairs(patchInfo) do
+			local phase = key:match("^legionRemixPhase(%d+)$")
+			if phase then releaseTimes[tonumber(phase)] = value end
+		end
+	end
+	return releaseTimes
+end
+
+function LegionRemix:GetCurrentPhase()
+	local releaseTimes = self:GetPhaseReleaseTimes()
+	if not releaseTimes then return nil end
+	local now = type(GetServerTime) == "function" and GetServerTime() or time()
+	local activePhase
+	for phase, timestamp in pairs(releaseTimes) do
+		if timestamp and now >= timestamp then
+			if not activePhase or phase > activePhase then activePhase = phase end
+		end
+	end
+	return activePhase
+end
+
+function LegionRemix:GetPhaseFilterMode()
 	local db = self:GetDB()
-	local filters = db and db.phaseFilters or {}
+	if not db then return "all" end
+	local filters = db.phaseFilters or {}
+	local mode = filters.mode
+	if mode == "current" then return "current" end
+	return "all"
+end
+
+function LegionRemix:SetPhaseFilterMode(mode)
+	local db = self:GetDB()
+	if not db then return end
+	db.phaseFilters = db.phaseFilters or {}
+	if mode ~= "current" then mode = "all" end
+	if db.phaseFilters.mode == mode then return end
+	db.phaseFilters.mode = mode
+	self:RefreshData()
+end
+
+function LegionRemix:GetActivePhaseFilterSet()
+	local mode = self:GetPhaseFilterMode()
+	local phases = self:GetAllPhases()
 	local set = {}
-	local selectedCount = 0
-	for phase, enabled in pairs(filters) do
-		if enabled and type(phase) == "number" then
-			set[phase] = true
-			selectedCount = selectedCount + 1
+	if mode == "current" then
+		local currentPhase = self:GetCurrentPhase()
+		local releaseTimes = self:GetPhaseReleaseTimes()
+		local now = type(GetServerTime) == "function" and GetServerTime() or time()
+		for _, phase in ipairs(phases) do
+			if currentPhase then
+				if phase <= currentPhase then set[phase] = true end
+			else
+				local release = releaseTimes and releaseTimes[phase]
+				if release and now >= release then set[phase] = true end
+			end
 		end
+		return set, false
 	end
-	if selectedCount == 0 then
-		for _, phase in ipairs(self:GetAllPhases()) do
-			set[phase] = true
-		end
-		return set, true
+	for _, phase in ipairs(phases) do
+		set[phase] = true
 	end
-	return set, false
+	return set, true
 end
 
 function LegionRemix:IsPhaseActive(phase)
@@ -88,35 +136,38 @@ function LegionRemix:IsPhaseActive(phase)
 end
 
 function LegionRemix:SetPhaseFilter(phase, enabled)
-	local db = self:GetDB()
-	if not db then return end
-	db.phaseFilters = db.phaseFilters or {}
-	if enabled then
-		db.phaseFilters[phase] = true
-	else
-		db.phaseFilters[phase] = nil
+	if phase == "all" then
+		self:SetPhaseFilterMode("all")
+		return
 	end
-	self:RefreshData()
+	if phase == "current" then
+		self:SetPhaseFilterMode(enabled and "current" or "all")
+		return
+	end
+	if enabled then
+		self:SetPhaseFilterMode("current")
+	else
+		self:SetPhaseFilterMode("all")
+	end
 end
 
 function LegionRemix:TogglePhaseFilter(phase)
-	local db = self:GetDB()
-	if not db then return end
-	db.phaseFilters = db.phaseFilters or {}
-	if db.phaseFilters[phase] then
-		db.phaseFilters[phase] = nil
-	else
-		db.phaseFilters[phase] = true
+	if phase == "current" then
+		if self:GetPhaseFilterMode() == "current" then
+			self:SetPhaseFilterMode("all")
+		else
+			self:SetPhaseFilterMode("current")
+		end
+		return
 	end
-	self:RefreshData()
+	if self:GetPhaseFilterMode() == "current" then
+		self:SetPhaseFilterMode("all")
+	else
+		self:SetPhaseFilterMode("current")
+	end
 end
 
-function LegionRemix:ResetPhaseFilters()
-	local db = self:GetDB()
-	if not db then return end
-	db.phaseFilters = {}
-	self:RefreshData()
-end
+function LegionRemix:ResetPhaseFilters() self:SetPhaseFilterMode("all") end
 
 function LegionRemix:SetFilterButtonActive(button, active)
 	if not button then return end
@@ -153,7 +204,7 @@ function LegionRemix:BuildFilterButtons()
 	bar:Show()
 	bar.hasButtons = true
 
-	local function createButton(key, label, onClick)
+	local function createButton(key, label, onClick, mode)
 		local btn = CreateFrame("Button", nil, bar, "BackdropTemplate")
 		btn:SetHeight(22)
 		btn:SetBackdrop({
@@ -176,14 +227,12 @@ function LegionRemix:BuildFilterButtons()
 		end)
 		table.insert(bar.buttons, btn)
 		self.filterButtons[key] = btn
+		btn.mode = mode
 		return btn
 	end
 
-	createButton("all", T("All Phases", "All Phases"), function() LegionRemix:ResetPhaseFilters() end)
-
-	for _, phase in ipairs(phases) do
-		createButton("phase_" .. phase, string.format(T("Phase %d", "Phase %d"), phase), function() LegionRemix:TogglePhaseFilter(phase) end).phase = phase
-	end
+	createButton("all", T("All", "All"), function() LegionRemix:ResetPhaseFilters() end, "all")
+	createButton("current", T("Current Available", "Current Available"), function() LegionRemix:SetPhaseFilterMode("current") end, "current")
 
 	self:LayoutFilterButtons()
 	if C_Timer then C_Timer.After(0, function() LegionRemix:LayoutFilterButtons() end) end
@@ -191,11 +240,13 @@ end
 
 function LegionRemix:UpdateFilterButtons()
 	if not self.filterButtons then return end
-	local activeSet, allActive = self:GetActivePhaseFilterSet()
-	local allButton = self.filterButtons.all
-	if allButton then self:SetFilterButtonActive(allButton, allActive) end
-	for key, btn in pairs(self.filterButtons) do
-		if key ~= "all" and btn.phase then self:SetFilterButtonActive(btn, allActive or activeSet[btn.phase]) end
+	local mode = self:GetPhaseFilterMode()
+	for _, btn in pairs(self.filterButtons) do
+		if btn.mode == "all" then
+			self:SetFilterButtonActive(btn, mode == "all")
+		elseif btn.mode == "current" then
+			self:SetFilterButtonActive(btn, mode == "current")
+		end
 	end
 end
 
@@ -211,7 +262,7 @@ local DEFAULTS = {
 	itemNameCache = {},
 	categoryFilters = {},
 	zoneFilters = {},
-	phaseFilters = {},
+	phaseFilters = { mode = "all" },
 	anchor = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -120 },
 }
 
@@ -657,9 +708,32 @@ end
 
 function LegionRemix:GetDB()
 	local db = getProfile()
+	self:EnsurePhaseFilterDefaults(db)
 	self:EnsureCategoryFilterDefaults(db)
 	self:EnsureZoneFilterDefaults(db)
 	return db
+end
+
+function LegionRemix:EnsurePhaseFilterDefaults(db)
+	if not db then return end
+	local filters = db.phaseFilters
+	if type(filters) ~= "table" then
+		filters = {}
+		db.phaseFilters = filters
+	end
+	local hasNumeric = false
+	for key in pairs(filters) do
+		if type(key) == "number" then
+			hasNumeric = true
+			break
+		end
+	end
+	if hasNumeric then
+		filters = { mode = "all" }
+		db.phaseFilters = filters
+	end
+	local mode = filters.mode
+	if mode ~= "current" and mode ~= "all" then filters.mode = "all" end
 end
 
 function LegionRemix:EnsureCategoryFilterDefaults(db)
@@ -776,23 +850,6 @@ function LegionRemix:GetZoneFilterOrder()
 		if not found then table.insert(order, key) end
 	end
 	return order
-end
-
-function LegionRemix:FormatPhaseLabel(phases)
-	if not phases or #phases == 0 then return nil end
-	if #phases == 1 then
-		return string.format(T("Phase %d", "Phase %d"), phases[1])
-	elseif #phases == 2 then
-		return string.format(T("Phases %s & %s", "Phases %s & %s"), phases[1], phases[2])
-	else
-		local display = {}
-		for i = 1, math.min(#phases, 3) do
-			display[#display + 1] = tostring(phases[i])
-		end
-		local label = table.concat(display, ", ")
-		if #phases > 3 then label = string.format(T("%s +%d more", "%s +%d more"), label, #phases - 3) end
-		return string.format(T("Phases %s", "Phases %s"), label)
-	end
 end
 
 function LegionRemix:GetActiveZoneFilters()
@@ -1881,17 +1938,7 @@ function LegionRemix:UpdateOverlay()
 	frame.remainingText:SetWidth(availableWidth * 0.55)
 
 	frame.bronzeText:SetFormattedText("%s: %s", CURRENCY, formatBronze(bronze))
-	if not allActive then
-		local activeList = {}
-		for phase in pairs(activeSet) do
-			table.insert(activeList, phase)
-		end
-		table.sort(activeList)
-		local phaseLabel = self:FormatPhaseLabel(activeList)
-		frame.remainingText:SetFormattedText("%s (%s): %s", T("Total Remaining", "Total Remaining"), phaseLabel or "-", formatBronze(remaining))
-	else
-		frame.remainingText:SetFormattedText("%s: %s", T("Total Remaining", "Total Remaining"), formatBronze(remaining))
-	end
+	frame.remainingText:SetFormattedText("%s: %s", T("Total Remaining", "Total Remaining"), formatBronze(remaining))
 
 	if db and db.collapsed then
 		if frame.filterBar and frame.filterBar.hasButtons then frame.filterBar:Hide() end
@@ -2162,10 +2209,7 @@ function LegionRemix:BuildOptionsUI(container)
 			zoneDropdown:SetItemValue(key, LegionRemix:IsZoneFilterEnabled(key))
 		end
 	end
-	zoneDropdown:SetCallback("OnValueChanged", function(_, _, key, state)
-		LegionRemix:SetZoneFilter(key, state)
-		refreshZoneDropdown()
-	end)
+	zoneDropdown:SetCallback("OnValueChanged", function(_, _, key, state) LegionRemix:SetZoneFilter(key, state) end)
 	scroll:AddChild(zoneDropdown)
 	refreshZoneDropdown()
 
@@ -2223,7 +2267,6 @@ function LegionRemix:BuildOptionsUI(container)
 	end
 	categoryDropdown:SetCallback("OnValueChanged", function(_, _, key, state)
 		LegionRemix:SetCategoryVisibility(key, state)
-		refreshCategoryDropdown()
 	end)
 	scroll:AddChild(categoryDropdown)
 	refreshCategoryDropdown()

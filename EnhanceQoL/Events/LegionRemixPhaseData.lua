@@ -345,8 +345,6 @@ EnhanceQoLLegionRemixPhaseData = {
 		[153204] = 4,
 		[153253] = 4,
 		[153293] = 4,
-
-		-- 5) Infinite Echoes
 	},
 	rare_appearance = {
 		[242368] = 1, -- The First Satyr's Spaulders
@@ -605,7 +603,6 @@ EnhanceQoLLegionRemixPhaseData = {
 		[2119] = 4,
 		[2120] = 4,
 		[2136] = 4,
-
 	},
 	achievement = {
 		[42301] = 1,
