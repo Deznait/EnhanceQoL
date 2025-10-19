@@ -256,7 +256,7 @@ local DEFAULTS = {
 	itemNameCache = {},
 	categoryFilters = {},
 	hideCompleteCategories = false,
-	zoneFilters = { dungeon = true, world = true, raid = true, other = true },
+	zoneFilters = {},
 	phaseFilters = { mode = "all" },
 	anchor = { point = "TOPLEFT", relativePoint = "TOPLEFT", x = 0, y = -120 },
 }
