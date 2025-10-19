@@ -353,6 +353,45 @@ EnhanceQoLLegionRemixPhaseData = {
 		[253273] = 4, -- Scythe of the Unmaker (Set)
 	},
 	set = {
+		-- Raid ensembles: Nighthold=1, Tomb of Sargeras=3, Antorus=4
+		[1004] = 1,
+		[1338] = 3,
+		[1474] = 4, -- DK
+		[1000] = 1,
+		[1334] = 3,
+		[1478] = 4, -- DH
+		[996] = 1,
+		[1330] = 3,
+		[1482] = 4, -- Druid
+		[992] = 1,
+		[1326] = 3,
+		[1486] = 4, -- Hunter
+		[998] = 1,
+		[1322] = 3,
+		[1490] = 4, -- Mage
+		[984] = 1,
+		[1318] = 3,
+		[1494] = 4, -- Monk
+		[980] = 1,
+		[1314] = 3,
+		[1498] = 4, -- Paladin
+		[311] = 1,
+		[1310] = 3,
+		[1502] = 4, -- Priest
+		[944] = 1,
+		[1308] = 3,
+		[1506] = 4, -- Rogue
+		[935] = 1,
+		[1304] = 3,
+		[1510] = 4, -- Shaman
+		[321] = 1,
+		[1299] = 3,
+		[1514] = 4, -- Warlock
+		[939] = 1,
+		[1295] = 3,
+		[1518] = 4, -- Warrior
+		[5276] = 4, -- Scythe of the Unmaker (Antorus)
+
 		-- Dungeon Ensembles → Phase
 		-- Phase 1 (Bild 1)
 		[4415] = 1, -- Sanguine Oath Vestments

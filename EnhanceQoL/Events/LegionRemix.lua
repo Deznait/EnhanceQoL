@@ -373,7 +373,6 @@ local CATEGORY_DATA = {
 					WARRIOR = { 939, 1295, 1518 },
 				},
 			},
-			{ type = "set_mixed", cost = 30000, items = { 5276 } },
 		},
 	},
 	{
@@ -432,7 +431,21 @@ local CATEGORY_DATA = {
 	},
 }
 
-for i, v in pairs({}) do
+for i, v in pairs({
+	  1004, 1338, 1474,
+	  1000, 1334, 1478,
+	  996, 1330, 1482,
+	  992, 1326, 1486,
+	  998, 1322, 1490,
+	  984, 1318, 1494,
+	  980, 1314, 1498,
+	  311, 1310, 1502,
+	  944, 1308, 1506,
+	  935, 1304, 1510,
+	  321, 1299, 1514,
+	  939, 1295, 1518,
+	  5276
+}) do
 	local inf = C_TransmogSets.GetSetInfo(v)
 	if inf then
 		print(v, inf.name)
