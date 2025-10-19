@@ -295,6 +295,10 @@ local CLASS_MASKS = {
 }
 
 local SUPPORTED_ZONE_TYPES = { "world", "dungeon", "raid" }
+local SUPPORTED_ZONE_LOOKUP = {}
+for _, key in ipairs(SUPPORTED_ZONE_TYPES) do
+	SUPPORTED_ZONE_LOOKUP[key] = true
+end
 
 local INSTANCE_DIFFICULTY_GROUPS = {
 	world = { ids = { 0 } },
@@ -572,14 +576,11 @@ function LegionRemix:GetPhaseLookup() return PHASE_LOOKUP end
 function LegionRemix:GetPhaseAchievements() return self.phaseAchievements end
 
 local ZONE_TYPE_LABELS = {
-	-- any = ALL,
 	world = WORLD,
 	dungeon = LFG_TYPE_DUNGEON,
 	raid = LFG_TYPE_RAID,
 	other = OTHER,
 }
-
-local ZONE_TYPE_ORDER = { "world", "dungeon", "raid", "other" }
 
 function LegionRemix:GetZoneTypeLabel(key) return ZONE_TYPE_LABELS[key] or key end
 
@@ -732,24 +733,16 @@ end
 function LegionRemix:EnsureZoneFilterDefaults(db)
 	db = db or self:GetDB()
 	if not db then return end
-	db.zoneFilters = db.zoneFilters or {}
-	local hasSelection = false
-	for key, value in pairs(db.zoneFilters) do
-		if value then
-			hasSelection = true
-			if key == "any" then
-				-- if "any" is already active we can clear other keys
-				db.zoneFilters = { any = true }
-				return
-			end
-		end
+	local filters = db.zoneFilters or {}
+	db.zoneFilters = filters
+	if filters.any then
+		db.zoneFilters = {}
+		filters = db.zoneFilters
+	end
+	for key, value in pairs(filters) do
+		if not SUPPORTED_ZONE_LOOKUP[key] or value ~= true then filters[key] = nil end
 	end
 	self:InitializeZoneTypes()
-	if not hasSelection then
-		for _, zoneKey in ipairs(SUPPORTED_ZONE_TYPES) do
-			db.zoneFilters[zoneKey] = true
-		end
-	end
 end
 
 function LegionRemix:GetCategoryOptions()
@@ -815,30 +808,17 @@ end
 
 function LegionRemix:GetZoneFilterOptions()
 	self:InitializeZoneTypes()
-	local options = { any = self:GetZoneTypeLabel("any") }
-	if self.zoneTypeLabels then
-		for key, label in pairs(self.zoneTypeLabels) do
-			if key ~= "any" then options[key] = label end
-		end
+	local options = {}
+	for _, key in ipairs(SUPPORTED_ZONE_TYPES) do
+		options[key] = self:GetZoneTypeLabel(key)
 	end
 	return options
 end
 
 function LegionRemix:GetZoneFilterOrder()
-	local options = self:GetZoneFilterOptions()
 	local order = {}
-	for _, key in ipairs(ZONE_TYPE_ORDER) do
-		if options[key] then table.insert(order, key) end
-	end
-	for key in pairs(options) do
-		local found = false
-		for _, existing in ipairs(order) do
-			if existing == key then
-				found = true
-				break
-			end
-		end
-		if not found then table.insert(order, key) end
+	for _, key in ipairs(SUPPORTED_ZONE_TYPES) do
+		table.insert(order, key)
 	end
 	return order
 end
@@ -846,42 +826,29 @@ end
 function LegionRemix:GetActiveZoneFilters()
 	local db = self:GetDB()
 	local filters = {}
-	local hasSpecific = false
 	for key, enabled in pairs(db.zoneFilters or {}) do
-		if enabled then
-			filters[key] = true
-			if key ~= "any" then hasSpecific = true end
-		end
+		if enabled and SUPPORTED_ZONE_LOOKUP[key] then filters[key] = true end
 	end
-	return filters, hasSpecific
+	return filters, next(filters) ~= nil
 end
 
 function LegionRemix:IsZoneFilterEnabled(key)
 	local db = self:GetDB()
 	local filters = db.zoneFilters or {}
-	if key == "any" then return filters.any or false end
-	if filters.any then return false end
-	if not next(filters) then return true end
+	if not SUPPORTED_ZONE_LOOKUP[key] then return false end
+	if not next(filters) then return false end
 	return filters[key] and true or false
 end
 
 function LegionRemix:SetZoneFilter(key, enabled)
+	if not SUPPORTED_ZONE_LOOKUP[key] then return end
 	local db = self:GetDB()
 	if not db then return end
 	db.zoneFilters = db.zoneFilters or {}
-	if key == "any" then
-		if enabled then
-			db.zoneFilters = { any = true }
-		else
-			db.zoneFilters.any = nil
-		end
+	if enabled then
+		db.zoneFilters[key] = true
 	else
-		if enabled then
-			db.zoneFilters[key] = true
-			db.zoneFilters.any = nil
-		else
-			db.zoneFilters[key] = nil
-		end
+		db.zoneFilters[key] = nil
 	end
 	self:UpdateOverlay()
 end
@@ -1467,14 +1434,10 @@ function LegionRemix:GetBronzeCurrency()
 end
 
 function LegionRemix:IsInLegionRemixZone()
-	local filters, hasSpecific = self:GetActiveZoneFilters()
-	if filters.any then return true end
-	if not next(filters) then return true end
-
+	local filters, hasSelection = self:GetActiveZoneFilters()
+	if not hasSelection then return true end
 	local zoneType = self:GetZoneCategory()
 	if not zoneType then return false end
-	if not hasSpecific then return true end
-
 	return filters[zoneType] and true or false
 end
 
@@ -2409,28 +2372,6 @@ function LegionRemix:BuildOptionsUI(container)
 		scroll:AddChild(zoneDropdown)
 		refreshZoneDropdown()
 
-		local zoneButtons = AceGUI:Create("SimpleGroup")
-		zoneButtons:SetLayout("Flow")
-		zoneButtons:SetFullWidth(true)
-		local allZonesBtn = AceGUI:Create("Button")
-		allZonesBtn:SetText(L["Remix Zones"])
-		allZonesBtn:SetWidth(140)
-		allZonesBtn:SetCallback("OnClick", function()
-			LegionRemix:ResetZoneFilters()
-			refreshZoneDropdown()
-		end)
-		zoneButtons:AddChild(allZonesBtn)
-
-		local everywhereBtn = AceGUI:Create("Button")
-		everywhereBtn:SetText(L["Show Everywhere"])
-		everywhereBtn:SetWidth(160)
-		everywhereBtn:SetCallback("OnClick", function()
-			LegionRemix:SetZoneFilter("any", true)
-			refreshZoneDropdown()
-		end)
-		zoneButtons:AddChild(everywhereBtn)
-		scroll:AddChild(zoneButtons)
-
 		addSpacer(scroll)
 
 		addCheckbox(scroll, L["Only consider sets wearable by the current character"], function()
@@ -2513,14 +2454,6 @@ function LegionRemix:BuildOptionsUI(container)
 		refreshBtn:SetWidth(160)
 		refreshBtn:SetCallback("OnClick", function() LegionRemix:RefreshData() end)
 		buttonsGroup:AddChild(refreshBtn)
-
-		addSpacer(scroll)
-
-		local status = AceGUI:Create("Label")
-		status:SetFullWidth(true)
-		local remaining = math.max((LegionRemix.totalCost or 0) - (LegionRemix.totalCollected or 0), 0)
-		status:SetText(string.format(L["Remaining Bronze: %s"], formatBronze(remaining)))
-		scroll:AddChild(status)
 	end
 end
 
