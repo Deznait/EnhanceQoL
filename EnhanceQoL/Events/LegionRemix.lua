@@ -1512,7 +1512,7 @@ function LegionRemix:ShowCategoryTooltip(row)
 			local entry = missing[i]
 			local label = self:GetItemName(entry)
 			if entry.phase then label = string.format("%s (%s)", label, string.format(T("Phase %d", "Phase %d"), entry.phase)) end
-			local costDisplay = (entry.cost and entry.cost > 0) and formatBronze(entry.cost) or T("No Cost", "No Cost")
+			local costDisplay = (entry.cost and entry.cost > 0) and formatBronze(entry.cost) or ""
 			GameTooltip:AddDoubleLine(label, costDisplay, 0.9, 0.9, 0.9, 0.7, 0.9, 0.7)
 			if entry.requiredAchievement then
 				local achievementName, completed = self:GetAchievementDetails(entry.requiredAchievement)
@@ -1766,7 +1766,9 @@ function LegionRemix:UpdateOverlay()
 	local dynHeight = 0
 	for _, data in ipairs(categories) do
 		local display = self:BuildCategoryDisplay(data)
-		if (display.totalCost or 0) > 0 then
+		local hasCost = (display.totalCost or 0) > 0
+		local hasEntries = (display.totalCount or 0) > 0
+		if hasCost or hasEntries then
 			visibleIndex = visibleIndex + 1
 			local row = self:GetRow(visibleIndex, frame.content)
 			dynHeight = dynHeight + row:GetHeight()
