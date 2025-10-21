@@ -1,5 +1,7 @@
 local addonName, addon = ...
 
+local GetTime = GetTime
+
 addon.MovementSpeedStat = addon.MovementSpeedStat or {}
 local mod = addon.MovementSpeedStat
 
@@ -17,24 +19,30 @@ local SPEED_EVENTS = {
 	"PLAYER_STOPPED_MOVING",
 }
 local SPEED_UNIT_EVENTS = {
+	"UNIT_AURA",
 	"UNIT_ENTERED_VEHICLE",
 	"UNIT_EXITED_VEHICLE",
-	"UNIT_AURA",
 }
 
-local MOVING_TICK = 0.2
-local IDLE_TICK = 0.8
-local MOVEMENT_THRESHOLD_YPS = 0.5
-local CACHE_EPSILON_PCT = 0.5
-local CACHE_EPSILON_YPS = 0.1
+local MOVING_TICK = 0.5
+local IDLE_TICK = 1.5
+local FLYING_TICK = 1.0
+local MOVEMENT_THRESHOLD_YPS = 1
+local FLYING_SPEED_GATE = BASE_MS * 2
+local CACHE_EPSILON_PCT = 1
+local CACHE_EPSILON_YPS = 0.2
+local FLYING_EPSILON_PCT_MULT = 3.0
+local FLYING_EPSILON_YPS_MULT = 3.0
 
-local cache = { yps = BASE_MS, pct = 100 }
+local cache = { yps = BASE_MS, pct = 100, pctText = nil, tooltipYPS = nil }
 local tickInterval = MOVING_TICK
 local accum = MOVING_TICK
 local active = false
 local installed = false
 local eventsRegistered = false
 local statFrameRef
+local EVENT_MIN_INTERVAL = 0.5
+local lastEventTick = 0
 
 local ticker = CreateFrame("Frame")
 ticker:Hide()
@@ -113,6 +121,7 @@ local function Compute(unit)
 	unit = unit or "player"
 
 	if unit == "player" and UnitInVehicle("player") then unit = "vehicle" end
+	local isVehicle = unit == "vehicle"
 
 	local rawSpeed, runSpeed = GetUnitSpeed(unit)
 	rawSpeed = rawSpeed or 0
@@ -121,7 +130,7 @@ local function Compute(unit)
 
 	if speed < runSpeed then speed = runSpeed end
 
-	if C_PlayerInfo and C_PlayerInfo.GetGlidingInfo then
+	if not isVehicle and C_PlayerInfo and C_PlayerInfo.GetGlidingInfo then
 		local advanced, _, glideSpeed = C_PlayerInfo.GetGlidingInfo()
 		if advanced and glideSpeed then
 			if glideSpeed > speed then speed = glideSpeed end
@@ -145,16 +154,32 @@ local function PercentText(p)
 	return string.format("%.0f", p)
 end
 
-local function ApplyDisplay(yps, pct)
+local function ApplyDisplay(yps, pct, tooltipEps)
 	cache.yps = yps
 	cache.pct = pct
+	tooltipEps = tooltipEps or CACHE_EPSILON_YPS
 
 	if not statFrameRef then return end
 
+	local pctText = PercentText(pct)
+	local needsLabel = cache.pctText ~= pctText
+	local needsTooltip = not cache.tooltipYPS or math.abs(yps - cache.tooltipYPS) > tooltipEps
+
 	statFrameRef.numericValue = pct
-	PaperDollFrame_SetLabelAndText(statFrameRef, STAT_MOVEMENT_SPEED, PercentText(pct), true, pct)
-	statFrameRef.tooltip = HIGHLIGHT_FONT_COLOR_CODE .. STAT_MOVEMENT_SPEED .. FONT_COLOR_CODE_CLOSE
-	statFrameRef.tooltip2 = string.format("~%.2f yards/sec", yps)
+
+	if not needsLabel and not needsTooltip then return end
+
+	if needsLabel then
+		PaperDollFrame_SetLabelAndText(statFrameRef, STAT_MOVEMENT_SPEED, pctText, true, pct)
+		cache.pctText = pctText
+	end
+
+	if needsTooltip then
+		statFrameRef.tooltip = HIGHLIGHT_FONT_COLOR_CODE .. STAT_MOVEMENT_SPEED .. FONT_COLOR_CODE_CLOSE
+		statFrameRef.tooltip2 = string.format("~%.2f yards/sec", yps)
+		cache.tooltipYPS = yps
+	end
+
 	statFrameRef:Show()
 end
 
@@ -169,7 +194,7 @@ local function StatUpdate(statFrame, unit)
 	unit = unit or "player"
 
 	local yps, pct = Compute(unit)
-	ApplyDisplay(yps, pct)
+	ApplyDisplay(yps, pct, CACHE_EPSILON_YPS)
 end
 
 local function EnsureStatInfo()
@@ -201,15 +226,22 @@ local function OnUpdate(_, elapsed)
 	accum = 0
 
 	local yps, pct, raw = Compute("player")
+	local inVehicle = UnitInVehicle("player")
+	local flyingLike = inVehicle or raw > FLYING_SPEED_GATE
 	local moving = raw > MOVEMENT_THRESHOLD_YPS
-	local desiredInterval = moving and MOVING_TICK or IDLE_TICK
+	local desiredInterval = flyingLike and FLYING_TICK or (moving and MOVING_TICK or IDLE_TICK)
 	if desiredInterval ~= tickInterval then
 		tickInterval = desiredInterval
 		accum = 0
 	end
+	local epsPct = flyingLike and (CACHE_EPSILON_PCT * FLYING_EPSILON_PCT_MULT) or CACHE_EPSILON_PCT
+	local epsYps = flyingLike and (CACHE_EPSILON_YPS * FLYING_EPSILON_YPS_MULT) or CACHE_EPSILON_YPS
 
-	if math.abs(pct - cache.pct) > CACHE_EPSILON_PCT or math.abs(yps - cache.yps) > CACHE_EPSILON_YPS then
-		ApplyDisplay(yps, pct)
+	if math.abs(pct - cache.pct) > epsPct or math.abs(yps - cache.yps) > epsYps then
+		ApplyDisplay(yps, pct, epsYps)
+	else
+		cache.yps = yps
+		cache.pct = pct
 	end
 end
 
@@ -243,6 +275,7 @@ local function StartTicker()
 	tickInterval = MOVING_TICK
 	accum = tickInterval
 	ForceTick()
+	lastEventTick = GetTime()
 	ticker:Show()
 end
 
@@ -251,6 +284,7 @@ local function StopTicker()
 	ticker:Hide()
 	accum = tickInterval
 	UnregisterSpeedEvents()
+	lastEventTick = 0
 end
 
 local function HookCharacterFrame()
@@ -262,7 +296,7 @@ local function HookCharacterFrame()
 			StartTicker()
 			if statFrameRef then
 				local yps, pct = Compute("player")
-				ApplyDisplay(yps, pct)
+				ApplyDisplay(yps, pct, CACHE_EPSILON_YPS)
 			end
 		end
 	end)
@@ -290,7 +324,7 @@ local function TryInstall()
 		StartTicker()
 		if statFrameRef then
 			local yps, pct = Compute("player")
-			ApplyDisplay(yps, pct)
+			ApplyDisplay(yps, pct, CACHE_EPSILON_YPS)
 		end
 	end
 end
@@ -307,6 +341,9 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
 	end
 
 	if not active or not ticker:IsShown() then return end
+	local now = GetTime()
+	if now - lastEventTick < EVENT_MIN_INTERVAL then return end
+	lastEventTick = now
 	ForceTick()
 end)
 
@@ -330,6 +367,8 @@ function mod.Disable()
 	end
 
 	statFrameRef = nil
+	cache.pctText = nil
+	cache.tooltipYPS = nil
 end
 
 function mod.Refresh()
