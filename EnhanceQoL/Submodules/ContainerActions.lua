@@ -381,6 +381,7 @@ function ContainerActions:OnCombatEnd()
 		end
 	end
 	if self.pendingVisibility == nil and self.desiredVisibility ~= nil then self:RequestVisibility(self.desiredVisibility) end
+	self:FlushDeferredEditRefresh()
 end
 
 function ContainerActions:GetTotalItemCount()
@@ -766,7 +767,20 @@ end
 
 function ContainerActions:OnAreaBlockSettingChanged()
 	self:UpdateAreaBlocks()
-	if EditMode and EditMode.RefreshFrame then EditMode:RefreshFrame(EDITMODE_ID) end
+	if EditMode and EditMode.RefreshFrame then
+		if InCombatLockdown and InCombatLockdown() then
+			self.deferEditModeRefresh = true
+		else
+			EditMode:RefreshFrame(EDITMODE_ID)
+		end
+	end
+end
+
+function ContainerActions:FlushDeferredEditRefresh()
+	if self.deferEditModeRefresh and EditMode and EditMode.RefreshFrame then
+		self.deferEditModeRefresh = nil
+		EditMode:RefreshFrame(EDITMODE_ID)
+	end
 end
 
 function ContainerActions:OnUnitEnteredVehicle(unit)
