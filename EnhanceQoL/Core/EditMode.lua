@@ -255,7 +255,9 @@ function EditMode:_prepareSetting(id, setting)
 	local field = setting.field
 	local onChange = setting.onValueChanged
 
-	if not copy.get then
+	local requiresField = not copy.generator
+
+	if not copy.get and requiresField then
 		assert(field, "setting.field required when getter is omitted")
 		copy.get = function(layoutName)
 			local data = self:EnsureLayoutData(id, layoutName)
@@ -263,7 +265,7 @@ function EditMode:_prepareSetting(id, setting)
 		end
 	end
 
-	if not copy.set then
+	if not copy.set and requiresField then
 		assert(field, "setting.field required when setter is omitted")
 		copy.set = function(layoutName, value)
 			self:SetValue(id, field, value, layoutName, true)
@@ -274,7 +276,7 @@ function EditMode:_prepareSetting(id, setting)
 	end
 
 	local entry = self.frames[id]
-	if copy.default == nil and entry and entry.defaults then copy.default = entry.defaults[field] end
+	if requiresField and copy.default == nil and entry and entry.defaults then copy.default = entry.defaults[field] end
 
 	return copy
 end

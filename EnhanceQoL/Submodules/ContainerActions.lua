@@ -124,6 +124,16 @@ end
 
 function ContainerActions:IsEnabled() return addon.db and addon.db["automaticallyOpenContainer"] end
 
+local function GetAreaDisplayName(key)
+	local def = AREA_BLOCKS[key]
+	if not def then return key end
+	if def.label then return def.label end
+	if def.labelConst and _G and type(_G[def.labelConst]) == "string" and _G[def.labelConst] ~= "" then return _G[def.labelConst] end
+	if def.labelFallback then return def.labelFallback end
+	if def.labelKey and L and L[def.labelKey] then return L[def.labelKey] end
+	return def.labelConst or def.labelKey or key
+end
+
 function ContainerActions:GetAnchorConfig(layoutName)
 	local snapshot = BuildAnchorLayoutSnapshot(layoutName)
 	return FormatAnchorPoint(snapshot)
@@ -172,12 +182,46 @@ function ContainerActions:EnsureAnchor()
 
 	if EditMode and EditMode.IsAvailable and EditMode:IsAvailable() and not self.anchorRegistered then
 		local defaults = BuildAnchorLayoutSnapshot()
+		local settings
+		local settingType = EditMode.lib and EditMode.lib.SettingType
+		if settingType then
+			settings = {
+				{
+					name = L["containerActionsAreaHeader"],
+					kind = settingType.Dropdown,
+					height = 180,
+					generator = function(_, rootDescription)
+						for _, areaKey in ipairs(AREA_BLOCK_ORDER) do
+							local key = areaKey
+							rootDescription:CreateCheckbox(
+								GetAreaDisplayName(key),
+								function()
+									local cfg = addon.db and addon.db.containerActionAreaBlocks or {}
+									return not not cfg[key]
+								end,
+								function()
+									addon.db.containerActionAreaBlocks = addon.db.containerActionAreaBlocks or {}
+									if addon.db.containerActionAreaBlocks[key] then
+										addon.db.containerActionAreaBlocks[key] = nil
+									else
+										addon.db.containerActionAreaBlocks[key] = true
+									end
+									ContainerActions:OnAreaBlockSettingChanged()
+								end
+							)
+						end
+					end,
+				},
+			}
+		end
+
 		EditMode:RegisterFrame(EDITMODE_ID, {
 			frame = anchor,
 			title = L["containerActionsAnchorLabel"] or "Container Button",
 			layoutDefaults = defaults,
 			isEnabled = function() return ContainerActions:IsEnabled() end,
 			onApply = function(_, layoutName, data) ContainerActions:ApplyAnchorLayout(data) end,
+			settings = settings,
 		})
 		self.anchorRegistered = true
 	end
@@ -684,7 +728,10 @@ function ContainerActions:UpdateAreaBlocks()
 	end
 end
 
-function ContainerActions:OnAreaBlockSettingChanged() self:UpdateAreaBlocks() end
+function ContainerActions:OnAreaBlockSettingChanged()
+	self:UpdateAreaBlocks()
+	if EditMode and EditMode.RefreshFrame then EditMode:RefreshFrame(EDITMODE_ID) end
+end
 
 function ContainerActions:OnUnitEnteredVehicle(unit)
 	if unit ~= "player" then return end
