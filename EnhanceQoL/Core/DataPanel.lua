@@ -6,8 +6,6 @@ local L = addon.L
 local EditMode = addon.EditMode
 local SettingType = EditMode and EditMode.lib and EditMode.lib.SettingType
 
-local registerEditModePanel
-
 local panels = {}
 
 local function copyList(source)

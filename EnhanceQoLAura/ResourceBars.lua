@@ -49,6 +49,7 @@ local layoutRunes
 local createHealthBar
 local updateHealthBar
 local updatePowerBar
+local updateBarSeparators
 local forceColorUpdate
 local lastBarSelectionPerSpec = {}
 local lastSpecCopySelection = {}
@@ -322,9 +323,7 @@ end
 
 local function importErrorMessage(reason, extra)
 	if reason == "NO_INPUT" then return L["ImportProfileEmpty"] or "Please enter a code to import." end
-	if reason == "DECODE" or reason == "DECOMPRESS" or reason == "DESERIALIZE" or reason == "WRONG_KIND" then
-		return L["ImportProfileInvalid"] or "The code could not be read."
-	end
+	if reason == "DECODE" or reason == "DECOMPRESS" or reason == "DESERIALIZE" or reason == "WRONG_KIND" then return L["ImportProfileInvalid"] or "The code could not be read." end
 	if reason == "WRONG_CLASS" then
 		local className = extra or UNKNOWN or "Unknown class"
 		return (L["ImportProfileWrongClass"] or "This profile belongs to %s."):format(className)
@@ -514,9 +513,7 @@ local function copyInsetValues(src, dest)
 	return dest
 end
 
-local function resolveInnerInset(bd)
-	return ZERO_INSETS
-end
+local function resolveInnerInset(bd) return ZERO_INSETS end
 
 local function ensureInnerFrame(frame)
 	local inner = frame._rbInner
@@ -875,9 +872,7 @@ function addon.Aura.functions.addResourceFrame(container)
 		shareRow:SetFullWidth(true)
 		groupCore:AddChild(shareRow)
 
-		local scopeDropdown = addon.functions.createDropdownAce(L["ProfileScope"] or "Apply to", scopeList, scopeOrder, function(_, _, key)
-			lastProfileShareScope[classKey] = key
-		end)
+		local scopeDropdown = addon.functions.createDropdownAce(L["ProfileScope"] or "Apply to", scopeList, scopeOrder, function(_, _, key) lastProfileShareScope[classKey] = key end)
 		scopeDropdown:SetFullWidth(false)
 		scopeDropdown:SetRelativeWidth(0.5)
 		scopeDropdown:SetValue(lastProfileShareScope[classKey])
@@ -1471,7 +1466,7 @@ function addon.Aura.functions.addResourceFrame(container)
 				sliderOutset:SetRelativeWidth(0.5)
 				group:AddChild(sliderOutset)
 
-				local sliderBgInset = addon.functions.createSliderAce(L["Background inset"] or "Background inset", cfg.backdrop.backgroundInset or 0, 0, 64, 1, function(_, _, val)
+				sliderBgInset = addon.functions.createSliderAce(L["Background inset"] or "Background inset", cfg.backdrop.backgroundInset or 0, 0, 64, 1, function(_, _, val)
 					cfg.backdrop.backgroundInset = max(0, val)
 					requestActiveRefresh(specIndex)
 				end)
@@ -1683,17 +1678,13 @@ function addon.Aura.functions.addResourceFrame(container)
 				copyGroup:AddChild(noSpecs)
 			else
 				local copyKey = tostring(specIndex)
-				if not lastSpecCopySelection[copyKey] or not copyList[lastSpecCopySelection[copyKey]] then
-					lastSpecCopySelection[copyKey] = copyOrder[1]
-				end
+				if not lastSpecCopySelection[copyKey] or not copyList[lastSpecCopySelection[copyKey]] then lastSpecCopySelection[copyKey] = copyOrder[1] end
 
 				local copyRow = addon.functions.createContainer("SimpleGroup", "Flow")
 				copyRow:SetFullWidth(true)
 				copyGroup:AddChild(copyRow)
 
-				local dropCopy = addon.functions.createDropdownAce(L["Copy from spec"] or "Copy from specialization", copyList, copyOrder, function(_, _, key)
-					lastSpecCopySelection[copyKey] = key
-				end)
+				local dropCopy = addon.functions.createDropdownAce(L["Copy from spec"] or "Copy from specialization", copyList, copyOrder, function(_, _, key) lastSpecCopySelection[copyKey] = key end)
 				dropCopy:SetFullWidth(false)
 				dropCopy:SetRelativeWidth(0.7)
 				dropCopy:SetValue(lastSpecCopySelection[copyKey])
@@ -2820,7 +2811,7 @@ function forceColorUpdate(pType)
 end
 
 -- Create/update separator ticks for a given bar type if enabled
-function updateBarSeparators(pType)
+updateBarSeparators = function(pType)
 	local eligible = ResourceBars.separatorEligible
 	if pType ~= "RUNES" and (not eligible or not eligible[pType]) then return end
 	local bar = powerbar[pType]
