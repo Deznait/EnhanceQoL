@@ -563,7 +563,7 @@ local function normalizePhaseKind(kind)
 	if kind == "transmog" or kind == "item" then return "item" end
 	if kind == "set" then return "set" end
 	if kind == "rare_appearance" then return "rare_appearance" end
-	if kind == "cloaks" then return "cloaks" end
+	if kind == "cloaks" then return "set" end
 	return nil
 end
 
