@@ -2636,7 +2636,7 @@ function LegionRemix:UpdateOverlay()
 			self:UpdateRow(row, display)
 		end
 	end
-	self.overlay:SetHeight(110 + dynHeight + ((visibleIndex - 1) * 6))
+	self.overlay:SetHeight(126 + dynHeight + ((visibleIndex - 1) * 6))
 	self:HideUnusedRows(visibleIndex + 1)
 end
 
