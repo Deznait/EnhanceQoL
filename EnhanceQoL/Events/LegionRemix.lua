@@ -38,6 +38,8 @@ LegionRemix.phaseTotals = LegionRemix.phaseTotals or {}
 LegionRemix.eventsRegistered = LegionRemix.eventsRegistered or false
 LegionRemix.active = LegionRemix.active or false
 LegionRemix.cachedPhases = nil
+LegionRemix.totalItemCount = LegionRemix.totalItemCount or 0
+LegionRemix.totalCollectedCount = LegionRemix.totalCollectedCount or 0
 
 local ikName
 local function SetIKName()
@@ -1837,6 +1839,8 @@ function LegionRemix:RefreshData()
 		self.latestCategories = {}
 		self.totalCost = 0
 		self.totalCollected = 0
+		self.totalItemCount = 0
+		self.totalCollectedCount = 0
 		self:UpdateOverlay()
 		return
 	end
@@ -1844,17 +1848,22 @@ function LegionRemix:RefreshData()
 	LegionRemix.phaseTotals = self.phaseTotals
 	local categories = {}
 	local totalCost, totalCollected = 0, 0
+	local totalCountAll, collectedCountAll = 0, 0
 	for _, category in ipairs(CATEGORY_DATA) do
 		if self:IsCategoryVisible(category.key) then
 			local data = self:BuildCategoryData(category)
 			table.insert(categories, data)
 			totalCost = totalCost + data.totalCost
 			totalCollected = totalCollected + data.collectedCost
+			collectedCountAll = collectedCountAll + (data.collectedCount or 0)
+			totalCountAll = totalCountAll + (data.totalCount or 0)
 		end
 	end
 	self.latestCategories = categories
 	self.totalCost = totalCost
 	self.totalCollected = totalCollected
+	self.totalCollectedCount = collectedCountAll
+	self.totalItemCount = totalCountAll
 	self:UpdateOverlay()
 end
 
@@ -2383,7 +2392,7 @@ function LegionRemix:CreateOverlay()
 	local header = CreateFrame("Frame", nil, frame, "BackdropTemplate")
 	header:SetPoint("TOPLEFT", 10, -10)
 	header:SetPoint("TOPRIGHT", -10, -10)
-	header:SetHeight(52)
+	header:SetHeight(68)
 	header:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
 	header:SetBackdropColor(0.06, 0.07, 0.12, 0.95)
 
@@ -2401,6 +2410,18 @@ function LegionRemix:CreateOverlay()
 	remainingText:SetPoint("BOTTOMRIGHT", -12, 10)
 	remainingText:SetJustifyH("RIGHT")
 	remainingText:SetWordWrap(false)
+
+	local progressAllText = header:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	progressAllText:SetPoint("TOPRIGHT", remainingText, "BOTTOMRIGHT", 0, -4)
+	progressAllText:SetJustifyH("RIGHT")
+	progressAllText:SetWordWrap(false)
+	progressAllText:SetText("")
+
+	local progressCurrentText = header:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	progressCurrentText:SetPoint("TOPRIGHT", progressAllText, "BOTTOMRIGHT", 0, -2)
+	progressCurrentText:SetJustifyH("RIGHT")
+	progressCurrentText:SetWordWrap(false)
+	progressCurrentText:SetText("")
 
 	local function createHeaderButton(width, height)
 		local btn = CreateFrame("Button", nil, header, "BackdropTemplate")
@@ -2498,12 +2519,14 @@ function LegionRemix:CreateOverlay()
 	frame.title = title
 	frame.bronzeText = bronzeText
 	frame.remainingText = remainingText
+	frame.progressAllText = progressAllText
 	frame.collapseButton = collapse
 	frame.closeButton = closeButton
 	frame.lockButton = lockButton
 	frame.filterBar = filterBar
 	-- frame.scrollFrame = scrollFrame
 	frame.content = content
+	frame.progressCurrentText = progressCurrentText
 
 	self.overlay = frame
 	self:ApplyAnchor(frame)
@@ -2535,7 +2558,6 @@ function LegionRemix:UpdateOverlay()
 	if frame.lockButton then frame.lockButton.tooltipText = db and db.locked and UNLOCK or LOCK end
 	self:RefreshLockButton()
 
-	local activeSet, allActive = self:GetActivePhaseFilterSet()
 	self:UpdateFilterButtons()
 
 	local bronze = self:GetBronzeCurrency()
@@ -2548,6 +2570,36 @@ function LegionRemix:UpdateOverlay()
 
 	frame.bronzeText:SetFormattedText("%s: %s", CURRENCY, formatBronze(bronze))
 	frame.remainingText:SetFormattedText("%s: %s", L["Total Remaining"], formatBronze(remaining))
+
+	local allCollectedCount = self.totalCollectedCount or 0
+	local allTotalCount = self.totalItemCount or 0
+	local categories = self.latestCategories or {}
+	local displayCache = {}
+	local filteredCollectedCount, filteredTotalCount = 0, 0
+	for index, data in ipairs(categories) do
+		local display = self:BuildCategoryDisplay(data)
+		displayCache[index] = display
+		filteredCollectedCount = filteredCollectedCount + (display.collectedCount or 0)
+		filteredTotalCount = filteredTotalCount + (display.totalCount or 0)
+	end
+
+	local mode = self:GetPhaseFilterMode()
+	if frame.progressAllText then
+		frame.progressAllText:SetWidth(availableWidth * 0.55)
+		if mode == "all" then
+			frame.progressAllText:SetFormattedText("%s: %d / %d", COLLECTED or "Collected", allCollectedCount, allTotalCount)
+		else
+			frame.progressAllText:SetText("")
+		end
+	end
+	if frame.progressCurrentText then
+		frame.progressCurrentText:SetWidth(availableWidth * 0.55)
+		if mode == "current" then
+			frame.progressCurrentText:SetFormattedText("%s: %d / %d", COLLECTED or "Collected", filteredCollectedCount, filteredTotalCount)
+		else
+			frame.progressCurrentText:SetText("")
+		end
+	end
 
 	if db and db.collapsed then
 		if frame.filterBar and frame.filterBar.hasButtons then frame.filterBar:Hide() end
@@ -2571,12 +2623,10 @@ function LegionRemix:UpdateOverlay()
 	self:LayoutFilterButtons()
 	self:UpdateContentWidth()
 
-	local categories = self.latestCategories or {}
 	local hideComplete = db and db.hideCompleteCategories
 	local visibleIndex = 0
 	local dynHeight = 0
-	for _, data in ipairs(categories) do
-		local display = self:BuildCategoryDisplay(data)
+	for _, display in ipairs(displayCache) do
 		local hasCost = (display.totalCost or 0) > 0
 		local hasEntries = (display.totalCount or 0) > 0
 		if (hasCost or hasEntries) and (not hideComplete or not self:IsCategoryCompleteForDisplay(display)) then

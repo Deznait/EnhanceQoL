@@ -589,6 +589,7 @@ globals = {
 	"C_ArtifactUI.GetRespecArtifactInfo",
 	"C_ArtifactUI.GetRespecCost",
 	"C_ArtifactUI.GetTotalPurchasedRanks",
+	"WORLD_QUEST",
 	"C_ArtifactUI.IsAtForge",
 	"C_ArtifactUI.IsPowerKnown",
 	"C_ArtifactUI.IsViewedArtifactEquipped",

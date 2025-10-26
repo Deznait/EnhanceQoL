@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.12.0] – 2025-10-26
+
+### ✨ Added
+
+- Legion Remix Tracker
+  - Show all achievements which yields bronze or infinity knowledge now
+  - Categories are now sorted alphabetically so mounts, pets, etc. are easier to scan.
+  - Bronze + Infinity Knowledge achievements can define World Quest requirements; "Current" only lists bosses whose quests are active and tooltips explain the missing requirements.
+  - Header now shows a `Collected: X / Y` indicator that matches the active filter (All vs. Current), alongside the remaining bronze.
+
+---
+
 ## [5.11.0] – 2025-10-24
 
 ### ✨ Added
