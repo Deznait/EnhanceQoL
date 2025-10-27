@@ -2011,6 +2011,134 @@ local function addMinimapFrame(container)
 		doLayout()
 	end
 
+	local function buildDungeonJournalLootSpec()
+		local g = ensureGroup("dungeonJournalLootSpec", L["dungeonJournalLootSpecIcons"])
+		local cb = addon.functions.createCheckboxAce(L["dungeonJournalLootSpecIcons"], addon.db["dungeonJournalLootSpecIcons"], function(self, _, value)
+			addon.db["dungeonJournalLootSpecIcons"] = value
+			if addon.DungeonJournalLootSpec and addon.DungeonJournalLootSpec.SetEnabled then addon.DungeonJournalLootSpec:SetEnabled(value) end
+			buildDungeonJournalLootSpec()
+		end, L["dungeonJournalLootSpecIconsDesc"])
+		g:AddChild(cb)
+
+		if addon.db["dungeonJournalLootSpecIcons"] then
+			local anchorOptions = {
+				["1"] = L["dungeonJournalLootSpecAnchorTop"],
+				["2"] = L["dungeonJournalLootSpecAnchorBottom"],
+			}
+			local anchorDropdown = addon.functions.createDropdownAce(L["dungeonJournalLootSpecAnchor"], anchorOptions, { "1", "2" }, function(_, _, key)
+				addon.db["dungeonJournalLootSpecAnchor"] = tonumber(key) or 1
+				if addon.DungeonJournalLootSpec then addon.DungeonJournalLootSpec:Refresh() end
+			end)
+			anchorDropdown:SetValue(tostring(addon.db["dungeonJournalLootSpecAnchor"] or 1))
+			g:AddChild(anchorDropdown)
+
+			local sliderOffsetX = addon.functions.createSliderAce(
+				L["dungeonJournalLootSpecOffsetX"] .. ": " .. addon.db["dungeonJournalLootSpecOffsetX"],
+				addon.db["dungeonJournalLootSpecOffsetX"],
+				-200,
+				200,
+				1,
+				function(self, _, val)
+					addon.db["dungeonJournalLootSpecOffsetX"] = val
+					self:SetLabel(L["dungeonJournalLootSpecOffsetX"] .. ": " .. tostring(val))
+					if addon.DungeonJournalLootSpec then addon.DungeonJournalLootSpec:Refresh() end
+				end
+			)
+			g:AddChild(sliderOffsetX)
+
+			local sliderOffsetY = addon.functions.createSliderAce(
+				L["dungeonJournalLootSpecOffsetY"] .. ": " .. addon.db["dungeonJournalLootSpecOffsetY"],
+				addon.db["dungeonJournalLootSpecOffsetY"],
+				-200,
+				200,
+				1,
+				function(self, _, val)
+					addon.db["dungeonJournalLootSpecOffsetY"] = val
+					self:SetLabel(L["dungeonJournalLootSpecOffsetY"] .. ": " .. tostring(val))
+					if addon.DungeonJournalLootSpec then addon.DungeonJournalLootSpec:Refresh() end
+				end
+			)
+			g:AddChild(sliderOffsetY)
+
+			local sliderSpacing = addon.functions.createSliderAce(
+				L["dungeonJournalLootSpecSpacing"] .. ": " .. addon.db["dungeonJournalLootSpecSpacing"],
+				addon.db["dungeonJournalLootSpecSpacing"],
+				-20,
+				40,
+				1,
+				function(self, _, val)
+					addon.db["dungeonJournalLootSpecSpacing"] = val
+					self:SetLabel(L["dungeonJournalLootSpecSpacing"] .. ": " .. tostring(val))
+					if addon.DungeonJournalLootSpec then addon.DungeonJournalLootSpec:Refresh() end
+				end
+			)
+			g:AddChild(sliderSpacing)
+
+			local sliderScale = addon.functions.createSliderAce(
+				L["dungeonJournalLootSpecScale"] .. ": " .. string.format("%.2f", addon.db["dungeonJournalLootSpecScale"]),
+				addon.db["dungeonJournalLootSpecScale"],
+				0.2,
+				3,
+				0.05,
+				function(self, _, val)
+					addon.db["dungeonJournalLootSpecScale"] = val
+					self:SetLabel(L["dungeonJournalLootSpecScale"] .. ": " .. string.format("%.2f", val))
+					if addon.DungeonJournalLootSpec then addon.DungeonJournalLootSpec:Refresh() end
+				end
+			)
+			g:AddChild(sliderScale)
+
+			local sliderZoom = addon.functions.createSliderAce(
+				L["dungeonJournalLootSpecIconPadding"] .. ": " .. string.format("%.2f", addon.db["dungeonJournalLootSpecIconPadding"]),
+				addon.db["dungeonJournalLootSpecIconPadding"],
+				0,
+				0.5,
+				0.01,
+				function(self, _, val)
+					addon.db["dungeonJournalLootSpecIconPadding"] = val
+					self:SetLabel(L["dungeonJournalLootSpecIconPadding"] .. ": " .. string.format("%.2f", val))
+					if addon.DungeonJournalLootSpec then addon.DungeonJournalLootSpec:Refresh() end
+				end
+			)
+			g:AddChild(sliderZoom)
+
+			local cbCompressSpecs = addon.functions.createCheckboxAce(
+				L["dungeonJournalLootSpecCompressSpecs"],
+				addon.db["dungeonJournalLootSpecCompressSpecs"],
+				function(self, _, value)
+					addon.db["dungeonJournalLootSpecCompressSpecs"] = value
+					if addon.DungeonJournalLootSpec then addon.DungeonJournalLootSpec:Refresh() end
+				end,
+				L["dungeonJournalLootSpecCompressSpecsDesc"]
+			)
+			g:AddChild(cbCompressSpecs)
+
+			local cbCompressRoles = addon.functions.createCheckboxAce(
+				L["dungeonJournalLootSpecCompressRoles"],
+				addon.db["dungeonJournalLootSpecCompressRoles"],
+				function(self, _, value)
+					addon.db["dungeonJournalLootSpecCompressRoles"] = value
+					if addon.DungeonJournalLootSpec then addon.DungeonJournalLootSpec:Refresh() end
+				end,
+				L["dungeonJournalLootSpecCompressRolesDesc"]
+			)
+			g:AddChild(cbCompressRoles)
+
+			local cbShowAll = addon.functions.createCheckboxAce(
+				L["dungeonJournalLootSpecShowAll"],
+				addon.db["dungeonJournalLootSpecShowAll"],
+				function(self, _, value)
+					addon.db["dungeonJournalLootSpecShowAll"] = value
+					if addon.DungeonJournalLootSpec then addon.DungeonJournalLootSpec:Refresh() end
+				end,
+				L["dungeonJournalLootSpecShowAllDesc"]
+			)
+			g:AddChild(cbShowAll)
+		end
+
+		doLayout()
+	end
+
 	buildGeneral()
 	buildSpec()
 	buildHideElements()
@@ -2018,6 +2146,7 @@ local function addMinimapFrame(container)
 	buildButtonBin()
 	buildLanding()
 	buildInstanceDifficulty()
+	buildDungeonJournalLootSpec()
 end
 
 -- New modular Unit Frames UI builder
@@ -6060,6 +6189,17 @@ local function initUI()
 	end
 	-- addon.functions.InitDBValue("instanceDifficultyUseIcon", false)
 
+	addon.functions.InitDBValue("dungeonJournalLootSpecIcons", false)
+	addon.functions.InitDBValue("dungeonJournalLootSpecAnchor", 1)
+	addon.functions.InitDBValue("dungeonJournalLootSpecOffsetX", 0)
+	addon.functions.InitDBValue("dungeonJournalLootSpecOffsetY", 0)
+	addon.functions.InitDBValue("dungeonJournalLootSpecSpacing", 0)
+	addon.functions.InitDBValue("dungeonJournalLootSpecScale", 1)
+	addon.functions.InitDBValue("dungeonJournalLootSpecIconPadding", 0)
+	addon.functions.InitDBValue("dungeonJournalLootSpecCompressSpecs", true)
+	addon.functions.InitDBValue("dungeonJournalLootSpecCompressRoles", true)
+	addon.functions.InitDBValue("dungeonJournalLootSpecShowAll", false)
+
 	-- Game Menu (ESC) scaling
 	addon.functions.InitDBValue("gameMenuScaleEnabled", false)
 	addon.functions.InitDBValue("gameMenuScale", 1.0)
@@ -6754,6 +6894,7 @@ local function initUI()
 
 	if addon.db["enableLootspecQuickswitch"] then addon.functions.createLootspecFrame() end
 	if addon.InstanceDifficulty and addon.InstanceDifficulty.SetEnabled then addon.InstanceDifficulty:SetEnabled(addon.db["showInstanceDifficulty"]) end
+	if addon.DungeonJournalLootSpec and addon.DungeonJournalLootSpec.SetEnabled then addon.DungeonJournalLootSpec:SetEnabled(addon.db["dungeonJournalLootSpecIcons"]) end
 end
 
 function addon.functions.createCatalystFrame()
