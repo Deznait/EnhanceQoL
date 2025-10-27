@@ -1434,6 +1434,18 @@ local function addChatFrame(container)
 
 	local data = {
 		{
+			var = "chatShowLootCurrencyIcons",
+			text = L["chatLootCurrencyIcons"],
+			type = "CheckBox",
+			desc = L["chatLootCurrencyIconsDesc"],
+			func = function(self, _, value)
+				addon.db["chatShowLootCurrencyIcons"] = value
+				if addon.ChatIcons and addon.ChatIcons.SetEnabled then addon.ChatIcons:SetEnabled(value) end
+				container:ReleaseChildren()
+				addChatFrame(container)
+			end,
+		},
+		{
 			var = "chatHideLearnUnlearn",
 			text = L["chatHideLearnUnlearn"],
 			type = "CheckBox",
@@ -5971,9 +5983,11 @@ local function initChatFrame()
 	addon.functions.InitDBValue("chatIMFrameData", {})
 	addon.functions.InitDBValue("chatIMHideInCombat", false)
 	addon.functions.InitDBValue("chatIMUseAnimation", true)
+	addon.functions.InitDBValue("chatShowLootCurrencyIcons", false)
 	addon.functions.InitDBValue("chatHideLearnUnlearn", false)
 	-- Apply learn/unlearn message filter based on saved setting
 	addon.functions.ApplyChatLearnFilter(addon.db["chatHideLearnUnlearn"])
+	if addon.ChatIcons and addon.ChatIcons.SetEnabled then addon.ChatIcons:SetEnabled(addon.db["chatShowLootCurrencyIcons"]) end
 
 	if addon.ChatIM and addon.ChatIM.SetEnabled then addon.ChatIM:SetEnabled(addon.db["enableChatIM"]) end
 end

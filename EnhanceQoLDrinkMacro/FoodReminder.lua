@@ -27,8 +27,6 @@ addon.functions.InitDBValue("mageFoodReminder", false)
 local defaultPos = { point = "TOP", x = 0, y = -100 }
 addon.functions.InitDBValue("mageFoodReminderPos", { point = defaultPos.point, x = defaultPos.x, y = defaultPos.y })
 addon.functions.InitDBValue("mageFoodReminderScale", 1)
-addon.functions.InitDBValue("mageFoodReminderSound", true)
-addon.functions.InitDBValue("mageFoodReminderUseCustomSound", false)
 addon.functions.InitDBValue("mageFoodReminderJoinSoundFile", "")
 addon.functions.InitDBValue("mageFoodReminderLeaveSoundFile", "")
 
@@ -41,7 +39,6 @@ else
 	if addon.db.mageFoodReminderLeaveSoundFile == "" then addon.db.mageFoodReminderLeaveSoundFile = nil end
 end
 addon.db.mageFoodReminderSound = nil
-addon.db.mageFoodReminderUseCustomSound = nil
 
 local brButton
 local defaultButtonSize = 60
@@ -56,27 +53,27 @@ local registerEditModeFrame -- forward declaration
 local DEFAULT_SOUND_SENTINEL = "__DEFAULT_SOUND__"
 
 local function updateButtonMouseState()
-    if not brButton then return end
-    if editModeActive then
-        brButton:EnableMouse(false)
-    else
-        brButton:EnableMouse(true)
-    end
+	if not brButton then return end
+	if editModeActive then
+		brButton:EnableMouse(false)
+	else
+		brButton:EnableMouse(true)
+	end
 end
 
 local syncingPosition = false
 
 local function syncEditModePosition()
-    if syncingPosition then return end
-    if not (EditMode and editModeRegistered and EditMode.SetFramePosition) then return end
-    local pos = addon.db["mageFoodReminderPos"] or defaultPos
-    if not pos.point then pos.point = defaultPos.point end
-    if pos.x == nil then pos.x = defaultPos.x end
-    if pos.y == nil then pos.y = defaultPos.y end
-    syncingPosition = true
-    local ok, err = pcall(EditMode.SetFramePosition, EditMode, editModeId, pos.point, pos.x, pos.y)
-    if not ok and err then geterrorhandler()(err) end
-    syncingPosition = false
+	if syncingPosition then return end
+	if not (EditMode and editModeRegistered and EditMode.SetFramePosition) then return end
+	local pos = addon.db["mageFoodReminderPos"] or defaultPos
+	if not pos.point then pos.point = defaultPos.point end
+	if pos.x == nil then pos.x = defaultPos.x end
+	if pos.y == nil then pos.y = defaultPos.y end
+	syncingPosition = true
+	local ok, err = pcall(EditMode.SetFramePosition, EditMode, editModeId, pos.point, pos.x, pos.y)
+	if not ok and err then geterrorhandler()(err) end
+	syncingPosition = false
 end
 
 local function ensureAnchor()
@@ -116,7 +113,11 @@ local function ensureAnchor()
 	anchor:SetPoint(pos.point or defaultPos.point, UIParent, pos.point or defaultPos.point, pos.x or defaultPos.x, pos.y or defaultPos.y)
 	local scale = addon.db["mageFoodReminderScale"] or 1
 	scale = math.floor(scale / 0.05 + 0.5) * 0.05
-	if scale < 0.1 then scale = 0.1 elseif scale > 2.0 then scale = 2.0 end
+	if scale < 0.1 then
+		scale = 0.1
+	elseif scale > 2.0 then
+		scale = 2.0
+	end
 	scale = tonumber(string.format("%.2f", scale))
 	anchor:SetScale(scale)
 	addon.db["mageFoodReminderScale"] = scale
@@ -172,29 +173,38 @@ local function applyButtonSettings()
 	local pos = addon.db["mageFoodReminderPos"] or defaultPos
 	anchor:ClearAllPoints()
 	anchor:SetPoint(pos.point or defaultPos.point, UIParent, pos.point or defaultPos.point, pos.x or defaultPos.x, pos.y or defaultPos.y)
-	anchor:SetScale(addon.db["mageFoodReminderScale"] or 1)
+	local scale = addon.db["mageFoodReminderScale"] or 1
+	scale = math.floor(scale / 0.05 + 0.5) * 0.05
+	if scale < 0.1 then
+		scale = 0.1
+	elseif scale > 2.0 then
+		scale = 2.0
+	end
+	scale = tonumber(string.format("%.2f", scale))
+	anchor:SetScale(scale)
+	addon.db["mageFoodReminderScale"] = scale
 
 	if brButton then
+		brButton:SetScale(scale)
+		brButton:SetParent(UIParent)
 		brButton:ClearAllPoints()
-		brButton:SetParent(anchor)
-		brButton:SetAllPoints(anchor)
+		brButton:SetPoint(pos.point or defaultPos.point, UIParent, pos.point or defaultPos.point, pos.x or defaultPos.x, pos.y or defaultPos.y)
 	end
 	updateButtonMouseState()
 
-	if addon.db["mageFoodReminder"] or editModeActive then
+	if editModeActive then
 		anchor:Show()
 	else
 		anchor:Hide()
 	end
 	anchor:EnableMouse(editModeActive)
-	anchor:SetFrameStrata(editModeActive and "HIGH" or "MEDIUM")
-	if brButton then brButton:SetFrameStrata(editModeActive and "HIGH" or "DIALOG") end
-
+	anchor:SetFrameStrata("HIGH")
 	if editModeActive then
 		anchor:SetBackdropColor(0.05, 0.05, 0.05, 0.6)
 	else
 		anchor:SetBackdropColor(0, 0, 0, 0)
 	end
+	if brButton then brButton:SetFrameStrata("HIGH") end
 
 	syncEditModePosition()
 end
@@ -262,21 +272,21 @@ local function createBRFrame()
 	brButton:SetFrameStrata("HIGH")
 	brButton:SetScript("OnClick", function()
 		if editModeActive then return end
-			LFDQueueFrame_SetType("follower")
+		LFDQueueFrame_SetType("follower")
 
-			LFDQueueFrame_Update()
-			for _, dungeonID in ipairs(_G["LFDDungeonList"]) do
-				if dungeonID >= 0 and C_LFGInfo.IsLFGFollowerDungeon(dungeonID) then
-					LFGDungeonList_SetDungeonEnabled(dungeonID, true)
+		LFDQueueFrame_Update()
+		for _, dungeonID in ipairs(_G["LFDDungeonList"]) do
+			if dungeonID >= 0 and C_LFGInfo.IsLFGFollowerDungeon(dungeonID) then
+				LFGDungeonList_SetDungeonEnabled(dungeonID, true)
 
-					LFDQueueFrameList_Update()
-					LFDQueueFrame_UpdateRoleButtons()
-					LFDQueueFrameFindGroupButton:Click()
-					queuedFollower = true
-					return
-				end
+				LFDQueueFrameList_Update()
+				LFDQueueFrame_UpdateRoleButtons()
+				LFDQueueFrameFindGroupButton:Click()
+				queuedFollower = true
+				return
 			end
-		end)
+		end
+	end)
 	brButton:RegisterForDrag("LeftButton")
 	brButton:SetScript("OnDragStart", function()
 		if editModeActive or not IsAltKeyDown() then return end
@@ -426,24 +436,16 @@ local function createSoundDropdownSetting(labelKey, dbKey)
 		generator = function(_, rootDescription)
 			if rootDescription.SetScrollMode then rootDescription:SetScrollMode(260) end
 			local noneLabel = NONE or L["None"] or "None"
-			rootDescription:CreateRadio(noneLabel, function()
-				return addon.db[dbKey] == ""
-			end, function()
-				addon.db[dbKey] = ""
-			end)
+			rootDescription:CreateRadio(noneLabel, function() return addon.db[dbKey] == "" end, function() addon.db[dbKey] = "" end)
 			local defaultLabel = L["mageFoodReminderDefaultSound"] or DEFAULT
-			rootDescription:CreateRadio(defaultLabel, function()
-				return addon.db[dbKey] == nil
-			end, function()
+			rootDescription:CreateRadio(defaultLabel, function() return addon.db[dbKey] == nil end, function()
 				addon.db[dbKey] = nil
 				PlaySound(SOUNDKIT.RAID_WARNING)
 			end)
 			local soundTable = LSM and LSM:HashTable("sound")
 			if soundTable then
 				for _, soundName in ipairs(LSM:List("sound")) do
-					rootDescription:CreateRadio(soundName, function()
-						return addon.db[dbKey] == soundName
-					end, function()
+					rootDescription:CreateRadio(soundName, function() return addon.db[dbKey] == soundName end, function()
 						addon.db[dbKey] = soundName
 						local file = soundTable[soundName]
 						if file then PlaySoundFile(file, "Master") end
@@ -457,107 +459,111 @@ end
 local registeringEditMode = false
 
 registerEditModeFrame = function()
-    if editModeRegistered or registeringEditMode or not EditMode or not EditMode.RegisterFrame then return end
-    registeringEditMode = true
+	if editModeRegistered or registeringEditMode or not EditMode or not EditMode.RegisterFrame then return end
+	registeringEditMode = true
 
-    local function performRegistration()
-        local anchor = ensureAnchor()
-        local pos = addon.db["mageFoodReminderPos"] or defaultPos
-        local defaults = {
-            point = pos.point or defaultPos.point,
-            x = pos.x or defaultPos.x,
-            y = pos.y or defaultPos.y,
-            scale = addon.db.mageFoodReminderScale or 1,
-        }
-
-	local settings
-	if SettingType then
-		settings = {}
-
-		local joinDropdown = createSoundDropdownSetting("mageFoodReminderJoinSound", "mageFoodReminderJoinSoundFile")
-		if joinDropdown then settings[#settings + 1] = joinDropdown end
-
-		local leaveDropdown = createSoundDropdownSetting("mageFoodReminderLeaveSound", "mageFoodReminderLeaveSoundFile")
-		if leaveDropdown then settings[#settings + 1] = leaveDropdown end
-
-		settings[#settings + 1] = {
-			name = L["mageFoodReminderSize"] or "Reminder scale",
-			kind = SettingType.Slider,
-			minValue = 0.1,
-			maxValue = 2.0,
-			valueStep = 0.05,
-			default = 1,
-			get = function()
-				return addon.db.mageFoodReminderScale or 1
-			end,
-			set = function(_, value)
-				value = tonumber(value) or addon.db.mageFoodReminderScale or 1
-				value = math.floor(value / 0.05 + 0.5) * 0.05
-				if value < 0.1 then value = 0.1 elseif value > 2.0 then value = 2.0 end
-				value = tonumber(string.format("%.2f", value))
-				addon.db.mageFoodReminderScale = value
-				applyButtonSettings()
-			end,
-			formatter = function(value)
-				value = math.floor(value / 0.05 + 0.5) * 0.05
-				if value < 0.1 then value = 0.1 elseif value > 2.0 then value = 2.0 end
-				return string.format("%.2f", value)
-			end,
+	local function performRegistration()
+		local anchor = ensureAnchor()
+		local pos = addon.db["mageFoodReminderPos"] or defaultPos
+		local defaults = {
+			point = pos.point or defaultPos.point,
+			x = pos.x or defaultPos.x,
+			y = pos.y or defaultPos.y,
+			scale = addon.db.mageFoodReminderScale or 1,
 		}
+
+		local settings
+		if SettingType then
+			settings = {}
+
+			local joinDropdown = createSoundDropdownSetting("mageFoodReminderJoinSound", "mageFoodReminderJoinSoundFile")
+			if joinDropdown then settings[#settings + 1] = joinDropdown end
+
+			local leaveDropdown = createSoundDropdownSetting("mageFoodReminderLeaveSound", "mageFoodReminderLeaveSoundFile")
+			if leaveDropdown then settings[#settings + 1] = leaveDropdown end
+
+			settings[#settings + 1] = {
+				name = L["mageFoodReminderSize"] or "Reminder scale",
+				kind = SettingType.Slider,
+				minValue = 0.1,
+				maxValue = 2.0,
+				valueStep = 0.05,
+				default = 1,
+				get = function() return addon.db.mageFoodReminderScale or 1 end,
+				set = function(_, value)
+					value = tonumber(value) or addon.db.mageFoodReminderScale or 1
+					value = math.floor(value / 0.05 + 0.5) * 0.05
+					if value < 0.1 then
+						value = 0.1
+					elseif value > 2.0 then
+						value = 2.0
+					end
+					value = tonumber(string.format("%.2f", value))
+					addon.db.mageFoodReminderScale = value
+					applyButtonSettings()
+				end,
+				formatter = function(value)
+					value = math.floor(value / 0.05 + 0.5) * 0.05
+					if value < 0.1 then
+						value = 0.1
+					elseif value > 2.0 then
+						value = 2.0
+					end
+					return string.format("%.2f", value)
+				end,
+			}
+		end
+
+		EditMode:RegisterFrame(editModeId, {
+			frame = anchor,
+			title = L["mageFoodReminder"] or "Food Reminder",
+			layoutDefaults = defaults,
+			onApply = function(_, layoutName, data)
+				if not data then
+					addon.db["mageFoodReminderPos"] = CopyTable(defaultPos)
+					addon.db.mageFoodReminderScale = 1
+				else
+					if data.point then addon.db["mageFoodReminderPos"] = {
+						point = data.point,
+						x = data.x or 0,
+						y = data.y or 0,
+					} end
+					if data.scale then addon.db.mageFoodReminderScale = data.scale end
+				end
+				applyButtonSettings()
+				syncEditModePosition()
+			end,
+			onPositionChanged = function(_, layoutName, data)
+				if not data then return end
+				addon.db["mageFoodReminderPos"] = {
+					point = data.point or defaults.point,
+					x = data.x or defaults.x,
+					y = data.y or defaults.y,
+				}
+				applyButtonSettings()
+				syncEditModePosition()
+			end,
+			onEnter = function()
+				editModeActive = true
+				local anchorFrame = ensureAnchor()
+				anchorFrame:Show()
+				checkShow()
+			end,
+			onExit = function()
+				editModeActive = false
+				checkShow()
+			end,
+			isEnabled = function() return addon.db.mageFoodReminder end,
+			managePosition = true,
+			settings = settings,
+		})
+		editModeRegistered = true
+		syncEditModePosition()
 	end
 
-        EditMode:RegisterFrame(editModeId, {
-            frame = anchor,
-            title = L["mageFoodReminder"] or "Food Reminder",
-            layoutDefaults = defaults,
-            onApply = function(_, layoutName, data)
-                if not data then
-                    addon.db["mageFoodReminderPos"] = CopyTable(defaultPos)
-                    addon.db.mageFoodReminderScale = 1
-                else
-                    if data.point then
-                        addon.db["mageFoodReminderPos"] = {
-                            point = data.point,
-                            x = data.x or 0,
-                            y = data.y or 0,
-                        }
-                    end
-                    if data.scale then addon.db.mageFoodReminderScale = data.scale end
-                end
-                applyButtonSettings()
-                syncEditModePosition()
-            end,
-            onPositionChanged = function(_, layoutName, data)
-                if not data then return end
-                addon.db["mageFoodReminderPos"] = {
-                    point = data.point or defaults.point,
-                    x = data.x or defaults.x,
-                    y = data.y or defaults.y,
-                }
-                applyButtonSettings()
-                syncEditModePosition()
-            end,
-            onEnter = function()
-                editModeActive = true
-                local anchorFrame = ensureAnchor()
-                anchorFrame:Show()
-                checkShow()
-            end,
-            onExit = function()
-                editModeActive = false
-                checkShow()
-            end,
-            isEnabled = function() return addon.db.mageFoodReminder end,
-            managePosition = true,
-            settings = settings,
-        })
-        editModeRegistered = true
-        syncEditModePosition()
-    end
-
-    local ok, err = pcall(performRegistration)
-    registeringEditMode = false
-    if not ok and err then geterrorhandler()(err) end
+	local ok, err = pcall(performRegistration)
+	registeringEditMode = false
+	if not ok and err then geterrorhandler()(err) end
 end
 
 function addon.Drinks.functions.updateRole()

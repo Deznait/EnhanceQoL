@@ -14,6 +14,7 @@
 - Data Panels now have an Edit Mode delete button with a confirmation prompt for faster cleanup.
 - Food Reminder now appears in Edit Mode with slider and dropdown settings for quick tuning.
 - Tooltip: target context menu can now copy NPC Wowhead links (toggle in Tooltip → Unit → NPCs).
+- Chat Frame option to show loot and currency icons alongside their chat links (disabled by default).
 
 ### 🔄 Changed
 
