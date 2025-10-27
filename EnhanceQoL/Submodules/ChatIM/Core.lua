@@ -45,6 +45,32 @@ end
 
 local function whisperFilter() return true end
 
+local function OpenChatIMForEditBox(editBox)
+	if not ChatIM.enabled or not editBox or not editBox:IsShown() then return end
+	local chatType = editBox.GetAttribute and editBox:GetAttribute("chatType")
+	if chatType == "WHISPER" then
+		local name = editBox:GetAttribute("tellTarget") or ChatEdit_GetLastTellTarget()
+		if name then
+			if not name:match("-") then name = name .. "-" .. (GetRealmName()):gsub("%s", "") end
+			ChatIM:StartWhisper(name)
+			local tab = ChatIM.tabs[name]
+			tab.edit:SetFocus()
+		end
+	elseif chatType == "BN_WHISPER" then
+		local target = editBox:GetAttribute("tellTarget") or ChatEdit_GetLastTellTarget()
+		if target then
+			local plain = BNTokenFindName and (BNTokenFindName(target) or target) or target
+			local bnetID = BNet_GetBNetIDAccount and BNet_GetBNetIDAccount(plain)
+			if bnetID then
+				local info = C_BattleNet.GetAccountInfoByID and C_BattleNet.GetAccountInfoByID(bnetID)
+				ChatIM:StartWhisper(plain, bnetID, info and info.battleTag)
+				local tab = ChatIM.tabs[target]
+				tab.edit:SetFocus()
+			end
+		end
+	end
+end
+
 local function focusTab(target)
 	ChatIM:CreateTab(target)
 	if ChatIM.widget and ChatIM.widget.frame and not ChatIM.widget.frame:IsShown() then
@@ -53,8 +79,7 @@ local function focusTab(target)
 	end
 	local tab = ChatIM.tabs[target]
 	if tab and tab.edit then
-		ChatIM.tabGroup:SelectTab(target)
-		-- tab.edit:SetFocus()
+		ChatIM.tabGroup:SelectTab(target) -- tab.edit:SetFocus()
 	end
 end
 
@@ -169,6 +194,21 @@ function ChatIM:SetEnabled(val)
 					local info = C_BattleNet.GetAccountInfoByID(bnetID)
 					if info then accountTag = info.battleTag end
 					if accountTag then ChatIM:StartWhisper(target, bnetID, accountTag) end
+				end
+			end)
+			hooksecurefunc("ChatFrame_ReplyTell2", function()
+				if not ChatIM.enabled then return end
+				local name = ChatEdit_GetLastToldTarget() and ChatEdit_GetLastToldTarget()
+				if name then
+					if not name:match("-") then name = name .. "-" .. (GetRealmName()):gsub("%s", "") end
+					ChatIM:StartWhisper(name)
+					local tab = ChatIM.tabs[name]
+					if tab and tab.edit then
+						ChatIM.tabGroup:SelectTab(name)
+						C_Timer.After(0, function() tab.edit:SetFocus() end)
+						local eb = ChatEdit_ChooseBoxForSend()
+						if eb then ChatEdit_OnEscapePressed(eb) end
+					end
 				end
 			end)
 			self.whisperHooked = true
