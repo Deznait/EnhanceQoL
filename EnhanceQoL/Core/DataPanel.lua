@@ -10,7 +10,6 @@ local DELETE_BUTTON_LABEL = L["DataPanelDelete"] or "Delete panel"
 local DELETE_CONFIRM_TEXT = L["DataPanelDeleteConfirm"] or 'Are you sure you want to delete "%s"? This cannot be undone.'
 
 local DELETE_PANEL_POPUP = addonName .. "DeleteDataPanel"
-StaticPopupDialogs = StaticPopupDialogs or {}
 if not StaticPopupDialogs[DELETE_PANEL_POPUP] then
 	StaticPopupDialogs[DELETE_PANEL_POPUP] = {
 		text = DELETE_CONFIRM_TEXT,
