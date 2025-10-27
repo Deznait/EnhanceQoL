@@ -27,6 +27,8 @@ addon.functions.InitDBValue("mageFoodReminder", false)
 local defaultPos = { point = "TOP", x = 0, y = -100 }
 addon.functions.InitDBValue("mageFoodReminderPos", { point = defaultPos.point, x = defaultPos.x, y = defaultPos.y })
 addon.functions.InitDBValue("mageFoodReminderScale", 1)
+addon.functions.InitDBValue("mageFoodReminderSound", true)
+addon.functions.InitDBValue("mageFoodReminderUseCustomSound", false)
 addon.functions.InitDBValue("mageFoodReminderJoinSoundFile", "")
 addon.functions.InitDBValue("mageFoodReminderLeaveSoundFile", "")
 
@@ -39,6 +41,7 @@ else
 	if addon.db.mageFoodReminderLeaveSoundFile == "" then addon.db.mageFoodReminderLeaveSoundFile = nil end
 end
 addon.db.mageFoodReminderSound = nil
+addon.db.mageFoodReminderUseCustomSound = nil
 
 local brButton
 local defaultButtonSize = 60
@@ -173,38 +176,28 @@ local function applyButtonSettings()
 	local pos = addon.db["mageFoodReminderPos"] or defaultPos
 	anchor:ClearAllPoints()
 	anchor:SetPoint(pos.point or defaultPos.point, UIParent, pos.point or defaultPos.point, pos.x or defaultPos.x, pos.y or defaultPos.y)
-	local scale = addon.db["mageFoodReminderScale"] or 1
-	scale = math.floor(scale / 0.05 + 0.5) * 0.05
-	if scale < 0.1 then
-		scale = 0.1
-	elseif scale > 2.0 then
-		scale = 2.0
-	end
-	scale = tonumber(string.format("%.2f", scale))
-	anchor:SetScale(scale)
-	addon.db["mageFoodReminderScale"] = scale
+	anchor:SetScale(addon.db["mageFoodReminderScale"] or 1)
 
 	if brButton then
-		brButton:SetScale(scale)
-		brButton:SetParent(UIParent)
 		brButton:ClearAllPoints()
-		brButton:SetPoint(pos.point or defaultPos.point, UIParent, pos.point or defaultPos.point, pos.x or defaultPos.x, pos.y or defaultPos.y)
+		brButton:SetAllPoints(anchor)
 	end
 	updateButtonMouseState()
 
-	if editModeActive then
+	if addon.db["mageFoodReminder"] or editModeActive then
 		anchor:Show()
 	else
 		anchor:Hide()
 	end
 	anchor:EnableMouse(editModeActive)
-	anchor:SetFrameStrata("HIGH")
+	anchor:SetFrameStrata(editModeActive and "HIGH" or "MEDIUM")
+	if brButton then brButton:SetFrameStrata(editModeActive and "HIGH" or "DIALOG") end
+
 	if editModeActive then
 		anchor:SetBackdropColor(0.05, 0.05, 0.05, 0.6)
 	else
 		anchor:SetBackdropColor(0, 0, 0, 0)
 	end
-	if brButton then brButton:SetFrameStrata("HIGH") end
 
 	syncEditModePosition()
 end
@@ -267,7 +260,7 @@ end
 local function createBRFrame()
 	removeBRFrame()
 	local anchor = ensureAnchor()
-	brButton = CreateFrame("Button", "EQOLMFButton", UIParent)
+	brButton = CreateFrame("Button", nil, UIParent)
 	brButton:SetAllPoints(anchor)
 	brButton:SetFrameStrata("HIGH")
 	brButton:SetScript("OnClick", function()
