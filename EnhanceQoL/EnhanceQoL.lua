@@ -2115,37 +2115,10 @@ local function addMinimapFrame(container)
 			scaleGroup:AddChild(sliderZoom)
 			g:AddChild(scaleGroup)
 
-			local cbCompressSpecs = addon.functions.createCheckboxAce(
-				L["dungeonJournalLootSpecCompressSpecs"],
-				addon.db["dungeonJournalLootSpecCompressSpecs"],
-				function(self, _, value)
-					addon.db["dungeonJournalLootSpecCompressSpecs"] = value
-					if addon.DungeonJournalLootSpec then addon.DungeonJournalLootSpec:Refresh() end
-				end,
-				L["dungeonJournalLootSpecCompressSpecsDesc"]
-			)
-			g:AddChild(cbCompressSpecs)
-
-			local cbCompressRoles = addon.functions.createCheckboxAce(
-				L["dungeonJournalLootSpecCompressRoles"],
-				addon.db["dungeonJournalLootSpecCompressRoles"],
-				function(self, _, value)
-					addon.db["dungeonJournalLootSpecCompressRoles"] = value
-					if addon.DungeonJournalLootSpec then addon.DungeonJournalLootSpec:Refresh() end
-				end,
-				L["dungeonJournalLootSpecCompressRolesDesc"]
-			)
-			g:AddChild(cbCompressRoles)
-
-			local cbShowAll = addon.functions.createCheckboxAce(
-				L["dungeonJournalLootSpecShowAll"],
-				addon.db["dungeonJournalLootSpecShowAll"],
-				function(self, _, value)
-					addon.db["dungeonJournalLootSpecShowAll"] = value
-					if addon.DungeonJournalLootSpec then addon.DungeonJournalLootSpec:Refresh() end
-				end,
-				L["dungeonJournalLootSpecShowAllDesc"]
-			)
+			local cbShowAll = addon.functions.createCheckboxAce(L["dungeonJournalLootSpecShowAll"], addon.db["dungeonJournalLootSpecShowAll"], function(self, _, value)
+				addon.db["dungeonJournalLootSpecShowAll"] = value
+				if addon.DungeonJournalLootSpec then addon.DungeonJournalLootSpec:Refresh() end
+			end, L["dungeonJournalLootSpecShowAllDesc"])
 			g:AddChild(cbShowAll)
 		end
 
@@ -6209,8 +6182,6 @@ local function initUI()
 	addon.functions.InitDBValue("dungeonJournalLootSpecSpacing", 0)
 	addon.functions.InitDBValue("dungeonJournalLootSpecScale", 1)
 	addon.functions.InitDBValue("dungeonJournalLootSpecIconPadding", 0)
-	addon.functions.InitDBValue("dungeonJournalLootSpecCompressSpecs", true)
-	addon.functions.InitDBValue("dungeonJournalLootSpecCompressRoles", true)
 	addon.functions.InitDBValue("dungeonJournalLootSpecShowAll", false)
 
 	-- Game Menu (ESC) scaling

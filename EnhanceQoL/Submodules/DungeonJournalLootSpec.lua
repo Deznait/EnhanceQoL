@@ -225,8 +225,8 @@ local function GetConfig()
 		spacing = db["dungeonJournalLootSpecSpacing"] or 0,
 		textureScale = db["dungeonJournalLootSpecScale"] or 1,
 		iconPadding = db["dungeonJournalLootSpecIconPadding"] or 0,
-		compressSpecs = db["dungeonJournalLootSpecCompressSpecs"] and true or false,
-		compressRoles = db["dungeonJournalLootSpecCompressRoles"] and true or false,
+		compressSpecs = true,
+		compressRoles = true,
 		showAll = db["dungeonJournalLootSpecShowAll"] and true or false,
 	}
 end
