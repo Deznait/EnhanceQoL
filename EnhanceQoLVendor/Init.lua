@@ -25,6 +25,7 @@ addon.Vendor.variables.tabNames = { -- Used to create autosell tabs
 
 -- Includelist
 addon.functions.InitDBValue("vendorIncludeSellList", {})
+addon.functions.InitDBValue("vendorIncludeDestroyList", {})
 
 -- Excludelist
 addon.functions.InitDBValue("vendorExcludeSellList", {})
@@ -41,6 +42,9 @@ addon.functions.InitDBValue("vendorAltClickInclude", false)
 addon.functions.InitDBValue("vendorShowSellOverlay", false)
 addon.functions.InitDBValue("vendorShowSellHighContrast", false)
 addon.functions.InitDBValue("vendorShowSellTooltip", false)
+addon.functions.InitDBValue("vendorDestroyEnable", false)
+addon.functions.InitDBValue("vendorShowDestroyOverlay", true)
+addon.functions.InitDBValue("vendorDestroyShowMessages", true)
 addon.functions.InitDBValue("vendorCraftShopperEnable", false)
 addon.functions.InitDBValue("vendorScrapAuto", false)
 addon.functions.InitDBValue("vendorScrapMaxQuality", Enum.ItemQuality.Rare)
