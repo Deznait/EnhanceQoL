@@ -15,6 +15,7 @@ local sellMarkLookup = {}
 local destroyMarkLookup = {}
 local updateSellMarks
 local updateDestroyUI
+local updateDestroyButtonState
 local tooltipCache = {}
 local destroyState = {
 	queue = {},
@@ -255,6 +256,21 @@ local function destroyHideList()
 	if destroyState.list and destroyState.list:IsShown() then destroyState.list:Hide() end
 end
 
+local function setDestroyButtonVisibility(button, visible)
+	if not button then return end
+	local inCombat = InCombatLockdown and InCombatLockdown() or false
+	if visible then
+		button:SetAlpha(1)
+		button:Enable()
+		if not inCombat then button:EnableMouse(true) end
+	else
+		button:SetAlpha(0)
+		button:Disable()
+		if not inCombat then button:EnableMouse(false) end
+		destroyHideList()
+	end
+end
+
 local function ensureDestroyButton()
 	if destroyState.button and destroyState.button:IsObjectType("Button") then return destroyState.button end
 	if InCombatLockdown and InCombatLockdown() then
@@ -319,13 +335,13 @@ local function ensureDestroyButton()
 		end
 
 		local info = C_Container.GetContainerItemInfo(bag, slot)
-		if not info then
-			print(L["vendorDestroyMissing"] or "Queued item is no longer in your bags.")
-			table.remove(queue, 1)
-			updateDestroyUI(copyDestroyQueue(queue))
-			updateDestroyButtonState()
-			return
-		end
+	if not info then
+		print(L["vendorDestroyMissing"] or "Queued item is no longer in your bags.")
+		table.remove(queue, 1)
+		updateDestroyUI(copyDestroyQueue(queue))
+		updateDestroyButtonState()
+		return
+	end
 
 		local link = C_Container.GetContainerItemLink(bag, slot)
 		if not link and entry.itemID then link = C_Item.GetItemLink(entry.itemID) end
@@ -333,14 +349,14 @@ local function ensureDestroyButton()
 		link = tostring(link)
 
 		local reason = getDestroyProtectionReason(entry.itemID, info)
-		if reason then
-			notifyDestroyProtection(entry.itemID, link, reason)
-			if addon.db["vendorIncludeDestroyList"] then addon.db["vendorIncludeDestroyList"][entry.itemID] = nil end
-			table.remove(queue, 1)
-			updateDestroyUI(copyDestroyQueue(queue))
-			updateDestroyButtonState()
-			return
-		end
+	if reason then
+		notifyDestroyProtection(entry.itemID, link, reason)
+		if addon.db["vendorIncludeDestroyList"] then addon.db["vendorIncludeDestroyList"][entry.itemID] = nil end
+		table.remove(queue, 1)
+		updateDestroyUI(copyDestroyQueue(queue))
+		updateDestroyButtonState()
+		return
+	end
 
 		if info.isLocked then
 			print(L["vendorDestroyLocked"] or "Item is locked.")
@@ -355,20 +371,19 @@ local function ensureDestroyButton()
 			return
 		end
 
-		DeleteCursorItem()
-		if CursorHasItem() then
-			ClearCursor()
-			print(L["vendorDestroyConfirm"] or "Item requires manual confirmation to delete.")
-			return
-		end
+	DeleteCursorItem()
+	if CursorHasItem() then
+		ClearCursor()
+		print(L["vendorDestroyConfirm"] or "Item requires manual confirmation to delete.")
+		return
+	end
 
-		table.remove(queue, 1)
-		if addon.db["vendorDestroyShowMessages"] ~= false then print(string.format(L["vendorDestroyDestroyed"] or "Destroyed: %s", link .. (count > 1 and (" x" .. count) or ""))) end
-		updateDestroyUI(copyDestroyQueue(queue))
-		updateDestroyButtonState()
-		updateSellMarks(nil, true)
-	end)
-	button:Hide()
+	table.remove(queue, 1)
+	if addon.db["vendorDestroyShowMessages"] ~= false then print(string.format(L["vendorDestroyDestroyed"] or "Destroyed: %s", link .. (count > 1 and (" x" .. count) or ""))) end
+	updateDestroyUI(copyDestroyQueue(queue))
+	updateSellMarks(nil, true)
+end)
+	setDestroyButtonVisibility(button, false)
 	anchorDestroyButton(button)
 
 	local count = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -380,18 +395,14 @@ local function ensureDestroyButton()
 	return button
 end
 
-local function updateDestroyButtonState()
+updateDestroyButtonState = function()
 	if destroyState.pendingQueue then
 		destroyState.queue = destroyState.pendingQueue
 		destroyState.pendingQueue = nil
 	end
 
 	if not addon.db["vendorDestroyEnable"] then
-		if destroyState.button and (not InCombatLockdown or not InCombatLockdown()) then
-			destroyState.button:Hide()
-			destroyState.button:Disable()
-			if destroyState.button.count then destroyState.button.count:SetText("") end
-		end
+		if destroyState.button then setDestroyButtonVisibility(destroyState.button, false) end
 		destroyHideList()
 		destroyState.pendingUpdate = false
 		return
@@ -422,8 +433,7 @@ local function updateDestroyButtonState()
 		table.remove(queue, 1)
 	end
 	if not inventoryOpen() or #queue == 0 then
-		button:Hide()
-		button:Disable()
+		setDestroyButtonVisibility(button, false)
 		if button.count then button.count:SetText("") end
 		destroyHideList()
 		destroyState.pendingUpdate = false
@@ -432,13 +442,16 @@ local function updateDestroyButtonState()
 
 	local entry = queue[1]
 	local info = entry and C_Container.GetContainerItemInfo(entry.bag, entry.slot)
-	if info and info.isLocked then
-		button:Disable()
-	else
-		button:Enable()
+	local inCombat = InCombatLockdown and InCombatLockdown() or false
+	if not inCombat then
+		if info and info.isLocked then
+			button:Disable()
+		else
+			button:Enable()
+		end
 	end
 
-	button:Show()
+	setDestroyButtonVisibility(button, true)
 	if button.count then button.count:SetText(#queue) end
 	if destroyState.list and destroyState.list:IsShown() then
 		destroyRefreshList()
@@ -1475,7 +1488,6 @@ local function hookBagFrame(frame)
 	end)
 	frame:HookScript("OnHide", function()
 		destroyHideList()
-		if destroyState.button and not inventoryOpen() then destroyState.button:Hide() end
 	end)
 end
 
