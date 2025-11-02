@@ -3485,8 +3485,8 @@ function LegionRemix:ApplyWorldTierIconVisibility()
 
 	if not frame.__EQOLWorldTierHooked then
 		frame.__EQOLWorldTierHooked = true
-		frame:HookScript("OnShow", function(widget) LegionRemix:OnWorldTierWidgetShow(widget) end)
-		frame:HookScript("OnHide", function(widget) LegionRemix:OnWorldTierWidgetHide(widget) end)
+		-- frame:HookScript("OnShow", function(widget) LegionRemix:OnWorldTierWidgetShow(widget) end)
+		-- frame:HookScript("OnHide", function(widget) LegionRemix:OnWorldTierWidgetHide(widget) end)
 	end
 
 	if self:ShouldSuppressWorldTierIcon() then
@@ -3793,6 +3793,7 @@ local activationEvents = {
 	"ZONE_CHANGED_NEW_AREA",
 	"ZONE_CHANGED",
 	"ZONE_CHANGED_INDOORS",
+	"UPDATE_UI_WIDGET",
 }
 
 local activationWatcher = CreateFrame("Frame")
@@ -3818,5 +3819,11 @@ activationWatcher:SetScript("OnEvent", function(_, event, ...)
 	if event == "ZONE_CHANGED_NEW_AREA" or event == "ZONE_CHANGED" or event == "ZONE_CHANGED_INDOORS" then
 		LegionRemix:RequestOverlayUpdate()
 		return
+	end
+	if event == "UPDATE_UI_WIDGET" then
+		local info = ...
+		if info.widgetID ~= 7190 then return end
+		local frame = getWorldTierWidgetFrame()
+		if frame and frame:IsShown() then C_Timer.After(0, function() LegionRemix:OnWorldTierWidgetShow(frame) end) end
 	end
 end)
