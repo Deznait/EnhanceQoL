@@ -268,6 +268,37 @@ function LegionRemix:UpdateFilterButtons()
 end
 
 local BRONZE_CURRENCY_ID = 3252
+local WORLD_TIER_WIDGET_CONTAINER = "UIWidgetBelowMinimapContainerFrame"
+local WORLD_TIER_WIDGET_ID = 7190
+
+local function getWorldTierContainer() return _G[WORLD_TIER_WIDGET_CONTAINER] end
+
+local function getWorldTierWidgetFrame()
+	local container = getWorldTierContainer()
+	if not container then return nil end
+
+	local widgetFrames = container.widgetFrames
+	if type(widgetFrames) ~= "table" then return nil end
+
+	local frame = widgetFrames[WORLD_TIER_WIDGET_ID] or (WORLD_TIER_WIDGET_ID and widgetFrames[tostring(WORLD_TIER_WIDGET_ID)])
+	if frame and type(frame) == "table" then return frame end
+
+	return nil
+end
+
+local function hideWorldTierWidget(frame)
+	if not frame or not frame.Hide then return end
+	frame.__EQOLHiddenByLegionRemix = true
+	if frame.SetAlpha then frame:SetAlpha(0) end
+	frame:Hide()
+end
+
+local function showWorldTierWidget(frame)
+	if not frame or not frame.Show then return end
+	frame.__EQOLHiddenByLegionRemix = nil
+	if frame.SetAlpha then frame:SetAlpha(1) end
+	if not frame:IsShown() then frame:Show() end
+end
 local DEFAULTS = {
 	overlayEnabled = false,
 	overlayHidden = false,
@@ -280,6 +311,12 @@ local DEFAULTS = {
 	itemNameCache = {},
 	categoryFilters = {},
 	hideCompleteCategories = false,
+	worldTierIcon = {
+		editEnabled = false,
+		hidden = false,
+		scale = 1,
+		anchor = { initialized = false },
+	},
 	zoneFilters = {},
 	phaseFilters = { mode = "all" },
 	anchor = { point = "TOPLEFT", relativePoint = "TOPLEFT", x = 0, y = -120 },
@@ -1060,6 +1097,7 @@ function LegionRemix:GetDB()
 	self:EnsureCategoryFilterDefaults(db)
 	self:EnsureZoneFilterDefaults(db)
 	self:EnsureOverlayStrataDefaults(db)
+	self:EnsureWorldTierDefaults(db)
 	return db
 end
 
@@ -1113,6 +1151,20 @@ function LegionRemix:EnsureOverlayStrataDefaults(db)
 	if not db then return end
 	local strata = db.overlayStrata
 	if not VALID_FRAME_STRATA[strata] then db.overlayStrata = DEFAULTS.overlayStrata end
+end
+
+function LegionRemix:EnsureWorldTierDefaults(db)
+	db = db or self:GetDB()
+	if not db then return end
+	local settings = db.worldTierIcon
+	if type(settings) ~= "table" then
+		settings = CopyTable(DEFAULTS.worldTierIcon)
+		db.worldTierIcon = settings
+	end
+	if type(settings.anchor) ~= "table" then settings.anchor = {} end
+	if settings.scale == nil then settings.scale = 1 end
+	if settings.hidden == nil then settings.hidden = false end
+	if settings.editEnabled == nil then settings.editEnabled = false end
 end
 
 function LegionRemix:SyncEditModeValue(field, value)
@@ -2241,6 +2293,7 @@ function LegionRemix:UpdateActivationState()
 		if self.active then self.active = false end
 		if self.overlay then self.overlay:Hide() end
 	end
+	self:ApplyWorldTierManagement()
 end
 
 function LegionRemix:ShouldOverlayBeVisible()
@@ -2961,6 +3014,461 @@ function LegionRemix:SetOverlayEnabled(value)
 	if value then self:RegisterEditModeFrame() end
 end
 
+function LegionRemix:GetWorldTierSettings()
+	local db = self:GetDB()
+	return db and db.worldTierIcon or DEFAULTS.worldTierIcon
+end
+
+function LegionRemix:IsWorldTierEditingEnabled()
+	local settings = self:GetWorldTierSettings()
+	return settings and settings.editEnabled and true or false
+end
+
+function LegionRemix:SetWorldTierEditingEnabled(value)
+	local settings = self:GetWorldTierSettings()
+	if not settings then return end
+	local enabled = value and true or false
+	if settings.editEnabled == enabled then return end
+	settings.editEnabled = enabled
+	if not enabled and self.worldTierEditModeId and EditMode and EditMode.UnregisterFrame then
+		local ok = pcall(function() EditMode:UnregisterFrame(self.worldTierEditModeId) end)
+		if ok then
+			self.worldTierEditModeRegistered = nil
+			self.worldTierEditModeId = nil
+		end
+	end
+	self:ApplyWorldTierManagement()
+	if not enabled then self:SyncWorldTierEditModeState() end
+end
+
+function LegionRemix:IsWorldTierHidden()
+	local settings = self:GetWorldTierSettings()
+	return settings and settings.hidden and true or false
+end
+
+function LegionRemix:ShouldSuppressWorldTierIcon()
+	return self:IsWorldTierHidden()
+end
+
+function LegionRemix:SetWorldTierHidden(value)
+	local settings = self:GetWorldTierSettings()
+	if not settings then return end
+	local hidden = value and true or false
+	if settings.hidden == hidden then return end
+	settings.hidden = hidden
+	self:SyncWorldTierEditModeState()
+	self:ApplyWorldTierIconVisibility()
+end
+
+function LegionRemix:GetWorldTierScale()
+	local settings = self:GetWorldTierSettings()
+	local scale = settings and tonumber(settings.scale) or 1
+	if not scale or scale <= 0 then scale = 1 end
+	return scale
+end
+
+function LegionRemix:SetWorldTierScale(value)
+	local settings = self:GetWorldTierSettings()
+	if not settings then return end
+	local scale = tonumber(value) or 1
+	if scale <= 0.2 then scale = 0.2 end
+	if scale > 3 then scale = 3 end
+	if settings.scale == scale then return end
+	settings.scale = scale
+	self:ApplyWorldTierScale()
+	self:SyncWorldTierEditModeState()
+end
+
+function LegionRemix:ApplyWorldTierScale()
+	local frame = getWorldTierWidgetFrame()
+	if not frame then
+		if not self.worldTierScalePending then
+			self.worldTierScalePending = true
+			if C_Timer and C_Timer.After then
+				C_Timer.After(1, function()
+					LegionRemix.worldTierScalePending = nil
+					LegionRemix:ApplyWorldTierScale()
+				end)
+			else
+				self.worldTierScalePending = nil
+			end
+		end
+		return
+	end
+	if self:IsWorldTierEditingEnabled() then
+		frame:SetScale(self:GetWorldTierScale())
+	else
+		local original = self.worldTierOriginalPlacement and self.worldTierOriginalPlacement.scale or 1
+		frame:SetScale(original or 1)
+	end
+end
+
+function LegionRemix:GetWorldTierAnchorFrame()
+	if self.worldTierAnchor and self.worldTierAnchor:IsObjectType("Frame") then return self.worldTierAnchor end
+	local frame = CreateFrame("Frame", "EnhanceQoL_LegionRemixWorldTierAnchor", UIParent, "BackdropTemplate")
+	frame:SetSize(48, 48)
+	frame:SetFrameStrata("LOW")
+	frame:SetClampedToScreen(true)
+	frame:SetBackdrop({
+		bgFile = "Interface\\Buttons\\WHITE8x8",
+		edgeFile = "Interface\\Buttons\\WHITE8x8",
+		edgeSize = 1,
+		insets = { left = 0, right = 0, top = 0, bottom = 0 },
+	})
+	frame:SetBackdropColor(0, 0, 0, 0)
+	frame:SetBackdropBorderColor(0, 0, 0, 0)
+	frame:EnableMouse(false)
+	frame:Hide()
+	self.worldTierAnchor = frame
+	return frame
+end
+
+function LegionRemix:CaptureWorldTierOriginalPlacement()
+	if self.worldTierOriginalPlacementCaptured then return end
+	local frame = getWorldTierWidgetFrame()
+	if not frame then return end
+	local point, relativeTo, relativePoint, x, y = frame:GetPoint(1)
+	local parent = frame:GetParent()
+	self.worldTierOriginalPlacement = {
+		point = point or "CENTER",
+		relativePoint = relativePoint or point or "CENTER",
+		x = x or 0,
+		y = y or 0,
+		parent = parent,
+		parentName = parent and parent:GetName(),
+		relativeTo = relativeTo,
+		relativeToName = relativeTo and relativeTo:GetName(),
+		scale = frame:GetScale() or 1,
+	}
+	self.worldTierOriginalPlacementCaptured = true
+end
+
+function LegionRemix:RestoreWorldTierOriginalPlacement(frame)
+	frame = frame or getWorldTierWidgetFrame()
+	if not frame then return end
+	local data = self.worldTierOriginalPlacement
+	if not data then return end
+	local parent = data.parent
+	if not parent or not parent.GetName then parent = (data.parentName and _G[data.parentName]) or parent end
+	if not parent then parent = UIParent end
+	local relativeFrame = data.relativeTo
+	if not relativeFrame or not relativeFrame.GetName then relativeFrame = (data.relativeToName and _G[data.relativeToName]) or relativeFrame end
+	if not relativeFrame then relativeFrame = parent end
+	frame:SetParent(parent)
+	frame:ClearAllPoints()
+	frame:SetPoint(data.point or "CENTER", relativeFrame, data.relativePoint or data.point or "CENTER", data.x or 0, data.y or 0)
+	frame:SetScale(data.scale or 1)
+end
+
+function LegionRemix:EnsureWorldTierAnchorDefaults(container)
+	local settings = self:GetWorldTierSettings()
+	if not settings then return end
+	settings.anchor = settings.anchor or {}
+	local anchor = settings.anchor
+	local frame = container or getWorldTierWidgetFrame()
+	if not frame then return end
+	if not anchor.initialized then
+		anchor.point = "CENTER"
+		anchor.relativePoint = "CENTER"
+		anchor.x = 0
+		anchor.y = 0
+		anchor.relativeTo = "UIParent"
+		anchor.width = anchor.width or frame:GetWidth() or 80
+		anchor.height = anchor.height or frame:GetHeight() or 48
+		anchor.initialized = true
+		return
+	end
+	if anchor.point and anchor.relativePoint and anchor.x and anchor.y then return end
+	local point, relativeTo, relativePoint, x, y = frame:GetPoint(1)
+	local convertedX, convertedY = computeTopLeftOffset(frame, UIParent, point, relativePoint, x or 0, y or 0)
+	if convertedX and convertedY then
+		anchor.point = "TOPLEFT"
+		anchor.relativePoint = "TOPLEFT"
+		anchor.x = convertedX
+		anchor.y = convertedY
+	else
+		anchor.point = point or "TOPLEFT"
+		anchor.relativePoint = relativePoint or anchor.point
+		anchor.x = x or 0
+		anchor.y = y or 0
+	end
+	anchor.relativeTo = "UIParent"
+	anchor.width = anchor.width or frame:GetWidth() or 80
+	anchor.height = anchor.height or frame:GetHeight() or 48
+	anchor.initialized = true
+end
+
+function LegionRemix:ApplyWorldTierAnchorPosition()
+	local anchorFrame = self:GetWorldTierAnchorFrame()
+	if not anchorFrame then return end
+	local settings = self:GetWorldTierSettings()
+	local anchor = settings and settings.anchor or {}
+	local point = anchor.point or "TOPLEFT"
+	local relativePoint = anchor.relativePoint or point
+	local x = anchor.x or 0
+	local y = anchor.y or 0
+	local width = anchor.width or anchorFrame:GetWidth() or 80
+	local height = anchor.height or anchorFrame:GetHeight() or 48
+	if width <= 0 then width = 80 end
+	if height <= 0 then height = 48 end
+	anchorFrame:SetParent(UIParent)
+	anchorFrame:ClearAllPoints()
+	anchorFrame:SetPoint(point, UIParent, relativePoint, x, y)
+	anchorFrame:SetSize(width, height)
+end
+
+function LegionRemix:ApplyWorldTierAnchorToWidget()
+	local frame = getWorldTierWidgetFrame()
+	if not frame then return end
+	local anchorFrame = self:GetWorldTierAnchorFrame()
+	if not anchorFrame then return end
+	frame:SetParent(anchorFrame)
+	frame:ClearAllPoints()
+	frame:SetPoint("CENTER", anchorFrame, "CENTER", 0, 0)
+	-- frame:SetPoint("BOTTOMRIGHT", anchorFrame, "BOTTOMRIGHT", 0, 0)
+end
+
+function LegionRemix:SaveWorldTierAnchor(frame)
+	if not frame then return end
+	local settings = self:GetWorldTierSettings()
+	if not settings then return end
+	settings.anchor = settings.anchor or {}
+	local anchor = settings.anchor
+	local point, relativeTo, relativePoint, x, y = frame:GetPoint(1)
+	local parent = relativeTo or frame:GetParent() or UIParent
+	if parent ~= UIParent then parent = UIParent end
+	local convertedX, convertedY = computeTopLeftOffset(frame, parent, point, relativePoint, x or 0, y or 0)
+	if convertedX and convertedY then
+		anchor.point = "TOPLEFT"
+		anchor.relativePoint = "TOPLEFT"
+		anchor.x = convertedX
+		anchor.y = convertedY
+	else
+		anchor.point = point or "TOPLEFT"
+		anchor.relativePoint = relativePoint or anchor.point
+		anchor.x = x or 0
+		anchor.y = y or 0
+	end
+	anchor.relativeTo = "UIParent"
+	anchor.width = frame:GetWidth()
+	anchor.height = frame:GetHeight()
+	anchor.initialized = true
+	self:SyncWorldTierEditModeState()
+	self:SyncWorldTierEditModePosition()
+end
+
+function LegionRemix:ApplyWorldTierManagement()
+	local frame = getWorldTierWidgetFrame()
+	if not frame then
+		if not self.worldTierManagementPending then
+			self.worldTierManagementPending = true
+			if C_Timer and C_Timer.After then
+				C_Timer.After(1, function()
+					LegionRemix.worldTierManagementPending = nil
+					LegionRemix:ApplyWorldTierManagement()
+				end)
+			else
+				self.worldTierManagementPending = nil
+			end
+		end
+		return
+	end
+
+	self:CaptureWorldTierOriginalPlacement()
+
+	if self:IsWorldTierEditingEnabled() then
+		self:EnsureWorldTierAnchorDefaults(frame)
+		self:ApplyWorldTierAnchorPosition()
+		self:ApplyWorldTierAnchorToWidget()
+		local anchor = self:GetWorldTierAnchorFrame()
+		if anchor then
+			anchor:Show()
+			anchor:SetBackdropColor(0, 0, 0, 0)
+			anchor:SetBackdropBorderColor(0, 0, 0, 0)
+			anchor:EnableMouse(false)
+		end
+		self:RegisterWorldTierEditModeFrame()
+	else
+		self:RestoreWorldTierOriginalPlacement(frame)
+		if self.worldTierAnchor then self.worldTierAnchor:Hide() end
+	end
+
+	self:ApplyWorldTierScale()
+	self:ApplyWorldTierIconVisibility()
+end
+
+function LegionRemix:SyncWorldTierEditModeValue(field, value)
+	if not EditMode or not self.worldTierEditModeId or self.applyingWorldTierEdit then return end
+	EditMode:SetValue(self.worldTierEditModeId, field, value, nil, true)
+end
+
+function LegionRemix:SyncWorldTierEditModeState()
+	self:SyncWorldTierEditModeValue("hidden", self:IsWorldTierHidden())
+	self:SyncWorldTierEditModeValue("scale", self:GetWorldTierScale())
+end
+
+function LegionRemix:SyncWorldTierEditModePosition()
+	if not EditMode or not self.worldTierEditModeId then return end
+	local settings = self:GetWorldTierSettings()
+	local anchor = settings and settings.anchor or {}
+	local point = anchor.point or "CENTER"
+	local x = anchor.x or 0
+	local y = anchor.y or 0
+	EditMode:SetFramePosition(self.worldTierEditModeId, point, x, y, nil, true)
+end
+
+function LegionRemix:RegisterWorldTierEditModeFrame()
+	if not EditMode or not EditMode.RegisterFrame then return end
+
+	local anchor = self:GetWorldTierAnchorFrame()
+	if not anchor then return end
+
+	if self.worldTierEditModeRegistered and self.worldTierEditModeId then
+		EditMode:RefreshFrame(self.worldTierEditModeId)
+		return
+	end
+
+	local settings = self:GetWorldTierSettings()
+	local anchorConfig = settings and settings.anchor or {}
+	local defaults = {
+		point = anchorConfig.point or "TOPLEFT",
+		relativePoint = anchorConfig.relativePoint or anchorConfig.point or "TOPLEFT",
+		x = anchorConfig.x or 0,
+		y = anchorConfig.y or 0,
+		scale = self:GetWorldTierScale(),
+		hidden = self:IsWorldTierHidden(),
+	}
+
+	local editSettings
+	if SettingType then
+		editSettings = {}
+		editSettings[#editSettings + 1] = {
+			name = L["Hide icon"],
+			kind = SettingType.Checkbox,
+			field = "hidden",
+			default = defaults.hidden,
+			get = function() return LegionRemix:IsWorldTierHidden() end,
+			set = function(_, value) LegionRemix:SetWorldTierHidden(value) end,
+		}
+		editSettings[#editSettings + 1] = {
+			name = L["World Tier icon size"],
+			kind = SettingType.Slider,
+			field = "scale",
+			default = defaults.scale,
+			minValue = 0.5,
+			maxValue = 2.5,
+			valueStep = 0.05,
+			get = function() return LegionRemix:GetWorldTierScale() end,
+			set = function(_, value) LegionRemix:SetWorldTierScale(value) end,
+			formatter = function(value)
+				value = tonumber(value) or defaults.scale or 1
+				return string.format("%.2f", value)
+			end,
+		}
+	end
+
+	local id = "legionremix:worldtier"
+	EditMode:RegisterFrame(id, {
+		frame = anchor,
+		title = L["World Tier Icon"],
+		layoutDefaults = defaults,
+		onApply = function(_, _, data) LegionRemix:ApplyWorldTierEditModeSettings(data or {}) end,
+		onPositionChanged = function(_, _, data) LegionRemix:ApplyWorldTierEditModePosition(data or {}) end,
+		onEnter = function()
+			anchor:Show()
+			anchor:SetBackdropColor(0.1, 0.6, 1, 0.15)
+			anchor:SetBackdropBorderColor(0.1, 0.6, 1, 0.8)
+			anchor:EnableMouse(true)
+			LegionRemix:ApplyWorldTierAnchorPosition()
+		end,
+		onExit = function()
+			anchor:SetBackdropColor(0, 0, 0, 0)
+			anchor:SetBackdropBorderColor(0, 0, 0, 0)
+			anchor:EnableMouse(false)
+			anchor:Show()
+		end,
+		settings = editSettings,
+		showOutsideEditMode = true,
+	})
+	self.worldTierEditModeRegistered = true
+	self.worldTierEditModeId = id
+	self:SyncWorldTierEditModeState()
+	self:SyncWorldTierEditModePosition()
+	if EditMode and EditMode.IsActive and EditMode:IsActive() then anchor:Show() end
+end
+
+function LegionRemix:ApplyWorldTierEditModeSettings(data)
+	if not data then return end
+	self.applyingWorldTierEdit = true
+	if data.hidden ~= nil then self:SetWorldTierHidden(data.hidden) end
+	if data.scale ~= nil then self:SetWorldTierScale(data.scale) end
+	self.applyingWorldTierEdit = nil
+end
+
+function LegionRemix:ApplyWorldTierEditModePosition(data)
+	if not data then return end
+	local anchor = self:GetWorldTierAnchorFrame()
+	if not anchor then return end
+	self.applyingWorldTierEdit = true
+	local point = data.point or "TOPLEFT"
+	local relativePoint = data.relativePoint or point
+	local x = data.x or 0
+	local y = data.y or 0
+	anchor:ClearAllPoints()
+	anchor:SetPoint(point, UIParent, relativePoint, x, y)
+	self:SaveWorldTierAnchor(anchor)
+	self.applyingWorldTierEdit = nil
+	self:ApplyWorldTierAnchorToWidget()
+end
+
+function LegionRemix:ApplyWorldTierIconVisibility()
+	local frame = getWorldTierWidgetFrame()
+	if not frame then
+		if not self.worldTierIconPending then
+			self.worldTierIconPending = true
+			if C_Timer and C_Timer.After then
+				C_Timer.After(1, function()
+					LegionRemix.worldTierIconPending = nil
+					LegionRemix:ApplyWorldTierIconVisibility()
+				end)
+			else
+				self.worldTierIconPending = nil
+			end
+		end
+		return
+	end
+
+	if not frame.__EQOLWorldTierHooked then
+		frame.__EQOLWorldTierHooked = true
+		frame:HookScript("OnShow", function(widget) LegionRemix:OnWorldTierWidgetShow(widget) end)
+		frame:HookScript("OnHide", function(widget) LegionRemix:OnWorldTierWidgetHide(widget) end)
+	end
+
+	if self:ShouldSuppressWorldTierIcon() then
+		hideWorldTierWidget(frame)
+	else
+		showWorldTierWidget(frame)
+	end
+end
+
+function LegionRemix:OnWorldTierWidgetShow()
+	if self.handlingWorldTierWidget then return end
+	self.handlingWorldTierWidget = true
+	self:ApplyWorldTierManagement()
+	self.handlingWorldTierWidget = nil
+end
+
+function LegionRemix:OnWorldTierWidgetHide()
+	if self.handlingWorldTierWidget then return end
+	self.handlingWorldTierWidget = true
+	self:ApplyWorldTierManagement()
+	self.handlingWorldTierWidget = nil
+end
+
+function LegionRemix:SetHideWorldTierIcon(value)
+	self:SetWorldTierHidden(value)
+end
+
 function LegionRemix:IsCollapsed()
 	local db = self:GetDB()
 	if not db then return false end
@@ -3224,6 +3732,10 @@ function LegionRemix:BuildOptionsUI(container)
 		LegionRemix:SetOverlayEnabled(value)
 		container:ReleaseChildren()
 		LegionRemix:BuildOptionsUI(container)
+	end)
+
+	addCheckbox(scroll, L["Edit World Tier icon"], function() return LegionRemix:IsWorldTierEditingEnabled() end, function(value)
+		LegionRemix:SetWorldTierEditingEnabled(value)
 	end)
 end
 
