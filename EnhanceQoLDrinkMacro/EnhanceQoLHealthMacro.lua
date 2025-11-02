@@ -299,6 +299,154 @@ local function getBestAvailableAny()
 	return nil
 end
 
+addon.Health.cooldownWatch = addon.Health.cooldownWatch or {}
+local cooldownWatch = addon.Health.cooldownWatch
+cooldownWatch.entries = cooldownWatch.entries or {}
+cooldownWatch.state = cooldownWatch.state or {}
+cooldownWatch.nextPollAt = cooldownWatch.nextPollAt or 0
+
+local function clearCooldownTimers()
+	if cooldownWatch.debounce then
+		cooldownWatch.debounce:Cancel()
+		cooldownWatch.debounce = nil
+	end
+	if cooldownWatch.timer then
+		cooldownWatch.timer:Cancel()
+		cooldownWatch.timer = nil
+	end
+end
+
+local function resetCooldownWatch()
+	clearCooldownTimers()
+	cooldownWatch.nextPollAt = 0
+	cooldownWatch.running = false
+	cooldownWatch.rebuilding = false
+	wipe(cooldownWatch.entries)
+	wipe(cooldownWatch.state)
+end
+
+local function cooldownCheck(force, suppressRebuild)
+	if cooldownWatch.running then return end
+	if not addon.db or addon.db.healthReorderByCooldown ~= true then
+		resetCooldownWatch()
+		return
+	end
+	if not addon.db.healthMacroEnabled then
+		resetCooldownWatch()
+		return
+	end
+	if #cooldownWatch.entries == 0 then
+		resetCooldownWatch()
+		return
+	end
+
+	local now = GetTime()
+	if not force then
+		local nextPoll = cooldownWatch.nextPollAt or 0
+		if nextPoll > 0 and now < nextPoll - 0.05 then return end
+	end
+
+	cooldownWatch.running = true
+	local changed = false
+	local soonest = math.huge
+
+	for i = 1, #cooldownWatch.entries do
+		local entry = cooldownWatch.entries[i]
+		local ready = true
+		local endsAt
+
+		if entry.kind == "item" then
+			local start, duration, enable = GetItemCooldown(entry.id)
+			if enable ~= 1 then
+				start, duration = 0, 0
+			end
+			if duration and duration > 0 and start and start > 0 then
+				ready = false
+				endsAt = start + duration
+			end
+		elseif entry.kind == "spell" then
+			local cd = C_Spell.GetSpellCooldown(entry.id)
+			local start = cd and cd.startTime or 0
+			local duration = cd and cd.duration or 0
+			if start ~= 0 and duration ~= 0 then
+				ready = false
+				endsAt = start + duration
+			end
+		end
+
+		local key = entry.key
+		if cooldownWatch.state[key] ~= ready then
+			cooldownWatch.state[key] = ready
+			changed = true
+		end
+
+		if not ready and endsAt and endsAt > now and endsAt < soonest then soonest = endsAt end
+	end
+
+	if soonest < math.huge then
+		cooldownWatch.nextPollAt = soonest
+		if cooldownWatch.timer then cooldownWatch.timer:Cancel() end
+		local delay = math.max(0.05, soonest - now + 0.05)
+		cooldownWatch.timer = C_Timer.NewTimer(delay, function()
+			cooldownWatch.timer = nil
+			cooldownCheck(true, false)
+		end)
+	else
+		cooldownWatch.nextPollAt = 0
+		if cooldownWatch.timer then
+			cooldownWatch.timer:Cancel()
+			cooldownWatch.timer = nil
+		end
+	end
+
+	cooldownWatch.running = false
+
+	if changed and not suppressRebuild then
+		if cooldownWatch.rebuilding then return end
+		cooldownWatch.rebuilding = true
+		addon.Health.functions.updateHealthMacro(false, true)
+		cooldownWatch.rebuilding = false
+	end
+end
+
+local function updateCooldownWatch(entries)
+	resetCooldownWatch()
+	if not addon.db or addon.db.healthReorderByCooldown ~= true then return end
+	if not addon.db.healthMacroEnabled then return end
+	if not entries or #entries == 0 then return end
+
+	for i = 1, #entries do
+		local entry = entries[i]
+		local kind = entry.isSpell and "spell" or "item"
+		local key = kind .. ":" .. entry.id
+		cooldownWatch.entries[i] = cooldownWatch.entries[i] or {}
+		cooldownWatch.entries[i].kind = kind
+		cooldownWatch.entries[i].id = entry.id
+		cooldownWatch.entries[i].key = key
+	end
+	for i = #entries + 1, #cooldownWatch.entries do
+		cooldownWatch.entries[i] = nil
+	end
+	wipe(cooldownWatch.state)
+	cooldownCheck(true, true)
+end
+
+local function handleCooldownEvent()
+	if not addon.db or addon.db.healthReorderByCooldown ~= true then return end
+	if not addon.db.healthMacroEnabled then return end
+	if #cooldownWatch.entries == 0 then return end
+
+	local now = GetTime()
+	local nextPoll = cooldownWatch.nextPollAt or 0
+	if nextPoll > 0 and now < nextPoll - 0.05 then return end
+
+	if cooldownWatch.debounce then cooldownWatch.debounce:Cancel() end
+	cooldownWatch.debounce = C_Timer.NewTimer(0.25, function()
+		cooldownWatch.debounce = nil
+		cooldownCheck(false, false)
+	end)
+end
+
 local function buildResetToken()
 	local r = addon.db.healthReset
 	if type(r) == "number" then return tostring(r) end
@@ -313,6 +461,7 @@ local function buildMacro()
 
 	-- Priority-based sequence (always)
 	local seqCandidates = {}
+	local macroEntries = {}
 
 	local function bestOf(list)
 		if not list or #list == 0 then return nil end
@@ -378,12 +527,14 @@ local function buildMacro()
 		if t and not seen[t] then
 			table.insert(seqList, t)
 			seen[t] = true
+			table.insert(macroEntries, v)
 		end
 	end
 
 	-- Keep sequence reasonably short (max 4)
 	while #seqList > 4 do
 		table.remove(seqList)
+		table.remove(macroEntries)
 	end
 
 	local resetType = buildResetToken()
@@ -423,10 +574,17 @@ local function buildMacro()
 		if GetMacroInfo(healthMacroName) then EditMacro(healthMacroName, healthMacroName, nil, macroBody) end
 		lastMacroKey = key
 	end
+
+	if addon.db.healthReorderByCooldown then
+		updateCooldownWatch(macroEntries)
+	else
+		resetCooldownWatch()
+	end
 end
 
 function addon.Health.functions.updateHealthMacro(ignoreCombat, skipAllowedRefresh)
 	if not addon.db.healthMacroEnabled then
+		resetCooldownWatch()
 		SyncEventRegistration()
 		return
 	end
@@ -452,6 +610,7 @@ SyncEventRegistration = function()
 		frame:UnregisterEvent("SPELLS_CHANGED")
 		frame:UnregisterEvent("PLAYER_TALENT_UPDATE")
 		frame:UnregisterEvent("BAG_UPDATE_COOLDOWN")
+		resetCooldownWatch()
 		return
 	end
 
@@ -467,6 +626,7 @@ SyncEventRegistration = function()
 		frame:RegisterEvent("BAG_UPDATE_COOLDOWN")
 	else
 		frame:UnregisterEvent("BAG_UPDATE_COOLDOWN")
+		resetCooldownWatch()
 	end
 end
 
@@ -545,6 +705,6 @@ frame:SetScript("OnEvent", function(_, event, arg1)
 		BucketSchedule("allowed")
 		BucketSchedule("macro")
 	elseif event == "BAG_UPDATE_COOLDOWN" then
-		if addon.db.healthReorderByCooldown then BucketSchedule("macroOnly") end
+		if addon.db.healthReorderByCooldown then handleCooldownEvent() end
 	end
 end)

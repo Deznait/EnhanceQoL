@@ -14,6 +14,7 @@
 
 - Resource bars with seperator were behind the bar
 - Container action button now stays disabled while a Challenge Mode run is active
+- Health macro no longer hammers cooldown checks, easing the performance hit during runs
 
 ---
 

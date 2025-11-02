@@ -13,6 +13,7 @@ local newItem = addon.functions.newItem
 local insert = table.insert
 local sort = table.sort
 local wipe = table.wipe
+local abs = math.abs
 
 -- Cache for O(1) checks
 addon.Health.cache = addon.Health.cache or {}
@@ -130,6 +131,10 @@ addon.Health.bestStone = nil
 addon.Health.bestPotion = nil
 addon.Health.bestOther = nil
 
+addon.Health._lastPlayerLevel = addon.Health._lastPlayerLevel or nil
+addon.Health._lastMaxHP = addon.Health._lastMaxHP or nil
+local MAXHP_RECALC_DELTA = 0.05
+
 addon.Health._wrapped = addon.Health._wrapped or {}
 local function wrapItem(entry, maxHP)
 	local obj = addon.Health._wrapped[entry.id]
@@ -148,12 +153,32 @@ local function wrapItem(entry, maxHP)
 	return obj
 end
 
-function addon.Health.functions.updateAllowedHealth()
+function addon.Health.functions.updateAllowedHealth(force)
 	local playerLevel = UnitLevel("player")
 	local maxHP = UnitHealthMax("player") or 0
+
+	if not force then
+		local lastLevel = addon.Health._lastPlayerLevel
+		local lastMaxHP = addon.Health._lastMaxHP
+
+		local levelChanged = playerLevel ~= lastLevel
+		local hpChanged = false
+
+		if not lastMaxHP or lastMaxHP == 0 then
+			hpChanged = true
+		else
+			local delta = abs(maxHP - lastMaxHP) / lastMaxHP
+			hpChanged = delta >= MAXHP_RECALC_DELTA
+		end
+
+		if not levelChanged and not hpChanged then return end
+	end
+
+	addon.Health._lastPlayerLevel = playerLevel
+	addon.Health._lastMaxHP = maxHP
+
 	local filtered = {}
 	local bestStone, bestPotion, bestOther
-	local cache = addon.Health.cache or {}
 
 	for i = 1, #addon.Health.healthList do
 		local e = addon.Health.healthList[i]
@@ -170,10 +195,12 @@ function addon.Health.functions.updateAllowedHealth()
 		end
 	end
 
-	sort(filtered, function(a, b)
-		if a.heal == b.heal then return a.requiredLevel > b.requiredLevel end
-		return a.heal > b.heal
-	end)
+	if #filtered > 1 then
+		sort(filtered, function(a, b)
+			if a.heal == b.heal then return a.requiredLevel > b.requiredLevel end
+			return a.heal > b.heal
+		end)
+	end
 
 	addon.Health.filteredHealth = filtered
 	addon.Health.bestStone = bestStone

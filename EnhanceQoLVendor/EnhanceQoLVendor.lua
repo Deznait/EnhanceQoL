@@ -24,10 +24,62 @@ local destroyState = {
 	pendingQueue = nil,
 	hideTimer = nil,
 }
+
+local function ensureDestroyListFrame()
+	if destroyState.list and destroyState.list:IsObjectType("Frame") then return destroyState.list end
+	if InCombatLockdown and InCombatLockdown() then return nil end
+	local button = destroyState.button
+	if not button then return nil end
+
+	local frame = CreateFrame("Frame", addonName .. "_DestroyList", button, "BackdropTemplate")
+    frame:SetFrameStrata("HIGH")
+    frame:SetFrameLevel((destroyState.button and destroyState.button:GetFrameLevel() or 5) + 10)
+    frame:SetBackdrop({
+		bgFile = "Interface\\Buttons\\WHITE8x8",
+		edgeFile = "Interface\\Buttons\\WHITE8x8",
+		edgeSize = 1,
+	})
+	frame:SetBackdropColor(0, 0, 0, 0.85)
+	frame:SetBackdropBorderColor(0.9, 0.2, 0.2, 1)
+	frame:SetSize(220, 40)
+	frame:EnableMouse(true)
+	frame:SetScript("OnLeave", function()
+		C_Timer.After(0.05, function()
+			if destroyState.button and destroyState.button:IsMouseOver() then return end
+			if frame:IsMouseOver() then return end
+			frame:Hide()
+		end)
+	end)
+	destroyState.list = frame
+	destroyState.rows = {}
+
+	local emptyLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	emptyLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -8)
+	emptyLabel:SetWidth(200)
+	emptyLabel:SetJustifyH("LEFT")
+	emptyLabel:SetText(L["vendorDestroyListEmpty"])
+	frame.emptyLabel = emptyLabel
+
+	return frame
+end
+
 local destroyProtected = {
 	[169223] = true, -- Legion artifact weapon
 	[200710] = true, -- Legion artifact weapon
 }
+
+local pendingSellMarksUpdate = false
+local pendingSellMarksReset = false
+local pendingDestroyButtonUpdate = false
+
+local function scheduleDestroyButtonUpdate()
+	if pendingDestroyButtonUpdate then return end
+	pendingDestroyButtonUpdate = true
+	C_Timer.After(0.05, function()
+		pendingDestroyButtonUpdate = false
+		updateDestroyButtonState()
+	end)
+end
 
 local function getDestroyProtectionReason(itemID, bagInfo, quality)
 	if destroyProtected[itemID] then return L["vendorDestroyProtected"] end
@@ -154,8 +206,9 @@ local function removeDestroyItem(itemID)
 	updateSellMarks(nil, true)
 end
 
-local function ensureDestroyListFrame()
+local function ensureDestroyButton()
 	if destroyState.list and destroyState.list:IsObjectType("Frame") then return destroyState.list end
+	if InCombatLockdown and InCombatLockdown() then return nil end
 	local button = destroyState.button
 	if not button then return nil end
 
@@ -261,12 +314,16 @@ local function setDestroyButtonVisibility(button, visible)
 	local inCombat = InCombatLockdown and InCombatLockdown() or false
 	if visible then
 		button:SetAlpha(1)
-		button:Enable()
-		if not inCombat then button:EnableMouse(true) end
+		if not inCombat then
+			button:Enable()
+			button:EnableMouse(true)
+		end
 	else
 		button:SetAlpha(0)
-		button:Disable()
-		if not inCombat then button:EnableMouse(false) end
+		if not inCombat then
+			button:Disable()
+			button:EnableMouse(false)
+		end
 		destroyHideList()
 	end
 end
@@ -339,7 +396,7 @@ local function ensureDestroyButton()
 		print(L["vendorDestroyMissing"] or "Queued item is no longer in your bags.")
 		table.remove(queue, 1)
 		updateDestroyUI(copyDestroyQueue(queue))
-		updateDestroyButtonState()
+		scheduleDestroyButtonUpdate()
 		return
 	end
 
@@ -354,7 +411,7 @@ local function ensureDestroyButton()
 		if addon.db["vendorIncludeDestroyList"] then addon.db["vendorIncludeDestroyList"][entry.itemID] = nil end
 		table.remove(queue, 1)
 		updateDestroyUI(copyDestroyQueue(queue))
-		updateDestroyButtonState()
+		scheduleDestroyButtonUpdate()
 		return
 	end
 
@@ -464,7 +521,7 @@ end
 function updateDestroyUI(queue)
 	queue = queue or {}
 	if destroyQueuesEqual(destroyState.queue, queue) then
-		if destroyState.pendingUpdate then updateDestroyButtonState() end
+		if destroyState.pendingUpdate then scheduleDestroyButtonUpdate() end
 		return
 	end
 
@@ -474,7 +531,7 @@ function updateDestroyUI(queue)
 		return
 	end
 
-	updateDestroyButtonState()
+	scheduleDestroyButtonUpdate()
 end
 
 local function updateSellMoreButton()
@@ -581,57 +638,81 @@ local function lookupItems()
 			local itemID = C_Container.GetContainerItemID(bag, slot)
 			if itemID then
 				local bagInfo = C_Container.GetContainerItemInfo(bag, slot)
-				local itemLink = C_Container.GetContainerItemLink(bag, slot)
-				local itemName, _, quality, itemLevel, _, _, _, _, _, _, sellPrice, classID, subclassID, bindType, expansionID = C_Item.GetItemInfo(itemLink)
-				if not itemName then
-					C_Item.RequestLoadItemDataByID(itemID)
-				else
-					local inDestroyList = addon.db["vendorIncludeDestroyList"] and addon.db["vendorIncludeDestroyList"][itemID]
-					local inSellList = addon.db["vendorIncludeSellList"] and addon.db["vendorIncludeSellList"][itemID]
-					if inDestroyList then
-						local reason = getDestroyProtectionReason(itemID, bagInfo)
-						if reason then
-							notifyDestroyProtection(itemID, itemLink or itemName, reason)
-							addon.db["vendorIncludeDestroyList"][itemID] = nil
-						else
-							table.insert(itemsToDestroy, createDestroyEntry(bag, slot, itemID, itemName, bagInfo))
-						end
-					elseif addon.db["vendorExcludeSellList"][itemID] then
-						-- skip
-					elseif inSellList then
-						if sellPrice and sellPrice > 0 then
-							table.insert(itemsToSell, { bag = bag, slot = slot, itemID = itemID })
-						else
-							local reason = getDestroyProtectionReason(itemID, bagInfo)
+				local itemLink = (bagInfo and bagInfo.hyperlink) or C_Container.GetContainerItemLink(bag, slot)
+				local itemNameFromBag = bagInfo and bagInfo.itemName
+				local hasNoValue = bagInfo and bagInfo.hasNoValue
+				local qualityFromBag = bagInfo and bagInfo.quality
+
+				local inDestroyList = addon.db["vendorIncludeDestroyList"] and addon.db["vendorIncludeDestroyList"][itemID]
+				local inSellList = addon.db["vendorIncludeSellList"] and addon.db["vendorIncludeSellList"][itemID]
+
+				local processed = false
+                if hasNoValue and (inDestroyList or inSellList) then
+                    local reason = getDestroyProtectionReason(itemID, bagInfo, qualityFromBag)
+                    if reason then
+                        notifyDestroyProtection(itemID, itemLink or itemNameFromBag, reason)
+                        if inDestroyList and addon.db["vendorIncludeDestroyList"] then addon.db["vendorIncludeDestroyList"][itemID] = nil end
+                        if inSellList and addon.db["vendorIncludeSellList"] then addon.db["vendorIncludeSellList"][itemID] = nil end
+                    else
+                        local displayName = itemNameFromBag or (itemLink and itemLink:match("%[(.+)%]")) or ("Item #" .. tostring(itemID))
+                        table.insert(itemsToDestroy, createDestroyEntry(bag, slot, itemID, displayName, bagInfo))
+                    end
+                    processed = true
+                end
+
+				if not processed then
+					local itemName, _, quality, itemLevel, _, _, _, _, _, _, sellPrice, classID, subclassID, bindType, expansionID = C_Item.GetItemInfo(itemLink)
+					if not itemName then
+						C_Item.RequestLoadItemDataByID(itemID)
+					else
+                        local resolvedName = itemNameFromBag or itemName
+						local reason
+
+						if inDestroyList then
+							reason = getDestroyProtectionReason(itemID, bagInfo, quality)
 							if reason then
-								notifyDestroyProtection(itemID, itemLink or itemName, reason)
-								addon.db["vendorIncludeSellList"][itemID] = nil
+								notifyDestroyProtection(itemID, itemLink or resolvedName, reason)
+								if addon.db["vendorIncludeDestroyList"] then addon.db["vendorIncludeDestroyList"][itemID] = nil end
 							else
-								table.insert(itemsToDestroy, createDestroyEntry(bag, slot, itemID, itemName, bagInfo))
+								table.insert(itemsToDestroy, createDestroyEntry(bag, slot, itemID, resolvedName, bagInfo))
 							end
-						end
-					elseif sellPrice and sellPrice > 0 then
-						if classID == 4 and subclassID == 5 and not C_TransmogCollection.PlayerHasTransmog(itemID) then
-							-- do not sell appearances
-						elseif classID == 7 and addon.Vendor.variables.itemQualityFilter[quality] then
-							local expTable = addon.db["vendor" .. addon.Vendor.variables.tabNames[quality] .. "CraftingExpansions"]
-							if expTable and expTable[expansionID] then table.insert(itemsToSell, { bag = bag, slot = slot, itemID = itemID }) end
-						elseif addon.Vendor.variables.itemQualityFilter[quality] then
-							local effectiveILvl = C_Item.GetDetailedItemLevelInfo(itemLink)
-							local bType, canUpgrade, isIgnoredUpgradeTrack = getTooltipInfo(bag, slot, quality)
-							if bType and bindType < bType then bindType = bType end
-							if not bType then bindType = 0 end
-							if
-								addon.Vendor.variables.itemTypeFilter[classID]
-								and (not addon.Vendor.variables.itemSubTypeFilter[classID] or (addon.Vendor.variables.itemSubTypeFilter[classID] and addon.Vendor.variables.itemSubTypeFilter[classID][subclassID]))
-								and addon.Vendor.variables.itemBindTypeQualityFilter[quality][bindType]
-							then
-								if not canUpgrade and not isIgnoredUpgradeTrack then
-									local rIlvl = (avgItemLevelEquipped - addon.db["vendor" .. addon.Vendor.variables.tabNames[quality] .. "MinIlvlDif"])
-									if addon.db["vendor" .. addon.Vendor.variables.tabNames[quality] .. "AbsolutIlvl"] then
-										rIlvl = addon.db["vendor" .. addon.Vendor.variables.tabNames[quality] .. "MinIlvlDif"]
+						elseif addon.db["vendorExcludeSellList"][itemID] then
+							-- skip
+						elseif inSellList then
+							if sellPrice and sellPrice > 0 then
+								table.insert(itemsToSell, { bag = bag, slot = slot, itemID = itemID })
+							else
+								reason = getDestroyProtectionReason(itemID, bagInfo, quality)
+								if reason then
+									notifyDestroyProtection(itemID, itemLink or resolvedName, reason)
+									if addon.db["vendorIncludeSellList"] then addon.db["vendorIncludeSellList"][itemID] = nil end
+								else
+									table.insert(itemsToDestroy, createDestroyEntry(bag, slot, itemID, resolvedName, bagInfo))
+								end
+							end
+						elseif sellPrice and sellPrice > 0 then
+							if classID == 4 and subclassID == 5 and not C_TransmogCollection.PlayerHasTransmog(itemID) then
+								-- do not sell appearances
+							elseif classID == 7 and addon.Vendor.variables.itemQualityFilter[quality] then
+								local expTable = addon.db["vendor" .. addon.Vendor.variables.tabNames[quality] .. "CraftingExpansions"]
+								if expTable and expTable[expansionID] then table.insert(itemsToSell, { bag = bag, slot = slot, itemID = itemID }) end
+							elseif addon.Vendor.variables.itemQualityFilter[quality] then
+								local effectiveILvl = C_Item.GetDetailedItemLevelInfo(itemLink)
+								local bType, canUpgrade, isIgnoredUpgradeTrack = getTooltipInfo(bag, slot, quality)
+								if bType and bindType < bType then bindType = bType end
+								if not bType then bindType = 0 end
+								if
+									addon.Vendor.variables.itemTypeFilter[classID]
+									and (not addon.Vendor.variables.itemSubTypeFilter[classID] or (addon.Vendor.variables.itemSubTypeFilter[classID] and addon.Vendor.variables.itemSubTypeFilter[classID][subclassID]))
+									and addon.Vendor.variables.itemBindTypeQualityFilter[quality][bindType]
+								then
+									if not canUpgrade and not isIgnoredUpgradeTrack then
+										local rIlvl = (avgItemLevelEquipped - addon.db["vendor" .. addon.Vendor.variables.tabNames[quality] .. "MinIlvlDif"])
+										if addon.db["vendor" .. addon.Vendor.variables.tabNames[quality] .. "AbsolutIlvl"] then
+											rIlvl = addon.db["vendor" .. addon.Vendor.variables.tabNames[quality] .. "MinIlvlDif"]
+										end
+                                    if effectiveILvl <= rIlvl then table.insert(itemsToSell, { bag = bag, slot = slot, itemID = itemID }) end
 									end
-									if effectiveILvl <= rIlvl then table.insert(itemsToSell, { bag = bag, slot = slot, itemID = itemID }) end
 								end
 							end
 						end
@@ -640,7 +721,6 @@ local function lookupItems()
 			end
 		end
 	end
-	updateDestroyUI(itemsToDestroy)
 	return itemsToSell, itemsToDestroy
 end
 
@@ -690,11 +770,11 @@ local eventHandlers = {
 		hasMoreItems = false
 		updateSellMoreButton()
 		wipe(tooltipCache)
-		if addon.db["vendorDestroyEnable"] then updateDestroyButtonState() end
+		if addon.db["vendorDestroyEnable"] then scheduleDestroyButtonUpdate() end
 	end,
 	["BAG_UPDATE_DELAYED"] = function()
 		wipe(tooltipCache)
-		if addon.db["vendorDestroyEnable"] then updateDestroyButtonState() end
+		if addon.db["vendorDestroyEnable"] then scheduleDestroyButtonUpdate() end
 	end,
 	["ITEM_DATA_LOAD_RESULT"] = function(arg1, arg2)
 		if arg2 == false and addon.aceFrame:IsShown() and lastEbox then
@@ -726,7 +806,8 @@ local eventHandlers = {
 			destroyState.queue = destroyState.pendingQueue
 			destroyState.pendingQueue = nil
 		end
-		if destroyState.pendingUpdate or addon.db["vendorDestroyEnable"] then updateDestroyButtonState() end
+		destroyState.pendingUpdate = false
+		if addon.db["vendorDestroyEnable"] then scheduleDestroyButtonUpdate() end
 	end,
 	["PLAYER_REGEN_DISABLED"] = function() destroyHideList() end,
 }
@@ -1287,7 +1368,7 @@ function addon.Vendor.functions.treeCallback(container, group)
 	end
 end
 
-function updateSellMarks(_, resetCache)
+local function performUpdateSellMarks(resetCache)
 	if resetCache then wipe(tooltipCache) end
 
 	local overlaySell = addon.db["vendorShowSellOverlay"]
@@ -1311,6 +1392,15 @@ function updateSellMarks(_, resetCache)
 	end
 
 	if not overlaySell and not overlayDestroy and not tooltip then
+		-- Keep the destroy queue in sync even when overlays/tooltips are off
+		if addon.db["vendorDestroyEnable"] and inventoryOpen() then
+			local _, itemsToDestroy = lookupItems()
+			updateDestroyUI(itemsToDestroy or {})
+		else
+			-- No need to scan; make sure the button hides
+			updateDestroyUI({})
+		end
+
 		clearFrame(ContainerFrameCombinedBags)
 		for _, frame in ipairs(frames) do
 			clearFrame(frame)
@@ -1326,6 +1416,7 @@ function updateSellMarks(_, resetCache)
 	local itemsToSell, itemsToDestroy = lookupItems()
 	itemsToSell = itemsToSell or {}
 	itemsToDestroy = itemsToDestroy or {}
+    updateDestroyUI(itemsToDestroy)
 
 	for _, v in ipairs(itemsToSell) do
 		sellMarkLookup[v.bag .. "_" .. v.slot] = true
@@ -1413,6 +1504,18 @@ function updateSellMarks(_, resetCache)
 	end
 end
 
+function updateSellMarks(_, resetCache)
+	if resetCache then pendingSellMarksReset = true end
+	if pendingSellMarksUpdate then return end
+	pendingSellMarksUpdate = true
+	C_Timer.After(0.05, function()
+		local doReset = pendingSellMarksReset
+		pendingSellMarksReset = false
+		pendingSellMarksUpdate = false
+		performUpdateSellMarks(doReset)
+	end)
+end
+
 local function AltClickHook(self, button)
 	if not addon.db["vendorAltClickInclude"] then return end
 	if not IsAltKeyDown() or not (button == "LeftButton" or button == "RightButton") then return end
@@ -1481,10 +1584,9 @@ local function hookBagFrame(frame)
 	frame._EnhanceQoLVendorDestroyHook = true
 	hooksecurefunc(frame, "UpdateItems", function(...)
 		updateSellMarks(...)
-		if addon.db["vendorDestroyEnable"] then updateDestroyButtonState() end
 	end)
 	frame:HookScript("OnShow", function()
-		if addon.db["vendorDestroyEnable"] then updateDestroyButtonState() end
+		if addon.db["vendorDestroyEnable"] then scheduleDestroyButtonUpdate() end
 	end)
 	frame:HookScript("OnHide", function()
 		destroyHideList()
