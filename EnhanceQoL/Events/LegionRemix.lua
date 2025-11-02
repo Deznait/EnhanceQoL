@@ -3483,12 +3483,6 @@ function LegionRemix:ApplyWorldTierIconVisibility()
 		return
 	end
 
-	if not frame.__EQOLWorldTierHooked then
-		frame.__EQOLWorldTierHooked = true
-		-- frame:HookScript("OnShow", function(widget) LegionRemix:OnWorldTierWidgetShow(widget) end)
-		-- frame:HookScript("OnHide", function(widget) LegionRemix:OnWorldTierWidgetHide(widget) end)
-	end
-
 	if self:ShouldSuppressWorldTierIcon() then
 		hideWorldTierWidget(frame)
 	else
@@ -3497,13 +3491,6 @@ function LegionRemix:ApplyWorldTierIconVisibility()
 end
 
 function LegionRemix:OnWorldTierWidgetShow()
-	if self.handlingWorldTierWidget then return end
-	self.handlingWorldTierWidget = true
-	self:ApplyWorldTierManagement()
-	self.handlingWorldTierWidget = nil
-end
-
-function LegionRemix:OnWorldTierWidgetHide()
 	if self.handlingWorldTierWidget then return end
 	self.handlingWorldTierWidget = true
 	self:ApplyWorldTierManagement()
@@ -3822,7 +3809,7 @@ activationWatcher:SetScript("OnEvent", function(_, event, ...)
 	end
 	if event == "UPDATE_UI_WIDGET" then
 		local info = ...
-		if info.widgetID ~= 7190 then return end
+		if not info or info.widgetID ~= WORLD_TIER_WIDGET_ID then return end
 		local frame = getWorldTierWidgetFrame()
 		if frame and frame:IsShown() then C_Timer.After(0, function() LegionRemix:OnWorldTierWidgetShow(frame) end) end
 	end
