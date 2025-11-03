@@ -701,9 +701,7 @@ local function GetActionBarVisibilityConfig(variable, incoming, persistLegacy)
 		config = nil
 	end
 
-	if config and not (config.MOUSEOVER or config.ALWAYS_IN_COMBAT or config.ALWAYS_OUT_OF_COMBAT) then
-		config = nil
-	end
+	if config and not (config.MOUSEOVER or config.ALWAYS_IN_COMBAT or config.ALWAYS_OUT_OF_COMBAT) then config = nil end
 
 	if persistLegacy and addon.db then
 		if not config then
@@ -720,9 +718,7 @@ local function GetActionBarVisibilityConfig(variable, incoming, persistLegacy)
 	return config
 end
 
-local function NormalizeActionBarVisibilityConfig(variable, incoming)
-	return GetActionBarVisibilityConfig(variable, incoming, true)
-end
+local function NormalizeActionBarVisibilityConfig(variable, incoming) return GetActionBarVisibilityConfig(variable, incoming, true) end
 
 local function ActionBarShouldForceShowByConfig(config, combatOverride)
 	if not config then return false end
@@ -864,9 +860,7 @@ local function UpdateActionBarMouseover(barName, config, variable)
 		end
 	end
 
-	local function handleButtonLeave()
-		EQOL_HideBarIfNotHovered(bar, variable)
-	end
+	local function handleButtonLeave() EQOL_HideBarIfNotHovered(bar, variable) end
 
 	for i = 1, 12 do
 		local button = _G[btnPrefix .. i]
@@ -6708,35 +6702,6 @@ local function initUI()
 
 	-- Apply once on load if enabled; do not keep overriding thereafter
 	addon.functions.applyGameMenuScale()
-
-	local stanceChildren
-	if StanceBar and StanceBar.GetChildren then stanceChildren = { StanceBar:GetChildren() } end
-
-	table.insert(addon.variables.unitFrameNames, {
-		name = "StanceBar",
-		var = "unitframeSettingStanceBar",
-		text = HUD_EDIT_MODE_STANCE_BAR_LABEL,
-		disableSetting = { "mouseoverActionBarStanceBar" },
-		children = stanceChildren or {},
-		revealAllChilds = true,
-	})
-
-	table.insert(addon.variables.unitFrameNames, {
-		name = "MicroMenu",
-		var = "unitframeSettingMicroMenu",
-		text = addon.L["MicroMenu"],
-		allowedVisibility = { "NONE", "MOUSEOVER", "HIDE" },
-		children = { MicroMenu:GetChildren() },
-		revealAllChilds = true,
-	})
-	table.insert(addon.variables.unitFrameNames, {
-		name = "BagsBar",
-		var = "unitframeSettingBagsBar",
-		text = addon.L["BagsBar"],
-		allowedVisibility = { "NONE", "MOUSEOVER", "HIDE" },
-		children = { BagsBar:GetChildren() },
-		revealAllChilds = true,
-	})
 
 	local function makeSquareMinimap()
 		MinimapCompassTexture:Hide()
