@@ -10,6 +10,9 @@ local OPTIONS_FRAME_MAX_SCALE = constants.OPTIONS_FRAME_MAX_SCALE or 2
 local ACTION_BAR_FRAME_NAMES = constants.ACTION_BAR_FRAME_NAMES or {}
 local ACTION_BAR_ANCHOR_ORDER = constants.ACTION_BAR_ANCHOR_ORDER or {}
 local ACTION_BAR_ANCHOR_CONFIG = constants.ACTION_BAR_ANCHOR_CONFIG or {}
+local ACTION_BAR_FRAME_NAMES = constants.ACTION_BAR_FRAME_NAMES or {}
+local ACTION_BAR_ANCHOR_ORDER = constants.ACTION_BAR_ANCHOR_ORDER or {}
+local ACTION_BAR_ANCHOR_CONFIG = constants.ACTION_BAR_ANCHOR_CONFIG or {}
 
 local function setCVarValue(...)
 	if addon.functions and addon.functions.setCVarValue then
@@ -21,6 +24,14 @@ local noop = function() end
 local NormalizeActionBarVisibilityConfig = (addon.functions and addon.functions.NormalizeActionBarVisibilityConfig) or noop
 local UpdateActionBarMouseover = (addon.functions and addon.functions.UpdateActionBarMouseover) or noop
 local RefreshAllActionBarAnchors = (addon.functions and addon.functions.RefreshAllActionBarAnchors) or noop
+local GetUnitFrameDropdownData = (addon.functions and addon.functions.GetUnitFrameDropdownData) or function() return {}, {} end
+local GetUnitFrameDropdownKey = (addon.functions and addon.functions.GetUnitFrameDropdownKey) or function() return "NONE" end
+local GetUnitFrameValueFromKey = (addon.functions and addon.functions.GetUnitFrameValueFromKey) or function() return nil end
+local IsVisibilityKeyAllowed = (addon.functions and addon.functions.IsVisibilityKeyAllowed) or function() return true end
+local UpdateUnitFrameMouseover = (addon.functions and addon.functions.UpdateUnitFrameMouseover) or noop
+local ApplyUnitFrameSettingByVar = (addon.functions and addon.functions.ApplyUnitFrameSettingByVar) or noop
+local setLeaderIcon = (addon.functions and addon.functions.setLeaderIcon) or noop
+local removeLeaderIcon = (addon.functions and addon.functions.removeLeaderIcon) or noop
 
 local function addUIFrame(container)
 	local data = {
@@ -496,6 +507,290 @@ local function addActionBarFrame(container, d)
 	if scroll and scroll.DoLayout then scroll:DoLayout() end
 end
 
+
+local function addUnitFrame2(container)
+	local scroll = addon.functions.createContainer("ScrollFrame", "Flow")
+	scroll:SetFullWidth(true)
+	scroll:SetFullHeight(true)
+	container:AddChild(scroll)
+
+	local wrapper = addon.functions.createContainer("SimpleGroup", "Flow")
+	scroll:AddChild(wrapper)
+	local function doLayout()
+		if scroll and scroll.DoLayout then scroll:DoLayout() end
+	end
+	wrapper:PauseLayout()
+
+	local groups = {}
+
+	local function ensureGroup(key, title)
+		local g, known
+		if groups[key] then
+			g = groups[key]
+			groups[key]:PauseLayout()
+			groups[key]:ReleaseChildren()
+			known = true
+		else
+			g = addon.functions.createContainer("InlineGroup", "List")
+			g:SetTitle(title)
+			wrapper:AddChild(g)
+			groups[key] = g
+		end
+
+		return g, known
+	end
+
+	local function buildHitIndicator()
+		local g, known = ensureGroup("hit", COMBAT_TEXT_LABEL)
+		local data = {
+			{
+				var = "hideHitIndicatorPlayer",
+				text = L["hideHitIndicatorPlayer"],
+				func = function(_, _, value)
+					addon.db["hideHitIndicatorPlayer"] = value
+					if value then
+						PlayerFrame.PlayerFrameContent.PlayerFrameContentMain.HitIndicator:Hide()
+					else
+						PlayerFrame.PlayerFrameContent.PlayerFrameContentMain.HitIndicator:Show()
+					end
+				end,
+			},
+			{
+				var = "hideHitIndicatorPet",
+				text = L["hideHitIndicatorPet"],
+				func = function(_, _, value)
+					addon.db["hideHitIndicatorPet"] = value
+					if value and PetHitIndicator then PetHitIndicator:Hide() end
+				end,
+			},
+		}
+		table.sort(data, function(a, b) return a.text < b.text end)
+		for _, cb in ipairs(data) do
+			local w = addon.functions.createCheckboxAce(cb.text, addon.db[cb.var], cb.func)
+			g:AddChild(w)
+		end
+		if known then
+			g:ResumeLayout()
+			doLayout()
+		end
+	end
+
+	local function buildCore()
+		local g, known = ensureGroup("core", "")
+		g:SetLayout("Flow")
+		local labelHeadline = addon.functions.createLabelAce("|cffffd700" .. L["UnitFrameHideExplain"] .. "|r", nil, nil, 14)
+		labelHeadline:SetFullWidth(true)
+		g:AddChild(labelHeadline)
+		g:AddChild(addon.functions.createSpacerAce())
+
+		for _, cbData in ipairs(addon.variables.unitFrameNames) do
+			local dd = AceGUI:Create("Dropdown")
+			dd:SetLabel(cbData.text)
+			local list, order = GetUnitFrameDropdownData(cbData)
+			dd:SetList(list, order)
+			local currentKey = GetUnitFrameDropdownKey(addon.db and addon.db[cbData.var])
+			if not IsVisibilityKeyAllowed(cbData, currentKey) then
+				currentKey = "NONE"
+				if addon.db then addon.db[cbData.var] = nil end
+			end
+			dd:SetValue(currentKey)
+			dd:SetRelativeWidth(0.33)
+			dd:SetCallback("OnValueChanged", function(_, _, key)
+				if not IsVisibilityKeyAllowed(cbData, key) then return end
+				addon.db[cbData.var] = GetUnitFrameValueFromKey(key)
+				UpdateUnitFrameMouseover(cbData.name, cbData)
+			end)
+			g:AddChild(dd)
+		end
+		if known then
+			g:ResumeLayout()
+			doLayout()
+		end
+	end
+
+	local function buildHealthText()
+		local g, known = ensureGroup("healthText", L["Health Text"] or "Health Text")
+		g:SetLayout("Flow")
+
+		local list = { OFF = VIDEO_OPTIONS_DISABLED, PERCENT = STATUS_TEXT_PERCENT, ABS = STATUS_TEXT_VALUE, BOTH = STATUS_TEXT_BOTH }
+		local order = { "OFF", "PERCENT", "ABS", "BOTH" }
+
+		local htExplainText =
+			string.format(L["HealthTextExplain"] or "%s follows Blizzard 'Status Text'. Any other mode shows your chosen format for Player, Target, and Boss frames.", VIDEO_OPTIONS_DISABLED)
+		local lbl = addon.functions.createLabelAce("|cffffd700" .. htExplainText .. "|r", nil, nil, 10)
+		lbl:SetFullWidth(true)
+		g:AddChild(lbl)
+
+		local dp = AceGUI:Create("Dropdown")
+		dp:SetLabel(L["PlayerHealthText"] or "Player health text")
+		dp:SetList(list, order)
+		dp:SetValue(addon.db and addon.db["healthTextPlayerMode"] or "OFF")
+		dp:SetRelativeWidth(0.33)
+		dp:SetCallback("OnValueChanged", function(_, _, key)
+			addon.db["healthTextPlayerMode"] = key or "OFF"
+			if addon.HealthText and addon.HealthText.SetMode then addon.HealthText:SetMode("player", addon.db["healthTextPlayerMode"]) end
+		end)
+		g:AddChild(dp)
+
+		local dt = AceGUI:Create("Dropdown")
+		dt:SetLabel(L["TargetHealthText"] or "Target health text")
+		dt:SetList(list, order)
+		dt:SetValue(addon.db and addon.db["healthTextTargetMode"] or "OFF")
+		dt:SetRelativeWidth(0.33)
+		dt:SetCallback("OnValueChanged", function(_, _, key)
+			addon.db["healthTextTargetMode"] = key or "OFF"
+			if addon.HealthText and addon.HealthText.SetMode then addon.HealthText:SetMode("target", addon.db["healthTextTargetMode"]) end
+		end)
+		g:AddChild(dt)
+
+		local db = AceGUI:Create("Dropdown")
+		db:SetLabel(L["BossHealthText"] or "Boss health text")
+		db:SetList(list, order)
+		db:SetValue(addon.db and (addon.db["healthTextBossMode"] or addon.db["bossHealthMode"]) or "OFF")
+		db:SetRelativeWidth(0.33)
+		db:SetCallback("OnValueChanged", function(_, _, key)
+			addon.db["healthTextBossMode"] = key or "OFF"
+			if addon.HealthText and addon.HealthText.SetMode then addon.HealthText:SetMode("boss", addon.db["healthTextBossMode"]) end
+		end)
+		g:AddChild(db)
+
+		-- OFF = obey Blizzard CVar, others override; no extra toggles
+
+		if known then
+			g:ResumeLayout()
+			doLayout()
+		end
+	end
+
+	local function buildCoreUF()
+		local g, known = ensureGroup("coreUF", "")
+		local labelHeadlineUF = addon.functions.createLabelAce("|cffffd700" .. (L["UnitFrameUFExplain"]:format(_G.RAID or "RAID", _G.PARTY or "Party", _G.PLAYER or "Player")) .. "|r", nil, nil, 14)
+		labelHeadlineUF:SetFullWidth(true)
+		g:AddChild(labelHeadlineUF)
+		g:AddChild(addon.functions.createSpacerAce())
+
+		local cbRaid = addon.functions.createCheckboxAce(L["hideRaidFrameBuffs"], addon.db["hideRaidFrameBuffs"], function(_, _, value)
+			addon.db["hideRaidFrameBuffs"] = value
+			addon.functions.updateRaidFrameBuffs()
+			addon.variables.requireReload = true
+		end)
+		g:AddChild(cbRaid)
+
+		local cbLeader = addon.functions.createCheckboxAce(L["showLeaderIconRaidFrame"], addon.db["showLeaderIconRaidFrame"], function(_, _, value)
+			addon.db["showLeaderIconRaidFrame"] = value
+			if value then
+				setLeaderIcon()
+			else
+				removeLeaderIcon()
+			end
+		end)
+		g:AddChild(cbLeader)
+
+		local cbSolo = addon.functions.createCheckboxAce(L["showPartyFrameInSoloContent"], addon.db["showPartyFrameInSoloContent"], function(_, _, value)
+			addon.db["showPartyFrameInSoloContent"] = value
+			addon.variables.requireReload = true
+			buildCoreUF()
+			ApplyUnitFrameSettingByVar("unitframeSettingPlayerFrame")
+			addon.functions.togglePartyFrameTitle(addon.db["hidePartyFrameTitle"])
+		end)
+		g:AddChild(cbSolo)
+
+		local cbTitle = addon.functions.createCheckboxAce(L["hidePartyFrameTitle"], addon.db["hidePartyFrameTitle"], function(_, _, value)
+			addon.db["hidePartyFrameTitle"] = value
+			addon.functions.togglePartyFrameTitle(value)
+		end)
+		g:AddChild(cbTitle)
+
+		-- Hide resting animation and glow on the Player frame
+		local cbRest = addon.functions.createCheckboxAce(L["hideRestingGlow"] or "Hide resting animation and glow", addon.db["hideRestingGlow"], function(_, _, value)
+			addon.db["hideRestingGlow"] = value
+			if addon.functions.ApplyRestingVisuals then addon.functions.ApplyRestingVisuals() end
+		end, L["hideRestingGlowDesc"] or "Removes the 'ZZZ' status texture and the resting glow on the player frame while resting.")
+		g:AddChild(cbRest)
+
+		local sliderName
+		local cbTrunc = addon.functions.createCheckboxAce(L["unitFrameTruncateNames"], addon.db.unitFrameTruncateNames, function(_, _, v)
+			addon.db.unitFrameTruncateNames = v
+			if sliderName then sliderName:SetDisabled(not v) end
+			addon.functions.updateUnitFrameNames()
+		end)
+		g:AddChild(cbTrunc)
+
+		sliderName = addon.functions.createSliderAce(L["unitFrameMaxNameLength"] .. ": " .. addon.db.unitFrameMaxNameLength, addon.db.unitFrameMaxNameLength, 1, 20, 1, function(self, _, val)
+			addon.db.unitFrameMaxNameLength = val
+			self:SetLabel(L["unitFrameMaxNameLength"] .. ": " .. val)
+			addon.functions.updateUnitFrameNames()
+		end)
+		sliderName:SetDisabled(not addon.db.unitFrameTruncateNames)
+		g:AddChild(sliderName)
+
+		local sliderScale
+		local cbScale = addon.functions.createCheckboxAce(L["unitFrameScaleEnable"], addon.db.unitFrameScaleEnabled, function(_, _, v)
+			addon.db.unitFrameScaleEnabled = v
+			if sliderScale then sliderScale:SetDisabled(not v) end
+			if v then
+				addon.functions.updatePartyFrameScale()
+			else
+				addon.variables.requireReload = true
+				addon.functions.checkReloadFrame()
+			end
+		end)
+		g:AddChild(cbScale)
+
+		sliderScale = addon.functions.createSliderAce(L["unitFrameScale"] .. ": " .. addon.db.unitFrameScale, addon.db.unitFrameScale, 0.5, 2, 0.05, function(self, _, val)
+			addon.db.unitFrameScale = val
+			self:SetLabel(L["unitFrameScale"] .. ": " .. string.format("%.2f", val))
+			addon.functions.updatePartyFrameScale()
+		end)
+		sliderScale:SetDisabled(not addon.db.unitFrameScaleEnabled)
+		g:AddChild(sliderScale)
+
+		g:AddChild(addon.functions.createSpacerAce())
+
+		if known then
+			g:ResumeLayout()
+			doLayout()
+		end
+	end
+
+	local function buildCast()
+		local g, known = ensureGroup("cast", L["CastBars"] or "Cast Bars")
+		local dd = AceGUI:Create("Dropdown")
+		dd:SetLabel(L["castBarsToHide"] or "Cast bars to hide")
+		local list = {
+			PlayerCastingBarFrame = L["castBar_player"] or _G.PLAYER or "Player",
+			TargetFrameSpellBar = L["castBar_target"] or TARGET or "Target",
+			FocusFrameSpellBar = L["castBar_focus"] or FOCUS or "Focus",
+		}
+		local order = { "PlayerCastingBarFrame", "TargetFrameSpellBar", "FocusFrameSpellBar" }
+		dd:SetList(list, order)
+		dd:SetMultiselect(true)
+		dd:SetFullWidth(true)
+		dd:SetCallback("OnValueChanged", function(widget, _, key, checked)
+			addon.db.hiddenCastBars = addon.db.hiddenCastBars or {}
+			addon.db.hiddenCastBars[key] = checked and true or false
+			addon.functions.ApplyCastBarVisibility()
+		end)
+		if type(addon.db.hiddenCastBars) == "table" then
+			for k, v in pairs(addon.db.hiddenCastBars) do
+				if v then dd:SetItemValue(k, true) end
+			end
+		end
+		g:AddChild(dd)
+		if known then
+			g:ResumeLayout()
+			doLayout()
+		end
+	end
+
+	buildHitIndicator()
+	buildCore()
+	buildHealthText()
+	buildCoreUF()
+	buildCast()
+	wrapper:ResumeLayout()
+	doLayout()
+end
 
 local function addChatFrame(container)
 	local scroll = addon.functions.createContainer("ScrollFrame", "Flow")
@@ -1265,6 +1560,7 @@ if addon.functions and addon.functions.RegisterOptionsPage then
 	addon.functions.RegisterOptionsPage("ui", addUIFrame)
 	addon.functions.RegisterOptionsPage("ui\001actionbar", addActionBarFrame)
 	addon.functions.RegisterOptionsPage("ui\001chatframe", addChatFrame)
+	addon.functions.RegisterOptionsPage("ui\001unitframe", addUnitFrame2)
 	addon.functions.RegisterOptionsPage("ui\001datapanel", buildDatapanelFrame)
 	addon.functions.RegisterOptionsPage("ui\001social", addSocialFrame)
 	addon.functions.RegisterOptionsPage("ui\001system", addCVarFrame)
