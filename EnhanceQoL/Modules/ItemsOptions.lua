@@ -27,6 +27,8 @@ local function showBagIgnoreWarning()
 	if addon.functions and addon.functions.checkBagIgnoreJunk then addon.functions.checkBagIgnoreJunk() end
 end
 
+local onInspect = addon.functions and addon.functions.onInspect
+
 local function addVendorMainFrame2(container)
 	local scroll = addon.functions.createContainer("ScrollFrame", "Flow")
 	scroll:SetFullWidth(true)

@@ -85,6 +85,7 @@ local IsShiftKeyDown = IsShiftKeyDown
 local IsControlKeyDown = IsControlKeyDown
 local IsAltKeyDown = IsAltKeyDown
 local math = math
+local TooltipUtil = _G.TooltipUtil
 
 local EQOL = select(2, ...)
 EQOL.C = {}
@@ -1523,6 +1524,7 @@ local function setIlvlText(element, slot)
 		end
 	end
 end
+addon.functions.onInspect = onInspect
 
 function addon.functions.IsIndestructible(link)
 	local itemParts = { strsplit(":", link) }
@@ -4160,6 +4162,8 @@ local function initSocial()
 	if addon.Ignore and addon.Ignore.UpdateAnchor then addon.Ignore:UpdateAnchor() end
 	if addon.FriendsListDecor and addon.FriendsListDecor.SetEnabled then addon.FriendsListDecor:SetEnabled(addon.db["friendsListDecorEnabled"] == true) end
 end
+
+local initLootToast
 
 initLootToast = function()
 	if (addon.db.enableLootToastFilter or addon.db.enableLootToastAnchor or addon.db.enableGroupLootAnchor) and addon.LootToast and addon.LootToast.Enable then
