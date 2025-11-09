@@ -37,6 +37,9 @@ local tostring = tostring
 local floor, max, min, ceil, abs = math.floor, math.max, math.min, math.ceil, math.abs
 local tinsert, tsort = table.insert, table.sort
 local tconcat = table.concat
+local RegisterStateDriver = RegisterStateDriver
+local UnregisterStateDriver = UnregisterStateDriver
+local InCombatLockdown = InCombatLockdown
 
 local frameAnchor
 local mainFrame
@@ -69,6 +72,8 @@ local DEFAULT_SMOOTH_DEADZONE = 0.75
 local RUNE_UPDATE_INTERVAL = 0.1
 local REFRESH_DEBOUNCE = 0.05
 local REANCHOR_REFRESH = { reanchorOnly = true }
+local OOC_VISIBILITY_DRIVER = "[combat] show; hide"
+local visibilityDriverWatcher
 local tryActivateSmooth
 local requestActiveRefresh
 local getStatusbarDropdownLists
@@ -868,6 +873,14 @@ function addon.Aura.functions.addResourceFrame(container)
 						if addon and addon.Aura and addon.Aura.functions and addon.Aura.functions.addResourceFrame then addon.Aura.functions.addResourceFrame(container) end
 					end
 				end
+			end,
+		},
+		{
+			text = L["Hide out of combat"] or "Hide resource bars out of combat",
+			var = "resourceBarsHideOutOfCombat",
+			func = function(self, _, value)
+				addon.db["resourceBarsHideOutOfCombat"] = value and true or false
+				if addon and addon.Aura and addon.Aura.ResourceBars and addon.Aura.ResourceBars.ApplyVisibilityPreference then addon.Aura.ResourceBars.ApplyVisibilityPreference() end
 			end,
 		},
 	}
@@ -3437,6 +3450,68 @@ local function setPowerbars()
 		else
 			if healthBar:IsShown() then healthBar:Hide() end
 		end
+	end
+
+	if addon and addon.Aura and addon.Aura.ResourceBars and addon.Aura.ResourceBars.ApplyVisibilityPreference then
+		addon.Aura.ResourceBars.ApplyVisibilityPreference("fromSetPowerbars")
+	end
+end
+
+local function shouldHideResourceBarsOutOfCombat()
+	return addon and addon.db and addon.db.resourceBarsHideOutOfCombat == true
+end
+
+local function forEachResourceBarFrame(callback)
+	if type(callback) ~= "function" then return end
+	if healthBar then callback(healthBar, "HEALTH") end
+	for pType, bar in pairs(powerbar) do
+		if bar then callback(bar, pType) end
+	end
+end
+
+local function ensureVisibilityDriverWatcher()
+	if visibilityDriverWatcher then return end
+	visibilityDriverWatcher = CreateFrame("Frame")
+	visibilityDriverWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+	visibilityDriverWatcher:SetScript("OnEvent", function()
+		if not ResourceBars._pendingVisibilityDriver then return end
+		ResourceBars.ApplyVisibilityPreference("pending")
+	end)
+end
+
+local function canApplyVisibilityDriver()
+	if InCombatLockdown and InCombatLockdown() then
+		ResourceBars._pendingVisibilityDriver = true
+		ensureVisibilityDriverWatcher()
+		return false
+	end
+	return true
+end
+
+local function applyVisibilityDriverToFrame(frame, expression)
+	if not frame then return end
+	if not expression then
+		if frame._rbVisibilityDriver then
+			if UnregisterStateDriver then pcall(UnregisterStateDriver, frame, "visibility") end
+			frame._rbVisibilityDriver = nil
+		end
+		return
+	end
+	if frame._rbVisibilityDriver == expression then return end
+	if RegisterStateDriver then
+		local ok = pcall(RegisterStateDriver, frame, "visibility", expression)
+		if ok then frame._rbVisibilityDriver = expression end
+	end
+end
+
+function ResourceBars.ApplyVisibilityPreference(context)
+	if not RegisterStateDriver or not UnregisterStateDriver then return end
+	if not canApplyVisibilityDriver() then return end
+	ResourceBars._pendingVisibilityDriver = nil
+	local expression = shouldHideResourceBarsOutOfCombat() and OOC_VISIBILITY_DRIVER or nil
+	forEachResourceBarFrame(function(frame) applyVisibilityDriverToFrame(frame, expression) end)
+	if not expression and context ~= "fromSetPowerbars" and frameAnchor then
+		setPowerbars()
 	end
 end
 

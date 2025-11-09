@@ -74,6 +74,7 @@ L["AnchorLoop"] = "Anchoring to UIParent because %s would create an anchor loop"
 -- Resource Bars UI
 L["Resource Bars"] = "Resource Bars"
 L["Enable Resource frame"] = "Enable Resource frame"
+L["Hide out of combat"] = "Hide resource bars out of combat"
 L["Bars to show"] = "Bars to show"
 L["All specs"] = "All specializations"
 L["ProfileScope"] = "Profile scope"
