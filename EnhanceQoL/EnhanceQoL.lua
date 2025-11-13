@@ -631,13 +631,11 @@ local function UpdateFrameVisibilityHealthRegistration()
 	if needs then
 		if watcher._eqol_healthRegistered then return end
 		SafeRegisterUnitEvent(watcher, "UNIT_HEALTH", "player")
-		SafeRegisterUnitEvent(watcher, "UNIT_HEALTH_FREQUENT", "player")
 		SafeRegisterUnitEvent(watcher, "UNIT_MAXHEALTH", "player")
 		watcher._eqol_healthRegistered = true
 	else
 		if not watcher._eqol_healthRegistered then return end
 		watcher:UnregisterEvent("UNIT_HEALTH")
-		watcher:UnregisterEvent("UNIT_HEALTH_FREQUENT")
 		watcher:UnregisterEvent("UNIT_MAXHEALTH")
 		watcher._eqol_healthRegistered = false
 		watcher._eqol_lastHealthEvent = nil
@@ -656,7 +654,7 @@ local function EnsureFrameVisibilityWatcher()
 
 	local watcher = CreateFrame("Frame")
 	watcher:SetScript("OnEvent", function(self, event, unit)
-		local isHealthEvent = event == "UNIT_HEALTH" or event == "UNIT_HEALTH_FREQUENT" or event == "UNIT_MAXHEALTH"
+		local isHealthEvent = event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH"
 		if isHealthEvent then
 			if not frameVisibilityHealthEnabled or unit ~= "player" then return end
 			local now = GetTime()
@@ -808,8 +806,6 @@ local function HookFrameForMouseover(frame, cbData)
 		frame:SetScript("OnLeave", handleLeave)
 	end
 
-	print(frame:GetName())
-	if true then return end
 	if cbData and cbData.children and cbData.revealAllChilds then
 		for _, child in pairs(cbData.children) do
 			if child and not child.EQOL_MouseoverHooked then
@@ -5519,7 +5515,7 @@ local function CreateUI()
 	-- Create the TreeGroup with new top-level navigation
 	addon.treeGroup = AceGUI:Create("TreeGroup")
 	addon.treeGroup.enabletooltips = false
-	
+
 	-- Top: Combat & Dungeons (children added by sub-addons like Aura, Mythic+, Drink, CombatMeter)
 	addon.functions.addToTree(nil, { value = "combat", text = L["CombatDungeons"] })
 

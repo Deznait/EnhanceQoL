@@ -15,6 +15,7 @@
 - Show Playerframe on 100% health fixed for midnight beta
 - Boss Frames were not targetable when changing the visibility behaviour
 - Error while hovering option menu of EQOL
+- Removed UNIT_HEALTH_FREQUENT as this is deprecated
 
 ---
 
