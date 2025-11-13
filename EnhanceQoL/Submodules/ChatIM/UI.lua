@@ -383,14 +383,22 @@ function ChatIM:CreateTab(sender, isBN, bnetID, battleTag)
 			return
 		end
 
-		-- Alles andere an Blizzard weiterreichen
-		ChatFrame_OnHyperlinkShow(frame, linkData, text, button)
+		-- TODO feature of OnHyperlinkShow was removed
+		if addon.variables.isMidnight then
+			if not C_Glue.IsOnGlueScreen() then SetItemRef(linkData, text, button, frame) end
+		else
+			-- Alles andere an Blizzard weiterreichen
+			ChatFrame_OnHyperlinkShow(frame, linkData, text, button)
+		end
 	end)
-	smf:SetScript("OnHyperlinkEnter", function(self, linkData)
-		GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
-		GameTooltip:SetHyperlink(linkData)
-	end)
-	smf:SetScript("OnHyperlinkLeave", GameTooltip_Hide)
+	-- TODO bug in midnight beta we can't change tooltip stuff
+	if not addon.variables.isMidnight then
+		smf:SetScript("OnHyperlinkEnter", function(self, linkData)
+			GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
+			GameTooltip:SetHyperlink(linkData)
+		end)
+		smf:SetScript("OnHyperlinkLeave", GameTooltip_Hide)
+	end
 
 	self.tabs[sender] = {
 		msg = smf,

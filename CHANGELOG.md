@@ -1,5 +1,34 @@
 # Changelog
 
+## [5.15.1] – 2025-11-15
+
+### ❌ Removed
+
+- Midnight Beta:
+  - Tooltip features
+    - NPC ID
+    - Mythic+ Score, Key, best dungeon
+    - Rightclick for Frame Settings
+  - Cloak Upgrade button in inventory for midnight beta
+  - feature to hide buffs on raid frames in midnight beta (disabled until a fix is found)
+  - account moneyframe feature because of a bug with tooltip handling in midnight beta
+  - Module CombatMeter
+  - MythicPlus features
+    - Automark of tank and healer (these require hardware events now)
+    - Potiontracker
+    - Tooltip for Dungeon Teleports
+
+### 🐛 Fixed
+
+- Nameplate health percent/absolute fixed for midnight beta
+- Tooltip error while hovering and enabled ignore list
+- Show Playerframe on 100% health fixed for midnight beta
+- Boss Frames were not targetable when changing the visibility behaviour
+- Error while hovering option menu of EQOL
+- Removed UNIT_HEALTH_FREQUENT as this is deprecated
+
+---
+
 ## [5.15.0] – 2025-11-10
 
 ### ✨ Added

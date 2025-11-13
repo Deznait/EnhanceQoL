@@ -38,7 +38,14 @@ local EnsureUnitData -- forward declaration
 local fInspect = CreateFrame("Frame")
 
 -- Decide whether we need INSPECT_READY at all (opt-in)
-local function ShouldUseInspectFeature() return (addon.db and (addon.db["TooltipUnitShowSpec"] or addon.db["TooltipUnitShowItemLevel"])) or false end
+local function ShouldUseInspectFeature()
+	-- TODO on midnight beta - bug we are not able to add lines to tooltip in secure states
+	if not addon.variables.isMidnight then
+		return (addon.db and (addon.db["TooltipUnitShowSpec"] or addon.db["TooltipUnitShowItemLevel"])) or false
+	else
+		return false
+	end
+end
 
 local function IsConfiguredModifierDown()
 	local mod = addon.db and addon.db["TooltipMythicScoreModifier"] or "SHIFT"
@@ -60,9 +67,7 @@ local function UpdateInspectEventRegistration()
 	fInspect:UnregisterEvent("MODIFIER_STATE_CHANGED")
 	if ShouldUseInspectFeature() then
 		fInspect:RegisterEvent("INSPECT_READY")
-		if addon.db["TooltipUnitInspectRequireModifier"] then
-			fInspect:RegisterEvent("MODIFIER_STATE_CHANGED")
-		end
+		if addon.db["TooltipUnitInspectRequireModifier"] then fInspect:RegisterEvent("MODIFIER_STATE_CHANGED") end
 	else
 		pendingGUID, pendingUnit = nil, nil
 	end
@@ -127,6 +132,8 @@ local function RefreshTooltipForGUID(guid)
 end
 
 fInspect:SetScript("OnEvent", function(_, ev, arg1, arg2)
+	-- TODO bug in midnight beta we can'T change tooltip
+	if addon.variables.isMidnight then return end
 	if ev == "INSPECT_READY" then
 		local guid = arg1
 		if not guid or guid ~= pendingGUID then return end
@@ -178,6 +185,8 @@ end)
 
 EnsureUnitData = function(unit)
 	if not unit or not UnitIsPlayer(unit) then return end
+	-- TODO midnight tooltip bug - we can't do anything for now
+	if addon.variables.isMidnight then return end
 	-- Only fetch if at least one feature is enabled (opt-in)
 	if not (addon.db["TooltipUnitShowSpec"] or addon.db["TooltipUnitShowItemLevel"]) then return end
 	local guid = UnitGUID(unit)
@@ -212,7 +221,7 @@ EnsureUnitData = function(unit)
 end
 
 local function GetNPCIDFromGUID(guid)
-	if guid then
+	if guid and not (issecretvalue and issecretvalue(guid)) then
 		local type, _, _, _, _, npcID = strsplit("-", guid)
 		if type == "Creature" or type == "Vehicle" then return tonumber(npcID) end
 	end
@@ -318,7 +327,12 @@ local function checkSpell(tooltip, id, name, isSpell)
 end
 
 local function ResolveTooltipUnit(tooltip)
-	local unit = GetUnitTokenFromTooltip(tooltip)
+	local unit
+	if addon.variables.isMidnight then
+		unit = "mouseover"
+	else
+		GetUnitTokenFromTooltip(tooltip)
+	end
 	if unit and UnitExists(unit) then return unit end
 	if UnitExists("mouseover") then return "mouseover" end
 	if tooltip == GameTooltip and UnitExists("target") then return "target" end
@@ -327,12 +341,15 @@ end
 
 local function checkAdditionalTooltip(tooltip)
 	local unit = ResolveTooltipUnit(tooltip)
-	if addon.db["TooltipShowNPCID"] and unit and UnitExists(unit) and not UnitPlayerControlled(unit) then
-		local id = GetNPCIDFromGUID(UnitGUID(unit))
+	-- TODO midnight beta bug - skipping
+	if addon.db["TooltipShowNPCID"] and not addon.variables.isMidnight and unit and UnitExists(unit) and not UnitPlayerControlled(unit) then
+		local uGuid = UnitGUID(unit)
+		local id = GetNPCIDFromGUID(uGuid)
 		if id then
 			tooltip:AddLine(" ")
 			tooltip:AddDoubleLine(L["NPCID"], id)
 		end
+		return
 	end
 	if addon.db["TooltipShowClassColor"] and unit and UnitIsPlayer(unit) then
 		local classDisplayName, class, classID = UnitClass(unit)
@@ -695,12 +712,46 @@ local function checkAura(tooltip, id, name)
 	tooltip:Hide()
 end
 
+local function checkAdditionalUnit(tt)
+	-- TODO bug in midnight beta - can't change tooltip
+	if addon.variables.isMidnight then return end
+	if not (addon.db["TooltipUnitShowSpec"] or addon.db["TooltipUnitShowItemLevel"]) then return end
+
+	local unit = GetUnitTokenFromTooltip(tt)
+	if not unit or not UnitIsPlayer(unit) then return end
+
+	EnsureUnitData(unit)
+	local guid = UnitGUID(unit)
+	local c = guid and InspectCache[guid] or nil
+	if not c then return end
+
+	local showSpec = addon.db["TooltipUnitShowSpec"] and c.specName
+	local showIlvl = addon.db["TooltipUnitShowItemLevel"] and c.ilvl
+	if addon.db["TooltipUnitInspectRequireModifier"] and not IsConfiguredModifierDown() then
+		showSpec = false
+		showIlvl = false
+	end
+	if showSpec or showIlvl then tt:AddLine(" ") end
+	if showSpec then tt:AddDoubleLine("|cffffd200" .. SPECIALIZATION .. "|r", c.specName) end
+	if showIlvl then
+		local label = STAT_AVERAGE_ITEM_LEVEL or ITEM_LEVEL or "Item Level"
+		tt:AddDoubleLine("|cffffd200" .. label .. "|r", tostring(c.ilvl))
+	end
+	if showSpec or showIlvl then tt:Show() end
+end
+
 if TooltipDataProcessor then
 	TooltipDataProcessor.AddTooltipPostCall(TooltipDataProcessor.AllTypes, function(tooltip, data)
 		if not data or not data.type then return end
 
-		local id, name, _, timeLimit
-		local kind = addon.Tooltip.variables.kindsByID[tonumber(data.type)]
+		local id, name, _, timeLimit, kind
+
+		if issecretvalue and issecretvalue(data.type) then
+			-- check for mouseover
+			if UnitIsEnemy("mouseover", "player") or UnitIsFriend("mouseover", "player") then kind = "unit" end
+		else
+			kind = addon.Tooltip.variables.kindsByID[tonumber(data.type)]
+		end
 		if kind == "spell" then
 			id = data.id
 			name = L["SpellID"]
@@ -713,6 +764,7 @@ if TooltipDataProcessor then
 			return
 		elseif kind == "unit" then
 			checkUnit(tooltip)
+			checkAdditionalUnit(tooltip)
 			return
 		elseif kind == "item" then
 			id = data.id
@@ -730,34 +782,6 @@ if TooltipDataProcessor then
 			checkCurrency(tooltip, id)
 			return
 		end
-	end)
-end
-
--- Compact inspect lines on Unit tooltips (spec / ilvl / simple score)
-if TooltipDataProcessor then
-	TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, function(tt)
-		if not (addon.db["TooltipUnitShowSpec"] or addon.db["TooltipUnitShowItemLevel"]) then return end
-		local unit = GetUnitTokenFromTooltip(tt)
-		if not unit or not UnitIsPlayer(unit) then return end
-
-		EnsureUnitData(unit)
-		local guid = UnitGUID(unit)
-		local c = guid and InspectCache[guid] or nil
-		if not c then return end
-
-		local showSpec = addon.db["TooltipUnitShowSpec"] and c.specName
-		local showIlvl = addon.db["TooltipUnitShowItemLevel"] and c.ilvl
-		if addon.db["TooltipUnitInspectRequireModifier"] and not IsConfiguredModifierDown() then
-			showSpec = false
-			showIlvl = false
-		end
-		if showSpec or showIlvl then tt:AddLine(" ") end
-		if showSpec then tt:AddDoubleLine("|cffffd200" .. SPECIALIZATION .. "|r", c.specName) end
-		if showIlvl then
-			local label = STAT_AVERAGE_ITEM_LEVEL or ITEM_LEVEL or "Item Level"
-			tt:AddDoubleLine("|cffffd200" .. label .. "|r", tostring(c.ilvl))
-		end
-		if showSpec or showIlvl then tt:Show() end
 	end)
 end
 
@@ -914,22 +938,24 @@ local function addTooltipFrame2(container, which)
 		g:SetLayout("Flow")
 
 		local list, order = addon.functions.prepareListForDropdown({ [1] = NONE, [2] = L["Enemies"], [3] = L["Friendly"], [4] = L["Both"] })
-		local dropTooltipUnitHideType = addon.functions.createDropdownAce(L["TooltipUnitHideType"], list, order, function(self)
-			addon.db["TooltipUnitHideType"] = self:GetValue()
-		end)
+		local dropTooltipUnitHideType = addon.functions.createDropdownAce(L["TooltipUnitHideType"], list, order, function(self) addon.db["TooltipUnitHideType"] = self:GetValue() end)
 		dropTooltipUnitHideType:SetValue(addon.db["TooltipUnitHideType"])
 		dropTooltipUnitHideType:SetFullWidth(false)
 		dropTooltipUnitHideType:SetWidth(150)
 		g:AddChild(dropTooltipUnitHideType)
 
-		local cbHideInCombat = addon.functions.createCheckboxAce(L["TooltipUnitHideInCombat"], addon.db["TooltipUnitHideInCombat"], function(_, _, value)
-			addon.db["TooltipUnitHideInCombat"] = value
-		end)
+		local cbHideInCombat = addon.functions.createCheckboxAce(
+			L["TooltipUnitHideInCombat"],
+			addon.db["TooltipUnitHideInCombat"],
+			function(_, _, value) addon.db["TooltipUnitHideInCombat"] = value end
+		)
 		g:AddChild(cbHideInCombat)
 
-		local cbHideInDungeon = addon.functions.createCheckboxAce(L["TooltipUnitHideInDungeon"], addon.db["TooltipUnitHideInDungeon"], function(_, _, value)
-			addon.db["TooltipUnitHideInDungeon"] = value
-		end)
+		local cbHideInDungeon = addon.functions.createCheckboxAce(
+			L["TooltipUnitHideInDungeon"],
+			addon.db["TooltipUnitHideInDungeon"],
+			function(_, _, value) addon.db["TooltipUnitHideInDungeon"] = value end
+		)
 		g:AddChild(cbHideInDungeon)
 
 		local cbHideHealthBar = addon.functions.createCheckboxAce(L["TooltipUnitHideHealthBar"], addon.db["TooltipUnitHideHealthBar"], function(_, _, value)
@@ -938,10 +964,11 @@ local function addTooltipFrame2(container, which)
 		end)
 		g:AddChild(cbHideHealthBar)
 
-		local cbHideInstruction =
-			addon.functions.createCheckboxAce(L["TooltipUnitHideRightClickInstruction"]:format(UNIT_POPUP_RIGHT_CLICK), addon.db["TooltipUnitHideRightClickInstruction"], function(_, _, value)
-				addon.db["TooltipUnitHideRightClickInstruction"] = value
-			end)
+		local cbHideInstruction = addon.functions.createCheckboxAce(
+			L["TooltipUnitHideRightClickInstruction"]:format(UNIT_POPUP_RIGHT_CLICK),
+			addon.db["TooltipUnitHideRightClickInstruction"],
+			function(_, _, value) addon.db["TooltipUnitHideRightClickInstruction"] = value end
+		)
 		g:AddChild(cbHideInstruction)
 
 		local playerGroup = addon.functions.createContainer("InlineGroup", "List")
@@ -949,13 +976,26 @@ local function addTooltipFrame2(container, which)
 		playerGroup:SetLayout("Flow")
 		g:AddChild(playerGroup)
 
-		local playerOptions = {
-			mythic = L["TooltipShowMythicScore"]:format(DUNGEON_SCORE),
-			spec = L["TooltipUnitShowSpec"],
-			ilvl = L["TooltipUnitShowItemLevel"],
-			classColor = L["TooltipShowClassColor"],
-		}
-		local playerOrder = { "mythic", "spec", "ilvl", "classColor" }
+		local playerOptions = {}
+		local playerOrder = {}
+		if not addon.variables.isMidnight then
+			playerOptions = {
+				mythic = L["TooltipShowMythicScore"]:format(DUNGEON_SCORE),
+				spec = L["TooltipUnitShowSpec"],
+				ilvl = L["TooltipUnitShowItemLevel"],
+				classColor = L["TooltipShowClassColor"],
+			}
+			playerOrder = { "mythic", "spec", "ilvl" }
+		else
+			playerOrder = { "classColor" }
+			playerOptions = {
+				classColor = L["TooltipShowClassColor"],
+			}
+			addon.db["TooltipUnitShowItemLevel"] = false
+			addon.db["TooltipUnitShowSpec"] = false
+			addon.db["TooltipShowMythicScore"] = false
+		end
+
 		local dropPlayerDetails = addon.functions.createDropdownAce(L["TooltipPlayerDetailsLabel"], playerOptions, playerOrder, function() end)
 		dropPlayerDetails:SetMultiselect(true)
 		dropPlayerDetails:SetFullWidth(false)
@@ -975,88 +1015,84 @@ local function addTooltipFrame2(container, which)
 		end)
 		playerGroup:AddChild(dropPlayerDetails)
 
-		local additionalGroup = addon.functions.createContainer("InlineGroup", "List")
-		additionalGroup:SetTitle(L["TooltipPlayerAdditionalOptions"])
-		playerGroup:AddChild(additionalGroup)
+		if not addon.variables.isMidnight then
+			local additionalGroup = addon.functions.createContainer("InlineGroup", "List")
+			additionalGroup:SetTitle(L["TooltipPlayerAdditionalOptions"])
+			playerGroup:AddChild(additionalGroup)
 
-		local cbMythicModifier = addon.functions.createCheckboxAce(
-			L["TooltipMythicScoreRequireModifier"]:format(DUNGEON_SCORE),
-			addon.db["TooltipMythicScoreRequireModifier"],
-			function(_, _, value)
-				addon.db["TooltipMythicScoreRequireModifier"] = value
-				buildUnit()
-			end
-		)
-		cbMythicModifier:SetDisabled(not addon.db["TooltipShowMythicScore"])
-		additionalGroup:AddChild(cbMythicModifier)
+			local cbMythicModifier = addon.functions.createCheckboxAce(
+				L["TooltipMythicScoreRequireModifier"]:format(DUNGEON_SCORE),
+				addon.db["TooltipMythicScoreRequireModifier"],
+				function(_, _, value)
+					addon.db["TooltipMythicScoreRequireModifier"] = value
+					buildUnit()
+				end
+			)
+			cbMythicModifier:SetDisabled(not addon.db["TooltipShowMythicScore"])
+			additionalGroup:AddChild(cbMythicModifier)
 
-		local cbInspectModifier = addon.functions.createCheckboxAce(
-			L["TooltipUnitInspectRequireModifier"],
-			addon.db["TooltipUnitInspectRequireModifier"],
-			function(_, _, value)
+			local cbInspectModifier = addon.functions.createCheckboxAce(L["TooltipUnitInspectRequireModifier"], addon.db["TooltipUnitInspectRequireModifier"], function(_, _, value)
 				addon.db["TooltipUnitInspectRequireModifier"] = value
 				UpdateInspectEventRegistration()
 				buildUnit()
-			end
-		)
-		cbInspectModifier:SetDisabled(not (addon.db["TooltipUnitShowSpec"] or addon.db["TooltipUnitShowItemLevel"]))
-		additionalGroup:AddChild(cbInspectModifier)
-
-		local gatedMythic = addon.db["TooltipMythicScoreRequireModifier"] and addon.db["TooltipShowMythicScore"]
-		local gatedInspect = addon.db["TooltipUnitInspectRequireModifier"] and (addon.db["TooltipUnitShowSpec"] or addon.db["TooltipUnitShowItemLevel"])
-		if gatedMythic or gatedInspect then
-			local modList = { SHIFT = SHIFT_KEY_TEXT, ALT = ALT_KEY_TEXT, CTRL = CTRL_KEY_TEXT }
-			local list2, order2 = addon.functions.prepareListForDropdown(modList)
-
-			local parts = {}
-			if gatedMythic then table.insert(parts, DUNGEON_SCORE) end
-			if gatedInspect then
-				if addon.db["TooltipUnitShowSpec"] and addon.db["TooltipUnitShowItemLevel"] then
-					table.insert(parts, L["SpecAndIlvl"] or (SPECIALIZATION .. " & " .. (STAT_AVERAGE_ITEM_LEVEL or ITEM_LEVEL or "Item Level")))
-				elseif addon.db["TooltipUnitShowSpec"] then
-					table.insert(parts, SPECIALIZATION)
-				elseif addon.db["TooltipUnitShowItemLevel"] then
-					table.insert(parts, STAT_AVERAGE_ITEM_LEVEL or ITEM_LEVEL or "Item Level")
-				end
-			end
-			local label
-			if #parts <= 1 then
-				label = (L["TooltipMythicScoreModifier"] or "Required modifier for %s"):format(parts[1] or DUNGEON_SCORE)
-			else
-				label = (L["TooltipModifierForMultiple"] or "Required modifier for: %s"):format(table.concat(parts, ", "))
-			end
-
-			local dropMod = addon.functions.createDropdownAce(label, list2, order2, function(self)
-				addon.db["TooltipMythicScoreModifier"] = self:GetValue()
 			end)
-			dropMod:SetValue(addon.db["TooltipMythicScoreModifier"])
-			dropMod:SetFullWidth(false)
-			dropMod:SetWidth(340)
-			additionalGroup:AddChild(dropMod)
-		end
+			cbInspectModifier:SetDisabled(not (addon.db["TooltipUnitShowSpec"] or addon.db["TooltipUnitShowItemLevel"]))
+			additionalGroup:AddChild(cbInspectModifier)
 
-		if addon.db["TooltipShowMythicScore"] then
-			local partsList = {
-				score = DUNGEON_SCORE,
-				best = L["BestMythic+run"],
-				dungeons = L["SeasonDungeons"] or "Season dungeons",
-			}
-			local dropParts = addon.functions.createDropdownAce(L["MythicScorePartsLabel"] or "Mythic+ details to show", partsList, nil, function(self, _, key, checked)
-				addon.db["TooltipMythicScoreParts"] = addon.db["TooltipMythicScoreParts"] or { score = true, best = true, dungeons = true }
-				if checked then
-					addon.db["TooltipMythicScoreParts"][key] = true
+			local gatedMythic = addon.db["TooltipMythicScoreRequireModifier"] and addon.db["TooltipShowMythicScore"]
+			local gatedInspect = addon.db["TooltipUnitInspectRequireModifier"] and (addon.db["TooltipUnitShowSpec"] or addon.db["TooltipUnitShowItemLevel"])
+			if gatedMythic or gatedInspect then
+				local modList = { SHIFT = SHIFT_KEY_TEXT, ALT = ALT_KEY_TEXT, CTRL = CTRL_KEY_TEXT }
+				local list2, order2 = addon.functions.prepareListForDropdown(modList)
+
+				local parts = {}
+				if gatedMythic then table.insert(parts, DUNGEON_SCORE) end
+				if gatedInspect then
+					if addon.db["TooltipUnitShowSpec"] and addon.db["TooltipUnitShowItemLevel"] then
+						table.insert(parts, L["SpecAndIlvl"] or (SPECIALIZATION .. " & " .. (STAT_AVERAGE_ITEM_LEVEL or ITEM_LEVEL or "Item Level")))
+					elseif addon.db["TooltipUnitShowSpec"] then
+						table.insert(parts, SPECIALIZATION)
+					elseif addon.db["TooltipUnitShowItemLevel"] then
+						table.insert(parts, STAT_AVERAGE_ITEM_LEVEL or ITEM_LEVEL or "Item Level")
+					end
+				end
+				local label
+				if #parts <= 1 then
+					label = (L["TooltipMythicScoreModifier"] or "Required modifier for %s"):format(parts[1] or DUNGEON_SCORE)
 				else
-					addon.db["TooltipMythicScoreParts"][key] = nil
+					label = (L["TooltipModifierForMultiple"] or "Required modifier for: %s"):format(table.concat(parts, ", "))
 				end
-			end)
-			dropParts:SetMultiselect(true)
-			local selected = addon.db["TooltipMythicScoreParts"] or {}
-			for k, v in pairs(selected) do
-				if v then dropParts:SetItemValue(k, true) end
+
+				local dropMod = addon.functions.createDropdownAce(label, list2, order2, function(self) addon.db["TooltipMythicScoreModifier"] = self:GetValue() end)
+				dropMod:SetValue(addon.db["TooltipMythicScoreModifier"])
+				dropMod:SetFullWidth(false)
+				dropMod:SetWidth(340)
+				additionalGroup:AddChild(dropMod)
 			end
-			dropParts:SetFullWidth(false)
-			dropParts:SetWidth(340)
-			additionalGroup:AddChild(dropParts)
+
+			if addon.db["TooltipShowMythicScore"] then
+				local partsList = {
+					score = DUNGEON_SCORE,
+					best = L["BestMythic+run"],
+					dungeons = L["SeasonDungeons"] or "Season dungeons",
+				}
+				local dropParts = addon.functions.createDropdownAce(L["MythicScorePartsLabel"] or "Mythic+ details to show", partsList, nil, function(self, _, key, checked)
+					addon.db["TooltipMythicScoreParts"] = addon.db["TooltipMythicScoreParts"] or { score = true, best = true, dungeons = true }
+					if checked then
+						addon.db["TooltipMythicScoreParts"][key] = true
+					else
+						addon.db["TooltipMythicScoreParts"][key] = nil
+					end
+				end)
+				dropParts:SetMultiselect(true)
+				local selected = addon.db["TooltipMythicScoreParts"] or {}
+				for k, v in pairs(selected) do
+					if v then dropParts:SetItemValue(k, true) end
+				end
+				dropParts:SetFullWidth(false)
+				dropParts:SetWidth(340)
+				additionalGroup:AddChild(dropParts)
+			end
 		end
 
 		local npcGroup = addon.functions.createContainer("InlineGroup", "List")
@@ -1064,17 +1100,16 @@ local function addTooltipFrame2(container, which)
 		npcGroup:SetLayout("List")
 		g:AddChild(npcGroup)
 
-		local cbNPCID = addon.functions.createCheckboxAce(L["TooltipShowNPCID"], addon.db["TooltipShowNPCID"], function(_, _, value)
-			addon.db["TooltipShowNPCID"] = value
-		end)
-		npcGroup:AddChild(cbNPCID)
-
+		if not addon.variables.isMidnight then
+			local cbNPCID = addon.functions.createCheckboxAce(L["TooltipShowNPCID"], addon.db["TooltipShowNPCID"], function(_, _, value) addon.db["TooltipShowNPCID"] = value end)
+			npcGroup:AddChild(cbNPCID)
+		else
+			addon.db["TooltipShowNPCID"] = false
+		end
 		local cbNPCWowhead = addon.functions.createCheckboxAce(
 			L["TooltipShowNPCWowheadLink"],
 			addon.db["TooltipShowNPCWowheadLink"],
-			function(_, _, value)
-				addon.db["TooltipShowNPCWowheadLink"] = value
-			end,
+			function(_, _, value) addon.db["TooltipShowNPCWowheadLink"] = value end,
 			L["TooltipShowNPCWowheadLink_desc"]
 		)
 		npcGroup:AddChild(cbNPCWowhead)
@@ -1180,9 +1215,7 @@ if Menu and Menu.ModifyMenu then
 		if not npcID then return end
 
 		root:CreateDivider()
-		local btn = root:CreateButton(L["CopyWowheadURL"], function()
-			ShowCopyURL(("https://www.wowhead.com/npc=%d"):format(npcID))
-		end)
+		local btn = root:CreateButton(L["CopyWowheadURL"], function() ShowCopyURL(("https://www.wowhead.com/npc=%d"):format(npcID)) end)
 		if not btn then return end
 		btn:AddInitializer(function()
 			btn:SetTooltip(function(tt)
@@ -1221,12 +1254,16 @@ hooksecurefunc("GameTooltip_AddInstructionLine", function(tt, text)
 
 	local i = tt:NumLines()
 	local line = _G[tt:GetName() .. "TextLeft" .. i]
-	if line and line:GetText() == text then
-		line:SetText("")
-		line:Hide()
+	if line then
+		local tmpText = line:GetText()
+		if issecretvalue and issecretvalue(tmpText) then return end
+		if line:GetText() == text then
+			line:SetText("")
+			line:Hide()
 
-		local mLine = _G[tt:GetName() .. "TextLeft" .. (i - 1)]
-		if mLine and mLine.GetText and mLine:GetText() == " " then mLine:Hide() end
-		tt:Show()
+			local mLine = _G[tt:GetName() .. "TextLeft" .. (i - 1)]
+			if mLine and mLine.GetText and mLine:GetText() == " " then mLine:Hide() end
+			tt:Show()
+		end
 	end
 end)

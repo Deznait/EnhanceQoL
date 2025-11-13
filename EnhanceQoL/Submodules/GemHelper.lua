@@ -100,12 +100,15 @@ local function createButton(parent, itemTexture, itemLink, bag, slot, locked)
 		button:EnableMouse(true)
 	end
 	-- Tooltip
-	button:SetScript("OnEnter", function(self)
-		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-		GameTooltip:SetHyperlink(itemLink)
-		GameTooltip:Show()
-	end)
-	button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	-- TODO we can't change tooltip in midnight beta for now
+	if not addon.variables.isMidnight then
+		button:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:SetHyperlink(itemLink)
+			GameTooltip:Show()
+		end)
+		button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	end
 	button:SetScript("OnClick", function(self)
 		ClearCursor()
 		C_Container.PickupContainerItem(bag, slot)

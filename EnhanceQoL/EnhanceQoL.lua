@@ -496,28 +496,60 @@ end
 
 local UpdateUnitFrameMouseover -- forward declaration
 
-local frameVisibilityContext = { inCombat = false, playerHealthMissing = false }
+local frameVisibilityContext = { inCombat = false, playerHealthMissing = false, playerHealthAlpha = 0 }
 local frameVisibilityStates = {}
 local hookedUnitFrames = {}
 local frameVisibilityHealthEnabled = false
 local FRAME_VISIBILITY_HEALTH_THROTTLE = 0.1
 local ApplyFrameVisibilityState -- forward declaration
+local midnightPlayerHealthCurve
+
+local function GetMidnightPlayerHealthAlpha()
+	if not addon or not addon.variables or not addon.variables.isMidnight then return nil end
+	if not UnitHealthPercentColor or not C_CurveUtil or not C_CurveUtil.CreateColorCurve or not CreateColor then return nil end
+
+	if not midnightPlayerHealthCurve then
+		local curve = C_CurveUtil.CreateColorCurve()
+		if not curve then return nil end
+		if curve.SetType and Enum and Enum.LuaCurveType and Enum.LuaCurveType.Step then curve:SetType(Enum.LuaCurveType.Step) end
+		if curve.AddPoint then
+			curve:AddPoint(0, CreateColor(1, 1, 1, 1))
+			curve:AddPoint(1, CreateColor(1, 1, 1, 0))
+			midnightPlayerHealthCurve = curve
+		end
+	end
+
+	local ok, color = pcall(UnitHealthPercentColor, "player", midnightPlayerHealthCurve)
+	if not ok or not color or not color.GetRGBA then return nil end
+	local _, _, _, alpha = color:GetRGBA()
+	return alpha
+end
 
 local function UpdateFrameVisibilityContext()
 	local inCombat = false
 	if InCombatLockdown and InCombatLockdown() then
 		inCombat = true
 	elseif UnitAffectingCombat then
-		inCombat = UnitAffectingCombat('player') and true or false
+		inCombat = UnitAffectingCombat("player") and true or false
 	end
 	frameVisibilityContext.inCombat = inCombat
 
 	if frameVisibilityHealthEnabled then
-		local maxHP = UnitHealthMax and UnitHealthMax('player') or 0
-		local currentHP = UnitHealth and UnitHealth('player') or 0
-		frameVisibilityContext.playerHealthMissing = maxHP > 0 and currentHP < maxHP
+		local isMidnight = addon and addon.variables and addon.variables.isMidnight
+		if isMidnight then
+			local alpha = GetMidnightPlayerHealthAlpha()
+			frameVisibilityContext.playerHealthAlpha = alpha
+			frameVisibilityContext.playerHealthMissing = alpha ~= nil
+		else
+			local maxHP = UnitHealthMax and UnitHealthMax("player") or 0
+			local currentHP = UnitHealth and UnitHealth("player") or 0
+			local missing = maxHP > 0 and currentHP < maxHP
+			frameVisibilityContext.playerHealthMissing = missing
+			frameVisibilityContext.playerHealthAlpha = missing and 1 or 0
+		end
 	else
 		frameVisibilityContext.playerHealthMissing = false
+		frameVisibilityContext.playerHealthAlpha = 0
 	end
 end
 
@@ -598,15 +630,13 @@ local function UpdateFrameVisibilityHealthRegistration()
 
 	if needs then
 		if watcher._eqol_healthRegistered then return end
-		SafeRegisterUnitEvent(watcher, 'UNIT_HEALTH', 'player')
-		SafeRegisterUnitEvent(watcher, 'UNIT_HEALTH_FREQUENT', 'player')
-		SafeRegisterUnitEvent(watcher, 'UNIT_MAXHEALTH', 'player')
+		SafeRegisterUnitEvent(watcher, "UNIT_HEALTH", "player")
+		SafeRegisterUnitEvent(watcher, "UNIT_MAXHEALTH", "player")
 		watcher._eqol_healthRegistered = true
 	else
 		if not watcher._eqol_healthRegistered then return end
-		watcher:UnregisterEvent('UNIT_HEALTH')
-		watcher:UnregisterEvent('UNIT_HEALTH_FREQUENT')
-		watcher:UnregisterEvent('UNIT_MAXHEALTH')
+		watcher:UnregisterEvent("UNIT_HEALTH")
+		watcher:UnregisterEvent("UNIT_MAXHEALTH")
 		watcher._eqol_healthRegistered = false
 		watcher._eqol_lastHealthEvent = nil
 	end
@@ -622,11 +652,11 @@ local function EnsureFrameVisibilityWatcher()
 	addon.variables = addon.variables or {}
 	if addon.variables.frameVisibilityWatcher then return end
 
-	local watcher = CreateFrame('Frame')
-	watcher:SetScript('OnEvent', function(self, event, unit)
-		local isHealthEvent = event == 'UNIT_HEALTH' or event == 'UNIT_HEALTH_FREQUENT' or event == 'UNIT_MAXHEALTH'
+	local watcher = CreateFrame("Frame")
+	watcher:SetScript("OnEvent", function(self, event, unit)
+		local isHealthEvent = event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH"
 		if isHealthEvent then
-			if not frameVisibilityHealthEnabled or unit ~= 'player' then return end
+			if not frameVisibilityHealthEnabled or unit ~= "player" then return end
 			local now = GetTime()
 			local last = self._eqol_lastHealthEvent or 0
 			if (now - last) < FRAME_VISIBILITY_HEALTH_THROTTLE then return end
@@ -635,9 +665,9 @@ local function EnsureFrameVisibilityWatcher()
 		UpdateFrameVisibilityContext()
 		RefreshAllFrameVisibilities()
 	end)
-	watcher:RegisterEvent('PLAYER_ENTERING_WORLD')
-	watcher:RegisterEvent('PLAYER_REGEN_DISABLED')
-	watcher:RegisterEvent('PLAYER_REGEN_ENABLED')
+	watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
+	watcher:RegisterEvent("PLAYER_REGEN_DISABLED")
+	watcher:RegisterEvent("PLAYER_REGEN_ENABLED")
 	addon.variables.frameVisibilityWatcher = watcher
 	UpdateFrameVisibilityContext()
 	UpdateFrameVisibilityHealthRegistration()
@@ -718,16 +748,33 @@ ApplyFrameVisibilityState = function(state)
 	if state.driverActive then return end
 
 	EnsureFrameVisibilityWatcher()
+	local context = frameVisibilityContext
 	local shouldShow = EvaluateFrameVisibility(state)
-	if shouldShow then
-		if state.visible == true then return end
-		ApplyToFrameAndChildren(state, 1)
-		state.visible = true
-	else
-		if state.visible == false then return end
-		ApplyToFrameAndChildren(state, 0)
-		state.visible = false
+	local targetAlpha = shouldShow and 1 or 0
+	local healthActive = context and state.supportsPlayerHealthRule and state.config and state.config.PLAYER_HEALTH_NOT_FULL and context.playerHealthMissing
+	local isMidnightPlayerFrame = addon and addon.variables and addon.variables.isMidnight and state.frame == _G.PlayerFrame
+	local applyMidnightAlpha = shouldShow and healthActive and isMidnightPlayerFrame
+
+	if applyMidnightAlpha then
+		local midnightAlpha = context.playerHealthAlpha
+		if midnightAlpha == nil then midnightAlpha = 0 end
+		targetAlpha = midnightAlpha
 	end
+
+	if shouldShow then
+		if state.visible == true and not applyMidnightAlpha then
+			UpdateFrameVisibilityHealthRegistration()
+			return
+		end
+	else
+		if state.visible == false then
+			UpdateFrameVisibilityHealthRegistration()
+			return
+		end
+	end
+
+	ApplyToFrameAndChildren(state, targetAlpha)
+	state.visible = shouldShow
 	UpdateFrameVisibilityHealthRegistration()
 end
 
@@ -747,28 +794,28 @@ local function HookFrameForMouseover(frame, cbData)
 		genericHoverOutCheck(state)
 	end
 
-	if frame.OnEnter or frame:GetScript('OnEnter') then
-		frame:HookScript('OnEnter', handleEnter)
+	if frame.OnEnter or frame:GetScript("OnEnter") then
+		frame:HookScript("OnEnter", handleEnter)
 	else
-		frame:SetScript('OnEnter', handleEnter)
+		frame:SetScript("OnEnter", handleEnter)
 	end
 
-	if frame.OnLeave or frame:GetScript('OnLeave') then
-		frame:HookScript('OnLeave', handleLeave)
+	if frame.OnLeave or frame:GetScript("OnLeave") then
+		frame:HookScript("OnLeave", handleLeave)
 	else
-		frame:SetScript('OnLeave', handleLeave)
+		frame:SetScript("OnLeave", handleLeave)
 	end
 
 	if cbData and cbData.children and cbData.revealAllChilds then
 		for _, child in pairs(cbData.children) do
 			if child and not child.EQOL_MouseoverHooked then
-				child:HookScript('OnEnter', function()
+				child:HookScript("OnEnter", function()
 					local state = frameVisibilityStates[frame]
 					if not state or not state.config or not state.config.MOUSEOVER then return end
 					state.isMouseOver = true
 					ApplyFrameVisibilityState(state)
 				end)
-				child:HookScript('OnLeave', function()
+				child:HookScript("OnLeave", function()
 					local state = frameVisibilityStates[frame]
 					if not state then return end
 					genericHoverOutCheck(state)
@@ -793,24 +840,26 @@ local function EnsureFrameState(frame, cbData)
 	return state
 end
 
-UpdateUnitFrameMouseover = function(barName, cbData)
-	if not cbData or not cbData.var then return end
-
-	local frame = _G[barName]
+local function ClearUnitFrameState(frame, cbData)
 	if not frame then return end
+	ApplyUnitFrameStateDriver(frame, nil)
+	RestoreUnitFrameVisibility(frame, cbData)
+	frameVisibilityStates[frame] = nil
+end
 
-	local config = NormalizeUnitFrameVisibilityConfig(cbData.var)
+local function ApplyVisibilityToUnitFrame(frameName, cbData, config)
+	if type(frameName) ~= "string" or frameName == "" then return false end
+	local frame = _G[frameName]
+	if not frame then return false end
+
 	if not config then
-		ApplyUnitFrameStateDriver(frame, nil)
-		RestoreUnitFrameVisibility(frame, cbData)
-		frameVisibilityStates[frame] = nil
-		UpdateFrameVisibilityHealthRegistration()
-		return
+		ClearUnitFrameState(frame, cbData)
+		return true
 	end
 
 	local state = EnsureFrameState(frame, cbData)
 	state.config = config
-	state.supportsPlayerHealthRule = (cbData.unitToken == 'player')
+	state.supportsPlayerHealthRule = (cbData.unitToken == "player")
 
 	local driverExpression = BuildUnitFrameDriverExpression(config)
 	local needsHealth = config and config.PLAYER_HEALTH_NOT_FULL and state.supportsPlayerHealthRule
@@ -830,8 +879,7 @@ UpdateUnitFrameMouseover = function(barName, cbData)
 				if child and child.SetAlpha then child:SetAlpha(1) end
 			end
 		end
-		UpdateFrameVisibilityHealthRegistration()
-		return
+		return true
 	end
 
 	state.driverActive = false
@@ -843,6 +891,45 @@ UpdateUnitFrameMouseover = function(barName, cbData)
 		state.isMouseOver = false
 	end
 	ApplyFrameVisibilityState(state)
+	return true
+end
+
+UpdateUnitFrameMouseover = function(barName, cbData)
+	if not cbData or not cbData.var then return end
+
+	local config = NormalizeUnitFrameVisibilityConfig(cbData.var)
+	local handled = false
+
+	local function processTarget(name)
+		if ApplyVisibilityToUnitFrame(name, cbData, config) then handled = true end
+	end
+
+	local onlyChildren = cbData.onlyChildren
+	local hasChildTargets = false
+	if type(onlyChildren) == "table" then
+		local seen = {}
+		for _, child in ipairs(onlyChildren) do
+			if type(child) == "string" and child ~= "" and not seen[child] then
+				processTarget(child)
+				seen[child] = true
+				hasChildTargets = true
+			end
+		end
+		for _, child in pairs(onlyChildren) do
+			if type(child) == "string" and child ~= "" and not seen[child] then
+				processTarget(child)
+				seen[child] = true
+				hasChildTargets = true
+			end
+		end
+		if hasChildTargets then
+			local container = _G[barName]
+			ClearUnitFrameState(container, cbData)
+		end
+	end
+
+	if not hasChildTargets then processTarget(barName) end
+
 	UpdateFrameVisibilityHealthRegistration()
 end
 addon.functions.UpdateUnitFrameMouseover = UpdateUnitFrameMouseover
@@ -1107,7 +1194,7 @@ local function EnsureSkyridingStateDriver()
 		addon.variables.isPlayerSkyriding = false
 		RefreshAllActionBarVisibilityAlpha()
 	end)
-	local expr = "[advancedflyable, mounted] show; [advancedflyable, stance:3] show; hide"
+	local expr = "[advflyable, mounted] show; [advflyable, stance:3] show; hide"
 	RegisterStateDriver(driver, "visibility", expr)
 	addon.variables.skyridingDriver = driver
 	addon.variables.isPlayerSkyriding = driver:IsShown()
@@ -1121,9 +1208,7 @@ local function EnsureActionBarVisibilityWatcher()
 	watcher:RegisterEvent("PLAYER_REGEN_DISABLED")
 	watcher:RegisterEvent("PLAYER_REGEN_ENABLED")
 	watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
-	watcher:SetScript("OnEvent", function(_, event)
-		RefreshAllActionBarVisibilityAlpha(nil, event)
-	end)
+	watcher:SetScript("OnEvent", function(_, event) RefreshAllActionBarVisibilityAlpha(nil, event) end)
 	addon.variables.actionBarVisibilityWatcher = watcher
 end
 
@@ -1200,9 +1285,12 @@ local function CheckItemGems(element, itemLink, emptySocketsCount, key, pdElemen
 					if addon.db["TooltipAnchorType"] == 4 then anchor = "ANCHOR_CURSOR_RIGHT" end
 					local xOffset = addon.db["TooltipAnchorOffsetX"] or 0
 					local yOffset = addon.db["TooltipAnchorOffsetY"] or 0
-					GameTooltip:SetOwner(self, anchor, xOffset, yOffset)
-					GameTooltip:SetHyperlink(gemLink)
-					GameTooltip:Show()
+					-- TODO we can't change tooltip for now in midnight beta
+					if not addon.variables.isMidnight then
+						GameTooltip:SetOwner(self, anchor, xOffset, yOffset)
+						GameTooltip:SetHyperlink(gemLink)
+						GameTooltip:Show()
+					end
 				end
 			end)
 		else
@@ -4053,16 +4141,31 @@ local function initUnitFrame()
 	end) end
 	addon.functions.togglePartyFrameTitle(addon.db["hidePartyFrameTitle"])
 
-	local function DisableBlizzBuffs(cuf)
-		if addon.db["hideRaidFrameBuffs"] then
-			if not cuf.optionTable then return end
-			if cuf.optionTable.displayBuffs then
-				cuf.optionTable.displayBuffs = false
-				CompactUnitFrame_UpdateAuras(cuf) -- entfernt sofort bestehende Buff-Buttons
+	if not addon.variables.isMidnight then
+		-- TODO actually no workaround for auras on raid frames so disabling this feature for now
+		local function DisableBlizzBuffs(cuf)
+			if addon.db["hideRaidFrameBuffs"] then
+				if not cuf.optionTable then return end
+				if cuf.optionTable.displayBuffs then
+					cuf.optionTable.displayBuffs = false
+					CompactUnitFrame_UpdateAuras(cuf) -- entfernt sofort bestehende Buff-Buttons
+				end
+			end
+		end
+		hooksecurefunc("CompactUnitFrame_SetUpFrame", DisableBlizzBuffs)
+
+		function addon.functions.updateRaidFrameBuffs()
+			if addon.variables.isMidnight then return end
+			for i = 1, 5 do
+				local f = _G["CompactPartyFrameMember" .. i]
+				if f then DisableBlizzBuffs(f) end
+			end
+			for i = 1, 40 do
+				local f = _G["CompactRaidFrame" .. i]
+				if f then DisableBlizzBuffs(f) end
 			end
 		end
 	end
-	hooksecurefunc("CompactUnitFrame_SetUpFrame", DisableBlizzBuffs)
 
 	local function TruncateFrameName(cuf)
 		if not addon.db["unitFrameTruncateNames"] then return end
@@ -4103,16 +4206,6 @@ local function initUnitFrame()
 		for i = 1, 40 do
 			local f = _G["CompactRaidFrame" .. i]
 			TruncateFrameName(f)
-		end
-	end
-	function addon.functions.updateRaidFrameBuffs()
-		for i = 1, 5 do
-			local f = _G["CompactPartyFrameMember" .. i]
-			if f then DisableBlizzBuffs(f) end
-		end
-		for i = 1, 40 do
-			local f = _G["CompactRaidFrame" .. i]
-			if f then DisableBlizzBuffs(f) end
 		end
 	end
 
@@ -4175,68 +4268,72 @@ local function initUnitFrame()
 end
 
 local function initBagsFrame()
-	addon.functions.InitDBValue("moneyTracker", {})
-	addon.functions.InitDBValue("enableMoneyTracker", false)
-	addon.functions.InitDBValue("showOnlyGoldOnMoney", false)
-	addon.functions.InitDBValue("warbandGold", 0)
-	if addon.db["moneyTracker"][UnitGUID("player")] == nil or type(addon.db["moneyTracker"][UnitGUID("player")]) ~= "table" then addon.db["moneyTracker"][UnitGUID("player")] = {} end
-	local moneyFrame = ContainerFrameCombinedBags.MoneyFrame
-	local otherMoney = {}
+	-- TODO actual bug in beta - we can't change anything with tooltip
+	if not addon.variables.isMidnight then
+		addon.functions.InitDBValue("moneyTracker", {})
+		addon.functions.InitDBValue("enableMoneyTracker", false)
+		addon.functions.InitDBValue("showOnlyGoldOnMoney", false)
+		addon.functions.InitDBValue("warbandGold", 0)
+		if addon.db["moneyTracker"][UnitGUID("player")] == nil or type(addon.db["moneyTracker"][UnitGUID("player")]) ~= "table" then addon.db["moneyTracker"][UnitGUID("player")] = {} end
 
-	local function ShowBagMoneyTooltip(self)
-		if not addon.db["enableMoneyTracker"] then return end
-		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-		GameTooltip:ClearLines()
+		local moneyFrame = ContainerFrameCombinedBags.MoneyFrame
+		local otherMoney = {}
 
-		local list, total = {}, 0
-		for _, info in pairs(addon.db["moneyTracker"]) do
-			total = total + (info.money or 0)
-			table.insert(list, info)
-		end
-		table.sort(list, function(a, b) return (a.money or 0) > (b.money or 0) end)
+		local function ShowBagMoneyTooltip(self)
+			if not addon.db["enableMoneyTracker"] then return end
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:ClearLines()
 
-		GameTooltip:AddDoubleLine(L["warbandGold"], addon.functions.formatMoney(addon.db["warbandGold"] or 0, "tracker"))
-		GameTooltip:AddLine(" ")
-
-		for _, info in ipairs(list) do
-			local col = (CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS)[info.class] or { r = 1, g = 1, b = 1 }
-			local displayName
-			if info.realm == GetRealmName() or not info.realm or info.realm == "" then
-				displayName = string.format("|cff%02x%02x%02x%s|r", col.r * 255, col.g * 255, col.b * 255, info.name)
-			else
-				displayName = string.format("|cff%02x%02x%02x%s-%s|r", col.r * 255, col.g * 255, col.b * 255, info.name, info.realm)
+			local list, total = {}, 0
+			for _, info in pairs(addon.db["moneyTracker"]) do
+				total = total + (info.money or 0)
+				table.insert(list, info)
 			end
-			GameTooltip:AddDoubleLine(displayName, addon.functions.formatMoney(info.money, "tracker"))
+			table.sort(list, function(a, b) return (a.money or 0) > (b.money or 0) end)
+
+			GameTooltip:AddDoubleLine(L["warbandGold"], addon.functions.formatMoney(addon.db["warbandGold"] or 0, "tracker"))
+			GameTooltip:AddLine(" ")
+
+			for _, info in ipairs(list) do
+				local col = (CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS)[info.class] or { r = 1, g = 1, b = 1 }
+				local displayName
+				if info.realm == GetRealmName() or not info.realm or info.realm == "" then
+					displayName = string.format("|cff%02x%02x%02x%s|r", col.r * 255, col.g * 255, col.b * 255, info.name)
+				else
+					displayName = string.format("|cff%02x%02x%02x%s-%s|r", col.r * 255, col.g * 255, col.b * 255, info.name, info.realm)
+				end
+				GameTooltip:AddDoubleLine(displayName, addon.functions.formatMoney(info.money, "tracker"))
+			end
+
+			GameTooltip:AddLine(" ")
+			GameTooltip:AddDoubleLine(TOTAL, addon.functions.formatMoney(total, "tracker"))
+			GameTooltip:Show()
 		end
 
-		GameTooltip:AddLine(" ")
-		GameTooltip:AddDoubleLine(TOTAL, addon.functions.formatMoney(total, "tracker"))
-		GameTooltip:Show()
-	end
-
-	local function HideBagMoneyTooltip()
-		if not addon.db["enableMoneyTracker"] then return end
-		GameTooltip:Hide()
-	end
-
-	moneyFrame:HookScript("OnEnter", ShowBagMoneyTooltip)
-	moneyFrame:HookScript("OnLeave", HideBagMoneyTooltip)
-	for _, coin in ipairs({ "GoldButton", "SilverButton", "CopperButton" }) do
-		local btn = moneyFrame[coin]
-		if btn then
-			btn:HookScript("OnEnter", ShowBagMoneyTooltip)
-			btn:HookScript("OnLeave", HideBagMoneyTooltip)
+		local function HideBagMoneyTooltip()
+			if not addon.db["enableMoneyTracker"] then return end
+			GameTooltip:Hide()
 		end
-	end
 
-	moneyFrame = ContainerFrame1.MoneyFrame
-	moneyFrame:HookScript("OnEnter", ShowBagMoneyTooltip)
-	moneyFrame:HookScript("OnLeave", HideBagMoneyTooltip)
-	for _, coin in ipairs({ "GoldButton", "SilverButton", "CopperButton" }) do
-		local btn = moneyFrame[coin]
-		if btn then
-			btn:HookScript("OnEnter", ShowBagMoneyTooltip)
-			btn:HookScript("OnLeave", HideBagMoneyTooltip)
+		moneyFrame:HookScript("OnEnter", ShowBagMoneyTooltip)
+		moneyFrame:HookScript("OnLeave", HideBagMoneyTooltip)
+		for _, coin in ipairs({ "GoldButton", "SilverButton", "CopperButton" }) do
+			local btn = moneyFrame[coin]
+			if btn then
+				btn:HookScript("OnEnter", ShowBagMoneyTooltip)
+				btn:HookScript("OnLeave", HideBagMoneyTooltip)
+			end
+		end
+
+		moneyFrame = ContainerFrame1.MoneyFrame
+		moneyFrame:HookScript("OnEnter", ShowBagMoneyTooltip)
+		moneyFrame:HookScript("OnLeave", HideBagMoneyTooltip)
+		for _, coin in ipairs({ "GoldButton", "SilverButton", "CopperButton" }) do
+			local btn = moneyFrame[coin]
+			if btn then
+				btn:HookScript("OnEnter", ShowBagMoneyTooltip)
+				btn:HookScript("OnLeave", HideBagMoneyTooltip)
+			end
 		end
 	end
 end
@@ -5118,13 +5215,16 @@ function addon.functions.createInstantCatalystButton()
 	icon:SetTexture("Interface\\AddOns\\EnhanceQoL\\Icons\\InstantCatalyst.tga")
 	button.icon = icon
 
-	button:SetScript("OnEnter", function(self)
-		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-		GameTooltip:ClearLines()
-		GameTooltip:AddLine(L["Instant Catalyst"])
-		GameTooltip:Show()
-	end)
-	button:SetScript("OnLeave", function(self) GameTooltip:Hide() end)
+	-- TODO bug in midnight beta we can't modify tooltip
+	if not addon.variables.isMidnight then
+		button:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:ClearLines()
+			GameTooltip:AddLine(L["Instant Catalyst"])
+			GameTooltip:Show()
+		end)
+		button:SetScript("OnLeave", function(self) GameTooltip:Hide() end)
+	end
 
 	if anchor then
 		button:SetPoint("RIGHT", anchor, "RIGHT", -2, 0)
@@ -5242,42 +5342,45 @@ local function initCharacter()
 
 	if addon.db["showDurabilityOnCharframe"] == false or (addon.functions and addon.functions.IsTimerunner and addon.functions.IsTimerunner()) then addon.general.durabilityIconFrame:Hide() end
 
-	addon.general.cloakUpgradeFrame = CreateFrame("Button", nil, PaperDollFrame, "BackdropTemplate")
-	addon.general.cloakUpgradeFrame:SetSize(32, 32)
-	addon.general.cloakUpgradeFrame:SetPoint("LEFT", addon.general.durabilityIconFrame, "RIGHT", 4, 0)
+	-- TODO remove on midnight release
+	if not addon.variables.isMidnight then
+		addon.general.cloakUpgradeFrame = CreateFrame("Button", nil, PaperDollFrame, "BackdropTemplate")
+		addon.general.cloakUpgradeFrame:SetSize(32, 32)
+		addon.general.cloakUpgradeFrame:SetPoint("LEFT", addon.general.durabilityIconFrame, "RIGHT", 4, 0)
 
-	addon.general.cloakUpgradeFrame.icon = addon.general.cloakUpgradeFrame:CreateTexture(nil, "OVERLAY")
-	addon.general.cloakUpgradeFrame.icon:SetSize(32, 32)
-	addon.general.cloakUpgradeFrame.icon:SetPoint("CENTER", addon.general.cloakUpgradeFrame, "CENTER")
-	addon.general.cloakUpgradeFrame.icon:SetTexture(addon.variables.cloakUpgradeIcon)
+		addon.general.cloakUpgradeFrame.icon = addon.general.cloakUpgradeFrame:CreateTexture(nil, "OVERLAY")
+		addon.general.cloakUpgradeFrame.icon:SetSize(32, 32)
+		addon.general.cloakUpgradeFrame.icon:SetPoint("CENTER", addon.general.cloakUpgradeFrame, "CENTER")
+		addon.general.cloakUpgradeFrame.icon:SetTexture(addon.variables.cloakUpgradeIcon)
 
-	addon.general.cloakUpgradeFrame:SetScript("OnClick", function()
-		GenericTraitUI_LoadUI()
-		GenericTraitFrame:SetSystemID(29)
-		GenericTraitFrame:SetTreeID(1115)
-		ToggleFrame(GenericTraitFrame)
-	end)
-	addon.general.cloakUpgradeFrame:SetScript("OnEnter", function(self)
-		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-		GameTooltip:SetText(L["cloakUpgradeTooltip"] or "Upgrade skills")
-		GameTooltip:Show()
-	end)
-	addon.general.cloakUpgradeFrame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+		addon.general.cloakUpgradeFrame:SetScript("OnClick", function()
+			GenericTraitUI_LoadUI()
+			GenericTraitFrame:SetSystemID(29)
+			GenericTraitFrame:SetTreeID(1115)
+			ToggleFrame(GenericTraitFrame)
+		end)
+		addon.general.cloakUpgradeFrame:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:SetText(L["cloakUpgradeTooltip"] or "Upgrade skills")
+			GameTooltip:Show()
+		end)
+		addon.general.cloakUpgradeFrame:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-	local function updateCloakUpgradeButton()
-		if PaperDollFrame and PaperDollFrame:IsShown() then
-			if addon.db["showCloakUpgradeButton"] and C_Item.IsEquippedItem(235499) then
-				addon.general.cloakUpgradeFrame:Show()
-			else
-				addon.general.cloakUpgradeFrame:Hide()
+		local function updateCloakUpgradeButton()
+			if PaperDollFrame and PaperDollFrame:IsShown() then
+				if addon.db["showCloakUpgradeButton"] and C_Item.IsEquippedItem(235499) then
+					addon.general.cloakUpgradeFrame:Show()
+				else
+					addon.general.cloakUpgradeFrame:Hide()
+				end
 			end
 		end
+		addon.functions.updateCloakUpgradeButton = updateCloakUpgradeButton
+		local cloakEventFrame = CreateFrame("Frame")
+		cloakEventFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+		cloakEventFrame:SetScript("OnEvent", updateCloakUpgradeButton)
+		cloakEventFrame:Hide()
 	end
-	addon.functions.updateCloakUpgradeButton = updateCloakUpgradeButton
-	local cloakEventFrame = CreateFrame("Frame")
-	cloakEventFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
-	cloakEventFrame:SetScript("OnEvent", updateCloakUpgradeButton)
-	cloakEventFrame:Hide()
 
 	for key, value in pairs(addon.variables.itemSlots) do
 		-- Hintergrund für das Item-Level
@@ -5337,7 +5440,7 @@ local function initCharacter()
 
 	PaperDollFrame:HookScript("OnShow", function(self)
 		setCharFrame()
-		addon.functions.updateCloakUpgradeButton()
+		if not addon.variables.isMidnight then addon.functions.updateCloakUpgradeButton() end --todo remove on midnight release
 	end)
 
 	if OrderHallCommandBar then
@@ -5421,6 +5524,7 @@ local function CreateUI()
 
 	-- Create the TreeGroup with new top-level navigation
 	addon.treeGroup = AceGUI:Create("TreeGroup")
+	addon.treeGroup.enabletooltips = false
 
 	-- Top: Combat & Dungeons (children added by sub-addons like Aura, Mythic+, Drink, CombatMeter)
 	addon.functions.addToTree(nil, { value = "combat", text = L["CombatDungeons"] })

@@ -7,6 +7,8 @@ else
 	error(parentAddonName .. " is not loaded")
 end
 
+if addon.variables.isMidnight then return end
+
 addon.CombatMeter = {}
 addon.CombatMeter.functions = {}
 

@@ -6,6 +6,7 @@ if _G[parentAddonName] then
 else
 	error(parentAddonName .. " is not loaded")
 end
+if addon.variables.isMidnight then return end
 
 local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_CombatMeter")
 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)

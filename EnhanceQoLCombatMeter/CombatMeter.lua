@@ -6,6 +6,7 @@ if _G[parentAddonName] then
 else
 	error(parentAddonName .. " is not loaded")
 end
+if addon.variables.isMidnight then return end
 
 local cm = addon.CombatMeter
 local band = bit.band
