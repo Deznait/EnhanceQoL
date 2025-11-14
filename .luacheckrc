@@ -1990,6 +1990,7 @@ globals = {
 	"FRIENDS_TEXTURE_AFK",
 	"FRIENDS_TEXTURE_OFFLINE",
 	"GroupLootFrame1",
+	"UnitPowerPercent",
 	"NUM_GROUP_LOOT_FRAMES",
 	"REWARD",
 	"ActionBarActionButtonMixin",

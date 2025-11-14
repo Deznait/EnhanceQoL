@@ -10,6 +10,8 @@ end
 local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_Aura")
 local AceGUI = addon.AceGUI
 local eventFrame = CreateFrame("Frame")
+local UnitAffectingCombat = UnitAffectingCombat
+local IS_MIDNIGHT_BUILD = (addon.variables and addon.variables.isMidnight) == true
 
 -- luacheck: globals ChatFrame_OpenChat ActionButtonSpellAlertManager
 
@@ -89,6 +91,8 @@ local buffInstances = {}
 local altToBase = {}
 local spellToCat = {}
 local chargeSpells = {}
+local pendingAuraInstances = {}
+local pendingMissingScan = false
 
 local timedAuras = {}
 local timeTicker
@@ -893,6 +897,10 @@ function updateBuff(catId, id, changedId, firstScan)
 	local cat = getCategory(catId)
 	local buff = cat and cat.buffs and cat.buffs[id]
 	local tType = buff and buff.trackType or (cat and cat.trackType) or "BUFF"
+	if IS_MIDNIGHT_BUILD and InCombatLockdown() and buff and buff._hasMissing and tType ~= "ITEM" and tType ~= "ENCHANT" then
+		pendingMissingScan = true
+		return
+	end
 	local key = catId .. ":" .. id
 	if buff and not buffAllowed(buff) then
 		if timedAuras[key] then
@@ -1056,18 +1064,20 @@ function updateBuff(catId, id, changedId, firstScan)
 
 	local aura
 	local triggeredId = id
-	if changedId and (changedId == id or (buff and buff.altHash and buff.altHash[changedId])) then
-		aura = C_UnitAuras.GetPlayerAuraBySpellID(changedId)
-		triggeredId = changedId
-	else
-		aura = C_UnitAuras.GetPlayerAuraBySpellID(id)
-		triggeredId = id
-		if not aura and buff and buff.altHash then
-			for altId in pairs(buff.altHash) do
-				aura = C_UnitAuras.GetPlayerAuraBySpellID(altId)
-				if aura then
-					triggeredId = altId
-					break
+	if not IS_MIDNIGHT_BUILD or not InCombatLockdown() then
+		if changedId and (changedId == id or (buff and buff.altHash and buff.altHash[changedId])) then
+			aura = C_UnitAuras.GetPlayerAuraBySpellID(changedId)
+			triggeredId = changedId
+		else
+			aura = C_UnitAuras.GetPlayerAuraBySpellID(id)
+			triggeredId = id
+			if not aura and buff and buff.altHash then
+				for altId in pairs(buff.altHash) do
+					aura = C_UnitAuras.GetPlayerAuraBySpellID(altId)
+					if aura then
+						triggeredId = altId
+						break
+					end
 				end
 			end
 		end
@@ -1414,6 +1424,73 @@ local function scheduleContextRefresh(reason)
 	end)
 end
 
+local function ApplyChangedSpells(changed)
+	if not changed or not next(changed) then return end
+	local needsLayout = {}
+	for spellId, cId in pairs(changed) do
+		for catId in pairs(spellToCat[spellId] or {}) do
+			local cat = addon.db["buffTrackerCategories"][catId]
+			if addon.db["buffTrackerEnabled"][catId] and categoryAllowed(cat) then
+				if not addon.db["buffTrackerHidden"][spellId] then
+					local changedId = cId ~= true and cId or nil
+					updateBuff(catId, spellId, changedId)
+				elseif activeBuffFrames[catId] and activeBuffFrames[catId][spellId] then
+					activeBuffFrames[catId][spellId]:Hide()
+				end
+				needsLayout[catId] = true
+			end
+		end
+	end
+
+	for catId in pairs(needsLayout) do
+		updatePositions(catId)
+		if anchors[catId] then anchors[catId]:Show() end
+	end
+end
+
+local function FlushPendingAuras()
+	if not IS_MIDNIGHT_BUILD or not next(pendingAuraInstances) then return end
+	local changed = {}
+	local unitAuras = C_UnitAuras and C_UnitAuras.GetUnitAuras
+	if unitAuras then
+		local function applySnapshot(filter)
+			local snapshot = unitAuras("player", filter)
+			if type(snapshot) ~= "table" then return end
+			for _, aura in ipairs(snapshot) do
+				if aura and aura.auraInstanceID and pendingAuraInstances[aura.auraInstanceID] then
+					if aura.spellId then
+						local base = altToBase[aura.spellId] or aura.spellId
+						changed[base] = aura.spellId
+					end
+					pendingAuraInstances[aura.auraInstanceID] = nil
+				end
+			end
+		end
+		applySnapshot("HELPFUL")
+		applySnapshot("HARMFUL")
+	end
+
+	if next(pendingAuraInstances) then
+		local getter = C_UnitAuras and C_UnitAuras.GetAuraDataByAuraInstanceID
+		if getter then
+			for inst in pairs(pendingAuraInstances) do
+				local aura = getter("player", inst)
+				if aura and aura.spellId then
+					local base = altToBase[aura.spellId] or aura.spellId
+					changed[base] = aura.spellId
+				elseif auraInstanceMap[inst] then
+					changed[auraInstanceMap[inst].buffId] = true
+				end
+				pendingAuraInstances[inst] = nil
+			end
+		else
+			wipe(pendingAuraInstances)
+		end
+	end
+
+	ApplyChangedSpells(changed)
+end
+
 addon.Aura.buffAnchors = anchors
 addon.Aura.scanBuffs = scanBuffs
 
@@ -1472,48 +1549,50 @@ eventFrame:SetScript("OnEvent", function(_, event, unit, ...)
 		end
 	end
 
+	if event == "PLAYER_REGEN_ENABLED" then
+		if IS_MIDNIGHT_BUILD then
+			FlushPendingAuras()
+			if pendingMissingScan then
+				pendingMissingScan = false
+				scanBuffs()
+			end
+		end
+		return
+	end
+
 	if event == "UNIT_AURA" and unit == "player" then
 		local eventInfo = ...
 		if eventInfo then
 			local changed = {}
+			local inCombat = IS_MIDNIGHT_BUILD and UnitAffectingCombat and UnitAffectingCombat("player")
 			for _, aura in ipairs(eventInfo.addedAuras or {}) do
-				local base = altToBase[aura.spellId] or aura.spellId
-				changed[base] = aura.spellId
+				if inCombat and aura and aura.auraInstanceID then
+					pendingAuraInstances[aura.auraInstanceID] = true
+				elseif aura and (not IS_MIDNIGHT_BUILD or not issecretvalue or not issecretvalue(aura.spellId)) then
+					local base = altToBase[aura.spellId] or aura.spellId
+					changed[base] = aura.spellId
+				end
 			end
 			for _, inst in ipairs(eventInfo.updatedAuraInstanceIDs or {}) do
-				local data = C_UnitAuras.GetAuraDataByAuraInstanceID("player", inst)
-				if data then
-					local base = altToBase[data.spellId] or data.spellId
-					changed[base] = data.spellId
-				elseif auraInstanceMap[inst] then
-					changed[auraInstanceMap[inst].buffId] = true
+				if inCombat then
+					pendingAuraInstances[inst] = true
+				elseif not IS_MIDNIGHT_BUILD or (issecretvalue and not issecretvalue(inst)) then
+					local data = C_UnitAuras.GetAuraDataByAuraInstanceID("player", inst)
+					if data and (not issecretvalue or not issecretvalue(data.spellId)) then
+						local base = altToBase[data.spellId] or data.spellId
+						changed[base] = data.spellId
+					elseif auraInstanceMap[inst] then
+						changed[auraInstanceMap[inst].buffId] = true
+					end
 				end
 			end
 			for _, inst in ipairs(eventInfo.removedAuraInstanceIDs or {}) do
 				if auraInstanceMap[inst] then changed[auraInstanceMap[inst].buffId] = true end
 				auraInstanceMap[inst] = nil
+				pendingAuraInstances[inst] = nil
 			end
 
-			local needsLayout = {}
-			for spellId, cId in pairs(changed) do
-				for catId in pairs(spellToCat[spellId] or {}) do
-					local cat = addon.db["buffTrackerCategories"][catId]
-					if addon.db["buffTrackerEnabled"][catId] and categoryAllowed(cat) then
-						if not addon.db["buffTrackerHidden"][spellId] then
-							local changedId = cId ~= true and cId or nil
-							updateBuff(catId, spellId, changedId)
-						elseif activeBuffFrames[catId] and activeBuffFrames[catId][spellId] then
-							activeBuffFrames[catId][spellId]:Hide()
-						end
-						needsLayout[catId] = true
-					end
-				end
-			end
-
-			for catId in pairs(needsLayout) do
-				updatePositions(catId)
-				if anchors[catId] then anchors[catId]:Show() end
-			end
+			ApplyChangedSpells(changed)
 			return
 		end
 	end
@@ -1577,6 +1656,7 @@ eventFrame:RegisterEvent("BAG_UPDATE_COOLDOWN")
 eventFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 eventFrame:RegisterEvent("UNIT_INVENTORY_CHANGED")
 eventFrame:RegisterEvent("ACTIVE_DELVE_DATA_UPDATE")
+eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 local function addBuff(catId, id)
 	-- get spell name and icon once
@@ -2723,6 +2803,7 @@ function addon.Aura.functions.addBuffTrackerOptions(container)
 	wrapper:AddChild(left)
 
 	treeGroup = AceGUI:Create("EQOL_DragTreeGroup")
+	treeGroup.enabletooltips = false
 	treeGroup:SetFullHeight(true)
 	treeGroup:SetFullWidth(true)
 	treeGroup:SetTreeWidth(200, true)
