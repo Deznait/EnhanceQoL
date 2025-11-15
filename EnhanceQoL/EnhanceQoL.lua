@@ -4928,9 +4928,14 @@ local function initUI()
 				end
 
 				local totalRows = math.ceil(index / COLUMNS)
-				local width = (ICON_SIZE + PADDING) * COLUMNS + PADDING
+				local tmpColumns = min(index, COLUMNS)
+				local width = (ICON_SIZE + PADDING) * tmpColumns + PADDING
 				local height = (ICON_SIZE + PADDING) * totalRows + PADDING
-				addon.variables.buttonSink:SetSize(width, height)
+				if index == 0 then
+					addon.variables.buttonSink:SetSize(0, 0)
+				else
+					addon.variables.buttonSink:SetSize(width, height)
+				end
 			end
 		else
 			for name, button in pairs(addon.variables.bagButtons) do
