@@ -70,6 +70,7 @@ These features are currently removed in the Midnight beta because of API changes
 - Context menu checks for **NPC ID** hardened to avoid errors
 - Health macro combat checks moved into **protected** logic
 - **Healthbar colors** no longer sometimes display the wrong color
+- Keybind shortening leads to invisible text
 
 ---
 
