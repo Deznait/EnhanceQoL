@@ -15,6 +15,19 @@ UF.ui = UF.ui or {}
 local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_Aura")
 local LSM = LibStub("LibSharedMedia-3.0")
 local AceGUI = addon.AceGUI or LibStub("AceGUI-3.0")
+local BLIZZARD_TEX = "Interface\\TargetingFrame\\UI-StatusBar"
+local atlasByPower = {
+	LUNAR_POWER = "Unit_Druid_AstralPower_Fill",
+	MAELSTROM = "Unit_Shaman_Maelstrom_Fill",
+	INSANITY = "Unit_Priest_Insanity_Fill",
+	FURY = "Unit_DemonHunter_Fury_Fill",
+	RUNIC_POWER = "UI-HUD-UnitFrame-Player-PortraitOn-Bar-RunicPower",
+	ENERGY = "UI-HUD-UnitFrame-Player-PortraitOn-ClassResource-Bar-Energy",
+	FOCUS = "UI-HUD-UnitFrame-Player-PortraitOn-Bar-Focus",
+	RAGE = "UI-HUD-UnitFrame-Player-PortraitOn-Bar-Rage",
+	MANA = "UI-HUD-UnitFrame-Player-PortraitOn-Bar-Mana",
+	HEALTH = "UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health",
+}
 
 local UnitHealth, UnitHealthMax = UnitHealth, UnitHealthMax
 local UnitPower, UnitPowerMax, UnitPowerType = UnitPower, UnitPowerMax, UnitPowerType
@@ -62,6 +75,8 @@ local defaults = {
 		powerHeight = 16,
 		statusHeight = 18,
 		anchor = { point = "CENTER", relativeTo = "UIParent", relativePoint = "CENTER", x = 0, y = -200 },
+		strata = nil,
+		frameLevel = nil,
 		border = { enabled = true, color = { 0, 0, 0, 0.8 }, edgeSize = 1, inset = 0 },
 		health = {
 			useClassColor = true,
@@ -74,6 +89,7 @@ local defaults = {
 			offsetLeft = { x = 6, y = 0 },
 			offsetRight = { x = -6, y = 0 },
 			useShortNumbers = true,
+			texture = "DEFAULT",
 		},
 		power = {
 			color = { 0.1, 0.45, 1, 1 },
@@ -84,6 +100,7 @@ local defaults = {
 			offsetLeft = { x = 6, y = 0 },
 			offsetRight = { x = -6, y = 0 },
 			useShortNumbers = true,
+			texture = "DEFAULT",
 		},
 		status = {
 			enabled = true,
@@ -138,11 +155,13 @@ local function setBackdrop(frame, borderCfg)
 	if not frame then return end
 	if borderCfg and borderCfg.enabled then
 		local color = borderCfg.color or { 0, 0, 0, 0.8 }
+		local insetVal = borderCfg.inset
+		if insetVal == nil then insetVal = borderCfg.edgeSize or 1 end
 		frame:SetBackdrop({
 			bgFile = "Interface\\Buttons\\WHITE8x8",
 			edgeFile = "Interface\\Buttons\\WHITE8x8",
 			edgeSize = borderCfg.edgeSize or 1,
-			insets = { left = borderCfg.inset or 0, right = borderCfg.inset or 0, top = borderCfg.inset or 0, bottom = borderCfg.inset or 0 },
+			insets = { left = insetVal, right = insetVal, top = insetVal, bottom = insetVal },
 		})
 		frame:SetBackdropColor(0, 0, 0, 0)
 		frame:SetBackdropBorderColor(color[1] or 0, color[2] or 0, color[3] or 0, color[4] or 1)
@@ -153,6 +172,30 @@ end
 
 local UnitHealthPercent = UnitHealthPercent
 local UnitPowerPercent = UnitPowerPercent
+
+local function resolveTexture(key)
+	if not key or key == "DEFAULT" then return BLIZZARD_TEX end
+	if LSM then
+		local tex = LSM:Fetch("statusbar", key)
+		if tex then return tex end
+	end
+	return key
+end
+
+local function configureSpecialTexture(bar, pType, texKey, cfg)
+	if not bar or not pType then return end
+	local atlas = atlasByPower[pType]
+	if not atlas then return end
+	if texKey and texKey ~= "" and texKey ~= "DEFAULT" then return end
+	cfg = cfg or bar._cfg
+	local tex = bar:GetStatusBarTexture()
+	if tex and tex.SetAtlas then
+		local currentAtlas = tex.GetAtlas and tex:GetAtlas()
+		if currentAtlas ~= atlas then tex:SetAtlas(atlas, true) end
+		if tex.SetHorizTile then tex:SetHorizTile(false) end
+		if tex.SetVertTile then tex:SetVertTile(false) end
+	end
+end
 
 local function formatText(mode, cur, maxv, useShort, percentValue)
 	if mode == "NONE" then return "" end
@@ -189,6 +232,7 @@ local function updateHealth(cfg)
 	state.health:SetMinMaxValues(0, maxv > 0 and maxv or 1)
 	state.health:SetValue(cur or 0)
 	local hc = cfg.health or {}
+	configureSpecialTexture(state.health, "HEALTH", hc.texture, hc)
 	local percentVal
 	if addon.variables and addon.variables.isMidnight and UnitHealthPercent then
 		percentVal = UnitHealthPercent(PLAYER_UNIT, true, true)
@@ -229,6 +273,8 @@ local function updatePower(cfg)
 	bar:SetMinMaxValues(0, maxv > 0 and maxv or 1)
 	bar:SetValue(cur or 0)
 	local pcfg = cfg.power or {}
+	local _, powerToken = UnitPowerType(PLAYER_UNIT)
+	configureSpecialTexture(bar, powerToken, pcfg.texture, pcfg)
 	local percentVal
 	if addon.variables and addon.variables.isMidnight and UnitPowerPercent then
 		percentVal = UnitPowerPercent(PLAYER_UNIT, nil, true, true)
@@ -301,7 +347,21 @@ local function layoutFrame(cfg)
 	local statusHeight = (cfg.status and cfg.status.enabled == false) and 0 or (cfg.statusHeight or defaults.player.statusHeight)
 	local healthHeight = cfg.healthHeight or defaults.player.healthHeight
 	local powerHeight = cfg.powerHeight or defaults.player.powerHeight
-	state.frame:SetWidth(width)
+	local borderInset = 0
+	if cfg.border and cfg.border.enabled then borderInset = (cfg.border.edgeSize or 1) end
+	state.frame:SetWidth(width + borderInset * 2)
+	if cfg.strata then
+		state.frame:SetFrameStrata(cfg.strata)
+	else
+		local pf = _G.PlayerFrame
+		if pf and pf.GetFrameStrata then state.frame:SetFrameStrata(pf:GetFrameStrata()) end
+	end
+	if cfg.frameLevel then
+		state.frame:SetFrameLevel(cfg.frameLevel)
+	else
+		local pf = _G.PlayerFrame
+		if pf and pf.GetFrameLevel then state.frame:SetFrameLevel(pf:GetFrameLevel()) end
+	end
 	state.status:SetHeight(statusHeight)
 	state.health:SetSize(width, healthHeight)
 	state.power:SetSize(width, powerHeight)
@@ -315,22 +375,22 @@ local function layoutFrame(cfg)
 	state.frame:ClearAllPoints()
 	state.frame:SetPoint(anchor.point or "CENTER", rel or UIParent, anchor.relativePoint or anchor.point or "CENTER", anchor.x or 0, anchor.y or 0)
 
-	local y = 0
+	local y = -borderInset
 	if statusHeight > 0 then
-		state.status:SetPoint("TOPLEFT", state.frame, "TOPLEFT", 0, 0)
-		state.status:SetPoint("TOPRIGHT", state.frame, "TOPRIGHT", 0, 0)
-		y = -statusHeight
+		state.status:SetPoint("TOPLEFT", state.frame, "TOPLEFT", borderInset, -borderInset)
+		state.status:SetPoint("TOPRIGHT", state.frame, "TOPRIGHT", -borderInset, -borderInset)
+		y = y - statusHeight
 	else
-		state.status:SetPoint("TOPLEFT", state.frame, "TOPLEFT", 0, 0)
-		state.status:SetPoint("TOPRIGHT", state.frame, "TOPRIGHT", 0, 0)
+		state.status:SetPoint("TOPLEFT", state.frame, "TOPLEFT", borderInset, -borderInset)
+		state.status:SetPoint("TOPRIGHT", state.frame, "TOPRIGHT", -borderInset, -borderInset)
 	end
 
-	state.health:SetPoint("TOPLEFT", state.frame, "TOPLEFT", 0, y)
-	state.health:SetPoint("TOPRIGHT", state.frame, "TOPRIGHT", 0, y)
+	state.health:SetPoint("TOPLEFT", state.frame, "TOPLEFT", borderInset, y)
+	state.health:SetPoint("TOPRIGHT", state.frame, "TOPRIGHT", -borderInset, y)
 	state.power:SetPoint("TOPLEFT", state.health, "BOTTOMLEFT", 0, 0)
 	state.power:SetPoint("TOPRIGHT", state.health, "BOTTOMRIGHT", 0, 0)
 
-	local totalHeight = statusHeight + healthHeight + powerHeight
+	local totalHeight = statusHeight + healthHeight + powerHeight + borderInset * 2
 	state.frame:SetHeight(totalHeight)
 
 	layoutTexts(state.health, state.healthTextLeft, state.healthTextRight, cfg.health, width)
@@ -377,9 +437,12 @@ end
 local function applyBars(cfg)
 	local hc = cfg.health or {}
 	local pcfg = cfg.power or {}
-	state.health:SetStatusBarTexture(LSM and LSM:Fetch("statusbar", "Blizzard") or "Interface\\TargetingFrame\\UI-StatusBar")
-	state.power:SetStatusBarTexture(LSM and LSM:Fetch("statusbar", "Blizzard") or "Interface\\TargetingFrame\\UI-StatusBar")
-	state.absorb:SetStatusBarTexture(LSM and LSM:Fetch("statusbar", "Blizzard") or "Interface\\Buttons\\WHITE8x8")
+	state.health:SetStatusBarTexture(resolveTexture(hc.texture))
+	configureSpecialTexture(state.health, "HEALTH", hc.texture, hc)
+	state.power:SetStatusBarTexture(resolveTexture(pcfg.texture))
+	local _, powerToken = UnitPowerType(PLAYER_UNIT)
+	configureSpecialTexture(state.power, powerToken, pcfg.texture, pcfg)
+	state.absorb:SetStatusBarTexture(LSM and LSM:Fetch("statusbar", "Blizzard") or BLIZZARD_TEX)
 	state.absorb:SetAllPoints(state.health)
 	state.absorb:SetFrameLevel(state.health:GetFrameLevel() + 1)
 	state.absorb:SetMinMaxValues(0, 1)
@@ -568,6 +631,38 @@ local function addOptions(container, skipClear)
 	shPower:SetRelativeWidth(0.25)
 	sizeRow:AddChild(shPower)
 
+	local strataRow = addon.functions.createContainer("SimpleGroup", "Flow")
+	strataRow:SetFullWidth(true)
+	parent:AddChild(strataRow)
+	local strataList = {
+		"BACKGROUND",
+		"LOW",
+		"MEDIUM",
+		"HIGH",
+		"DIALOG",
+		"FULLSCREEN",
+		"FULLSCREEN_DIALOG",
+		"TOOLTIP",
+	}
+	local strataMap = {}
+	for _, k in ipairs(strataList) do strataMap[k] = k end
+	local ddStrata = addon.functions.createDropdownAce(L["UFStrata"] or "Frame strata", strataMap, strataList, function(_, _, key)
+		cfg.strata = key ~= "" and key or nil
+		UF.Refresh()
+	end)
+	ddStrata:SetRelativeWidth(0.5)
+	local defaultStrata = (_G.PlayerFrame and _G.PlayerFrame.GetFrameStrata and _G.PlayerFrame:GetFrameStrata()) or ""
+	ddStrata:SetValue(cfg.strata or defaultStrata or "")
+	strataRow:AddChild(ddStrata)
+
+	local defaultLevel = (_G.PlayerFrame and _G.PlayerFrame.GetFrameLevel and _G.PlayerFrame:GetFrameLevel()) or 0
+	local levelSlider = addon.functions.createSliderAce(L["UFFrameLevel"] or "Frame level", cfg.frameLevel or defaultLevel, 0, 50, 1, function(_, _, val)
+		cfg.frameLevel = val
+		UF.Refresh()
+	end)
+	levelSlider:SetRelativeWidth(0.5)
+	strataRow:AddChild(levelSlider)
+
 	local cbClassColor = addon.functions.createCheckboxAce(L["UFUseClassColor"] or "Use class color (health)", cfg.health.useClassColor == true, function(_, _, val)
 		cfg.health.useClassColor = val and true or false
 		UF.Refresh()
@@ -583,6 +678,28 @@ local function addOptions(container, skipClear)
 	UF.ui.healthColorPicker = addColorPicker(colorRow, L["UFHealthColor"] or "Health color", cfg.health.color or defaults.player.health.color, function() UF.Refresh() end)
 	if UF.ui.healthColorPicker then UF.ui.healthColorPicker:SetDisabled(cfg.health.useClassColor == true) end
 	addColorPicker(colorRow, L["UFPowerColor"] or "Power color", cfg.power.color or defaults.player.power.color, function() UF.Refresh() end)
+
+	local function textureDropdown(parent, sec)
+		if not parent then return end
+		local list = { DEFAULT = "Default (Blizzard)" }
+		local order = { "DEFAULT" }
+		for name, path in pairs(LSM and LSM:HashTable("statusbar") or {}) do
+			if type(path) == "string" and path ~= "" then
+				list[name] = tostring(name)
+				table.insert(order, name)
+			end
+		end
+		table.sort(order, function(a, b) return tostring(list[a]) < tostring(list[b]) end)
+		local dd = addon.functions.createDropdownAce(L["Bar Texture"] or "Bar Texture", list, order, function(_, _, key)
+			sec.texture = key
+			UF.Refresh()
+		end)
+		local cur = sec.texture or "DEFAULT"
+		if not list[cur] then cur = "DEFAULT" end
+		dd:SetValue(cur)
+		dd:SetFullWidth(true)
+		parent:AddChild(dd)
+	end
 
 	local function addTextControls(label, sectionKey, fsLeft, fsRight)
 		local sec = cfg[sectionKey] or {}
@@ -686,6 +803,8 @@ local function addOptions(container, skipClear)
 		end)
 		rightY:SetRelativeWidth(0.25)
 		offsets1:AddChild(rightY)
+
+		textureDropdown(group, sec)
 	end
 
 	addTextControls(L["HealthBar"] or "Health Bar", "health")

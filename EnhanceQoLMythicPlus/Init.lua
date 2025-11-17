@@ -982,7 +982,7 @@ local hearthstoneID = {
 		id = 210455,
 		spellID = 438606,
 		usable = function()
-			if addon.variables.unitRace == "LightforgedDraenei" or addon.variables.unitRace == "Draenei" then
+			if addon.variables.unitRace == "LightforgedDraenei" or addon.variables.unitRace == "Draenei" and PlayerHasToy(210455) then
 				return true
 			else
 				return false
