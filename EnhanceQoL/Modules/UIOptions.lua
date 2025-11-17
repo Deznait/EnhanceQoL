@@ -591,7 +591,11 @@ local function addVisibilityHub(container)
 		for _, rule in ipairs(rules) do
 			local value = config and config[rule.key] == true
 			local cb = addon.functions.createCheckboxAce(rule.label or rule.key or "", value, function(_, _, checked) updateRuleSelection(rule.key, checked) end, rule.description)
-			cb:SetRelativeWidth(0.5)
+			if cb.SetFullWidth then
+				cb:SetFullWidth(true)
+			else
+				cb:SetRelativeWidth(1.0)
+			end
 			if disableOthers and rule.key ~= "ALWAYS_HIDDEN" then cb:SetDisabled(true) end
 			scenarioGroup:AddChild(cb)
 		end
