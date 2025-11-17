@@ -58,9 +58,6 @@ local TARGET_HEALTH_NAME = "EQOLUFTargetHealth"
 local TARGET_POWER_NAME = "EQOLUFTargetPower"
 local TARGET_STATUS_NAME = "EQOLUFTargetStatus"
 local MIN_WIDTH = 50
-local TARGET_AURA_SIZE = 24
-local TARGET_AURA_PADDING = 2
-local TARGET_AURA_MAX = 16
 
 local UNITS = {
 	player = {
@@ -81,6 +78,64 @@ local UNITS = {
 	},
 }
 
+local defaults = {
+	player = {
+		enabled = false,
+		width = 220,
+		healthHeight = 24,
+		powerHeight = 16,
+		statusHeight = 18,
+		anchor = { point = "CENTER", relativeTo = "UIParent", relativePoint = "CENTER", x = 0, y = -200 },
+		strata = nil,
+		frameLevel = nil,
+		barGap = 0,
+		border = { enabled = true, color = { 0, 0, 0, 0.8 }, edgeSize = 1, inset = 0 },
+		health = {
+			useClassColor = true,
+			color = { 0.0, 0.8, 0.0, 1 },
+			absorbColor = { 0.85, 0.95, 1.0, 0.7 },
+			backdrop = { enabled = true, color = { 0, 0, 0, 0.6 } },
+			textLeft = "PERCENT",
+			textRight = "CURMAX",
+			fontSize = 14,
+			font = nil,
+			fontOutline = "OUTLINE", -- fallback to default font
+			offsetLeft = { x = 6, y = 0 },
+			offsetRight = { x = -6, y = 0 },
+			useShortNumbers = true,
+			texture = "DEFAULT",
+		},
+		power = {
+			color = { 0.1, 0.45, 1, 1 },
+			backdrop = { enabled = true, color = { 0, 0, 0, 0.6 } },
+			useClassColor = true,
+			textLeft = "PERCENT",
+			textRight = "CURMAX",
+			fontSize = 14,
+			font = nil,
+			offsetLeft = { x = 6, y = 0 },
+			offsetRight = { x = -6, y = 0 },
+			useShortNumbers = true,
+			texture = "DEFAULT",
+		},
+		status = {
+			enabled = true,
+			fontSize = 14,
+			font = nil,
+			nameColorMode = "CLASS", -- CLASS or CUSTOM
+			nameColor = { 0.8, 0.8, 1, 1 },
+			levelColor = { 1, 0.85, 0, 1 },
+			nameOffset = { x = 0, y = 0 },
+			levelOffset = { x = 0, y = 0 },
+			levelEnabled = true,
+		},
+	},
+	target = {
+		enabled = false,
+		auraIcons = { size = 24, padding = 2, max = 16, showCooldown = true },
+	},
+}
+
 local issecretvalue = _G.issecretvalue
 local mainPowerEnum
 local mainPowerToken
@@ -91,6 +146,29 @@ local function resetTargetAuras()
 	for k in pairs(targetAuras) do
 		targetAuras[k] = nil
 	end
+end
+
+local function ensureDB(unit)
+	addon.db = addon.db or {}
+	addon.db.ufFrames = addon.db.ufFrames or {}
+	local db = addon.db.ufFrames
+	db[unit] = db[unit] or {}
+	local udb = db[unit]
+	local def = defaults[unit] or defaults.player or {}
+	for k, v in pairs(def) do
+		if udb[k] == nil then
+			if type(v) == "table" then
+				if addon.functions.copyTable then
+					udb[k] = addon.functions.copyTable(v)
+				else
+					udb[k] = CopyTable(v)
+				end
+			else
+				udb[k] = v
+			end
+		end
+	end
+	return udb
 end
 
 local function cacheTargetAura(aura)
@@ -114,11 +192,16 @@ local function updateTargetAuraIcons()
 	if not st or not st.auraContainer or not st.frame then return end
 	local icons = st.auraButtons or {}
 	st.auraButtons = icons
+	local cfg = ensureDB("target")
+	local ac = cfg.auraIcons or defaults.target.auraIcons or { size = 24, padding = 2, max = 16, showCooldown = true }
+	ac.size = ac.size or 24
+	ac.padding = ac.padding or 0
+	ac.max = ac.max or 16
+	if ac.max < 1 then ac.max = 1 end
 
 	local list = {}
 	for _, aura in pairs(targetAuras) do
-		-- if aura.isHarmful then list[#list + 1] = aura end
-		list[#list + 1] = aura
+		if aura.isHarmful then list[#list + 1] = aura end
 	end
 	table.sort(list, function(a, b)
 		local ea = a.expirationTime or math.huge
@@ -128,16 +211,16 @@ local function updateTargetAuraIcons()
 	end)
 
 	local width = st.frame:GetWidth() or 0
-	local perRow = math.max(1, math.floor((width + TARGET_AURA_PADDING) / (TARGET_AURA_SIZE + TARGET_AURA_PADDING)))
+	local perRow = math.max(1, math.floor((width + ac.padding) / (ac.size + ac.padding)))
 	local shown = 0
 
 	for i, aura in ipairs(list) do
-		if i > TARGET_AURA_MAX then break end
+		if i > ac.max then break end
 		shown = shown + 1
 		local btn = icons[i]
 		if not btn then
 			btn = CreateFrame("Button", nil, st.auraContainer)
-			btn:SetSize(TARGET_AURA_SIZE, TARGET_AURA_SIZE)
+			btn:SetSize(ac.size, ac.size)
 			btn.icon = btn:CreateTexture(nil, "ARTWORK")
 			btn.icon:SetAllPoints(btn)
 			btn.cd = CreateFrame("Cooldown", nil, btn, "CooldownFrameTemplate")
@@ -145,9 +228,11 @@ local function updateTargetAuraIcons()
 			btn.count = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 			btn.count:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -2, 2)
 			icons[i] = btn
+		else
+			btn:SetSize(ac.size, ac.size)
 		end
 		btn.icon:SetTexture(aura.icon or "")
-		if aura.duration and aura.duration > 0 and aura.expirationTime then
+		if ac.showCooldown ~= false and aura.duration and aura.duration > 0 and aura.expirationTime then
 			btn.cd:SetCooldown(aura.expirationTime - aura.duration, aura.duration)
 		else
 			btn.cd:Clear()
@@ -162,7 +247,7 @@ local function updateTargetAuraIcons()
 		local row = math.floor((shown - 1) / perRow)
 		local col = (shown - 1) % perRow
 		btn:ClearAllPoints()
-		btn:SetPoint("TOPLEFT", st.auraContainer, "TOPLEFT", col * (TARGET_AURA_SIZE + TARGET_AURA_PADDING), -row * (TARGET_AURA_SIZE + TARGET_AURA_PADDING))
+		btn:SetPoint("TOPLEFT", st.auraContainer, "TOPLEFT", col * (ac.size + ac.padding), -row * (ac.size + ac.padding))
 		btn:Show()
 	end
 
@@ -171,7 +256,7 @@ local function updateTargetAuraIcons()
 	end
 
 	local rows = math.ceil(shown / perRow)
-	st.auraContainer:SetHeight(rows > 0 and (rows * (TARGET_AURA_SIZE + TARGET_AURA_PADDING) - TARGET_AURA_PADDING) or 0.001)
+	st.auraContainer:SetHeight(rows > 0 and (rows * (ac.size + ac.padding) - ac.padding) or 0.001)
 	st.auraContainer:SetShown(shown > 0)
 end
 
@@ -287,102 +372,23 @@ end
 
 local function hideBlizzardPlayerFrame()
 	if not _G.PlayerFrame then return end
-	_G.PlayerFrame:Hide()
+	if not InCombatLockdown() then _G.PlayerFrame:Hide() end
 	_G.PlayerFrame:HookScript("OnShow", _G.PlayerFrame.Hide)
 end
 
 local function hideBlizzardTargetFrame()
 	if not _G.TargetFrame then return end
-	_G.TargetFrame:Hide()
+	if not InCombatLockdown() then _G.TargetFrame:Hide() end
 	_G.TargetFrame:HookScript("OnShow", _G.TargetFrame.Hide)
 end
-
-local defaults = {
-	player = {
-		enabled = false,
-		width = 220,
-		healthHeight = 24,
-		powerHeight = 16,
-		statusHeight = 18,
-		anchor = { point = "CENTER", relativeTo = "UIParent", relativePoint = "CENTER", x = 0, y = -200 },
-		strata = nil,
-		frameLevel = nil,
-		barGap = 0,
-		border = { enabled = true, color = { 0, 0, 0, 0.8 }, edgeSize = 1, inset = 0 },
-		health = {
-			useClassColor = true,
-			color = { 0.0, 0.8, 0.0, 1 },
-			absorbColor = { 0.85, 0.95, 1.0, 0.7 },
-			backdrop = { enabled = true, color = { 0, 0, 0, 0.6 } },
-			textLeft = "PERCENT",
-			textRight = "CURMAX",
-			fontSize = 14,
-			font = nil,
-			fontOutline = "OUTLINE", -- fallback to default font
-			offsetLeft = { x = 6, y = 0 },
-			offsetRight = { x = -6, y = 0 },
-			useShortNumbers = true,
-			texture = "DEFAULT",
-		},
-		power = {
-			color = { 0.1, 0.45, 1, 1 },
-			backdrop = { enabled = true, color = { 0, 0, 0, 0.6 } },
-			useClassColor = true,
-			textLeft = "PERCENT",
-			textRight = "CURMAX",
-			fontSize = 14,
-			font = nil,
-			offsetLeft = { x = 6, y = 0 },
-			offsetRight = { x = -6, y = 0 },
-			useShortNumbers = true,
-			texture = "DEFAULT",
-		},
-		status = {
-			enabled = true,
-			fontSize = 14,
-			font = nil,
-			nameColorMode = "CLASS", -- CLASS or CUSTOM
-			nameColor = { 0.8, 0.8, 1, 1 },
-			levelColor = { 1, 0.85, 0, 1 },
-			nameOffset = { x = 0, y = 0 },
-			levelOffset = { x = 0, y = 0 },
-			levelEnabled = true,
-		},
-	},
-	target = {
-		enabled = false,
-	},
-}
 
 do
 	local targetDefaults = CopyTable(defaults.player)
 	targetDefaults.enabled = false
 	targetDefaults.anchor = targetDefaults.anchor and CopyTable(targetDefaults.anchor) or { point = "CENTER", relativeTo = "UIParent", relativePoint = "CENTER", x = 0, y = -200 }
 	targetDefaults.anchor.x = (targetDefaults.anchor.x or 0) + 260
+	targetDefaults.auraIcons = { size = 24, padding = 2, max = 16, showCooldown = true }
 	defaults.target = targetDefaults
-end
-
-local function ensureDB(unit)
-	addon.db = addon.db or {}
-	addon.db.ufFrames = addon.db.ufFrames or {}
-	local db = addon.db.ufFrames
-	db[unit] = db[unit] or {}
-	local udb = db[unit]
-	local def = defaults[unit] or defaults.player or {}
-	for k, v in pairs(def) do
-		if udb[k] == nil then
-			if type(v) == "table" then
-				if addon.functions.copyTable then
-					udb[k] = addon.functions.copyTable(v)
-				else
-					udb[k] = CopyTable(v)
-				end
-			else
-				udb[k] = v
-			end
-		end
-	end
-	return udb
 end
 
 local function getFont(path)
@@ -715,7 +721,8 @@ local function layoutFrame(cfg, unit)
 
 	if unit == "target" and st.auraContainer then
 		st.auraContainer:ClearAllPoints()
-		st.auraContainer:SetPoint("TOPLEFT", st.frame, "BOTTOMLEFT", 0, -TARGET_AURA_PADDING)
+		local ac = cfg.auraIcons or defaults.target.auraIcons or { padding = 2 }
+		st.auraContainer:SetPoint("TOPLEFT", st.barGroup, "BOTTOMLEFT", 0, -(ac.padding or 0))
 		st.auraContainer:SetWidth(width + borderInset * 2)
 	end
 end
@@ -854,14 +861,18 @@ local function applyConfig(unit)
 	ensureFrames(unit)
 	st = states[unit]
 	applyBars(cfg, unit)
-	layoutFrame(cfg, unit)
+	if not InCombatLockdown() then layoutFrame(cfg, unit) end
 	updateStatus(cfg, unit)
 	updateNameAndLevel(cfg, unit)
 	updateHealth(cfg, unit)
 	updatePower(cfg, unit)
 	-- if unit == "target" then hideBlizzardTargetFrame() end
-	if unit == "player" then
+	if not InCombatLockdown() then
 		if st and st.frame then st.frame:Show() end
+	end
+	if unit ~= "player" then
+		st.barGroup:Hide()
+		st.status:Hide()
 	end
 end
 
@@ -913,11 +924,17 @@ local function onEvent(self, event, unit, arg1)
 			refreshMainPower("target")
 			fullScanTargetAuras()
 			applyConfig("target")
-			if states and states["target"] and states["target"].frame then states["target"].frame:Show() end
+			if states and states["target"] and states["target"].frame then
+				states["target"].barGroup:Show()
+				states["target"].status:Show()
+			end
 		else
 			resetTargetAuras()
 			updateTargetAuraIcons()
-			if states and states["target"] and states["target"].frame then states["target"].frame:Hide() end
+			if states and states["target"] and states["target"].frame then
+				states["target"].barGroup:Hide()
+				states["target"].status:Hide()
+			end
 		end
 	elseif event == "UNIT_AURA" and unit == "target" then
 		local eventInfo = arg1
@@ -1085,6 +1102,46 @@ local function addOptions(container, skipClear, unit)
 	end)
 	shPower:SetRelativeWidth(0.25)
 	sizeRow:AddChild(shPower)
+
+	if unit == "target" then
+		local auraRow = addon.functions.createContainer("InlineGroup", "Flow")
+		auraRow:SetTitle(L["Auras"] or "Auras")
+		auraRow:SetFullWidth(true)
+		parent:AddChild(auraRow)
+		cfg.auraIcons = cfg.auraIcons or {}
+		cfg.auraIcons.size = cfg.auraIcons.size or def.auraIcons.size
+		cfg.auraIcons.padding = cfg.auraIcons.padding or def.auraIcons.padding
+		cfg.auraIcons.max = cfg.auraIcons.max or def.auraIcons.max
+		if cfg.auraIcons.showCooldown == nil then cfg.auraIcons.showCooldown = def.auraIcons.showCooldown end
+
+		local sSize = addon.functions.createSliderAce(L["UFHealthHeight"] or "Aura size", cfg.auraIcons.size or 24, 12, 48, 1, function(_, _, val)
+			cfg.auraIcons.size = val
+			refresh()
+		end)
+		sSize:SetRelativeWidth(0.5)
+		auraRow:AddChild(sSize)
+
+		local sPad = addon.functions.createSliderAce(L["UFBarGap"] or "Aura spacing", cfg.auraIcons.padding or 2, 0, 10, 1, function(_, _, val)
+			cfg.auraIcons.padding = val or 0
+			refresh()
+		end)
+		sPad:SetRelativeWidth(0.5)
+		auraRow:AddChild(sPad)
+
+		local sMax = addon.functions.createSliderAce(L["UFFrameLevel"] or "Max auras", cfg.auraIcons.max or 16, 4, 40, 1, function(_, _, val)
+			cfg.auraIcons.max = val or 16
+			refresh()
+		end)
+		sMax:SetFullWidth(true)
+		auraRow:AddChild(sMax)
+
+		local cbCD = addon.functions.createCheckboxAce(L["Show cooldown text"] or "Show cooldown text", cfg.auraIcons.showCooldown ~= false, function(_, _, v)
+			cfg.auraIcons.showCooldown = v and true or false
+			refresh()
+		end)
+		cbCD:SetFullWidth(true)
+		auraRow:AddChild(cbCD)
+	end
 
 	local gapRow = addon.functions.createContainer("SimpleGroup", "Flow")
 	gapRow:SetFullWidth(true)
