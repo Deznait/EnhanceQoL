@@ -52,6 +52,66 @@ local STATUS_NAME = "EQOLUFPlayerStatus"
 local MIN_WIDTH = 50
 
 local issecretvalue = _G.issecretvalue
+local function getMainPower()
+	local class = addon.variables and addon.variables.unitClass
+	local spec = addon.variables and addon.variables.unitSpec
+	local enumId, token = UnitPowerType(PLAYER_UNIT)
+	return enumId, token
+end
+local function findTreeNode(path)
+	if not addon.treeGroupData or type(path) ~= "string" then return nil end
+	local segments = {}
+	for seg in string.gmatch(path, "[^\001]+") do segments[#segments + 1] = seg end
+	local function search(children, idx)
+		if not children then return nil end
+		for _, node in ipairs(children) do
+			if node.value == segments[idx] then
+				if idx == #segments then
+					return node
+				end
+				return search(node.children, idx + 1)
+			end
+		end
+		return nil
+	end
+	return search(addon.treeGroupData, 1)
+end
+
+local function addTreeNode(path, node, parentPath)
+	if not addon.functions or not addon.functions.addToTree then return end
+	if findTreeNode(path) then return end
+	addon.functions.addToTree(parentPath, node, true)
+end
+
+local function removeTreeNode(path)
+	if not addon.treeGroupData or not addon.treeGroup then return end
+	local segments = {}
+	for seg in string.gmatch(path, "[^\001]+") do segments[#segments + 1] = seg end
+	if #segments == 0 then return end
+	local function remove(children, idx)
+		if not children then return false end
+		for i, node in ipairs(children) do
+			if node.value == segments[idx] then
+				if idx == #segments then
+					table.remove(children, i)
+					if addon.treeGroup.SetTree then addon.treeGroup:SetTree(addon.treeGroupData) end
+					if addon.treeGroup.RefreshTree then addon.treeGroup:RefreshTree() end
+					return true
+				elseif node.children then
+					local removed = remove(node.children, idx + 1)
+					if removed and #node.children == 0 then node.children = nil end
+					return removed
+				end
+			end
+		end
+		return false
+	end
+	remove(addon.treeGroupData, 1)
+end
+
+local function ensureRootNode()
+	addTreeNode("ufplus", { value = "ufplus", text = L["UFPlusRoot"] or "UF Plus" }, nil)
+end
 
 local function shortValue(val)
 	if val == nil then return "" end
@@ -119,10 +179,14 @@ local defaults = {
 			levelEnabled = true,
 		},
 	},
+	target = {
+		enabled = false,
+	},
 }
 
 local state = {
 	frame = nil,
+	barGroup = nil,
 	health = nil,
 	power = nil,
 	absorb = nil,
@@ -141,11 +205,18 @@ local function ensureDB(unit)
 	local db = addon.db.ufFrames
 	db[unit] = db[unit] or {}
 	local udb = db[unit]
-	-- seed defaults
-	for k, v in pairs(defaults.player) do
+	local def = defaults[unit] or defaults.player or {}
+	for k, v in pairs(def) do
 		if udb[k] == nil then
-			udb[k] = type(v) == "table" and addon.functions.copyTable and addon.functions.copyTable(v) or (type(v) == "table" and CopyTable(v) or v)
-			if not udb[k] and type(v) == "table" then udb[k] = CopyTable(v) end
+			if type(v) == "table" then
+				if addon.functions.copyTable then
+					udb[k] = addon.functions.copyTable(v)
+				else
+					udb[k] = CopyTable(v)
+				end
+			else
+				udb[k] = v
+			end
 		end
 	end
 	return udb
@@ -295,16 +366,16 @@ end
 local function updatePower(cfg)
 	local bar = state.power
 	if not bar then return end
-	local cur = UnitPower(PLAYER_UNIT)
-	local maxv = UnitPowerMax(PLAYER_UNIT)
+	local powerEnum, powerToken = getMainPower()
+	local cur = UnitPower(PLAYER_UNIT, powerEnum)
+	local maxv = UnitPowerMax(PLAYER_UNIT, powerEnum)
 	bar:SetMinMaxValues(0, maxv > 0 and maxv or 1)
 	bar:SetValue(cur or 0)
 	local pcfg = cfg.power or {}
-	local _, powerToken = UnitPowerType(PLAYER_UNIT)
 	configureSpecialTexture(bar, powerToken, pcfg.texture, pcfg)
 	local percentVal
 	if addon.variables and addon.variables.isMidnight and UnitPowerPercent then
-		percentVal = UnitPowerPercent(PLAYER_UNIT, nil, true, true)
+		percentVal = UnitPowerPercent(PLAYER_UNIT, powerEnum, true, true)
 	else
 		if (not addon.variables or not addon.variables.isMidnight or not issecretvalue or (not issecretvalue(cur) and not issecretvalue(maxv))) and maxv and maxv > 0 then
 			percentVal = (cur or 0) / maxv * 100
@@ -488,7 +559,7 @@ local function applyBars(cfg)
 	configureSpecialTexture(state.health, "HEALTH", hc.texture, hc)
 	applyBarBackdrop(state.health, hc)
 	state.power:SetStatusBarTexture(resolveTexture(pcfg.texture))
-	local _, powerToken = UnitPowerType(PLAYER_UNIT)
+	local _, powerToken = getMainPower()
 	configureSpecialTexture(state.power, powerToken, pcfg.texture, pcfg)
 	applyBarBackdrop(state.power, pcfg)
 	state.absorb:SetStatusBarTexture(LSM and LSM:Fetch("statusbar", "Blizzard") or BLIZZARD_TEX)
@@ -1051,29 +1122,56 @@ if addon.functions and addon.functions.RegisterOptionsPage then
 		local lbl = addon.functions.createLabelAce(L["UFPlusRoot"] or "UF Plus")
 		lbl:SetFullWidth(true)
 		container:AddChild(lbl)
+		local playerCfg = ensureDB("player")
+		local targetCfg = ensureDB("target")
+		local cbPlayer = addon.functions.createCheckboxAce(L["UFPlayerEnable"] or "Enable custom player frame", playerCfg.enabled == true, function(_, _, val)
+			playerCfg.enabled = val and true or false
+			if playerCfg.enabled then
+				ensureRootNode()
+				addTreeNode("ufplus\001player", { value = "player", text = L["UFPlayerFrame"] or PLAYER }, "ufplus")
+				UF.Enable()
+			else
+				UF.Disable()
+				removeTreeNode("ufplus\001player")
+			end
+		end)
+		cbPlayer:SetFullWidth(true)
+		container:AddChild(cbPlayer)
+
+		local cbTarget = addon.functions.createCheckboxAce(L["UFTargetEnable"] or "Enable custom target frame", targetCfg.enabled == true, function(_, _, val)
+			targetCfg.enabled = val and true or false
+			if targetCfg.enabled then
+				ensureRootNode()
+				addTreeNode("ufplus\001target", { value = "target", text = L["UFTargetFrame"] or TARGET }, "ufplus")
+			else
+				removeTreeNode("ufplus\001target")
+			end
+		end)
+		cbTarget:SetFullWidth(true)
+		container:AddChild(cbTarget)
 	end)
 	addon.functions.RegisterOptionsPage("ufplus\001player", function(container) addOptions(container, false) end)
-	if addon.functions.addToTree then
-		addon.functions.addToTree(nil, {
-			value = "ufplus",
-			text = L["UFPlusRoot"] or "UF Plus",
-			children = {
-				{ value = "player", text = L["UFPlayerFrame"] or PLAYER },
-			},
-		}, true)
-	end
+	addon.functions.RegisterOptionsPage("ufplus\001target", function(container)
+		container:ReleaseChildren()
+		local lbl = addon.functions.createLabelAce(L["UFTargetFrame"] or "Target Frame")
+		lbl:SetFullWidth(true)
+		container:AddChild(lbl)
+		local info = addon.functions.createLabelAce(L["UFTargetComingSoon"] or "Target frame configuration coming soon.")
+		info:SetFullWidth(true)
+		container:AddChild(info)
+	end)
+	ensureRootNode()
 end
 
 function UF.treeCallback(container, group)
 	if not container then return end
 	container:ReleaseChildren()
-	print(group)
 	if group == "ufplus" then
-		local lbl = addon.functions.createLabelAce(L["UFPlusRoot"] or "UF Plus")
-		lbl:SetFullWidth(true)
-		container:AddChild(lbl)
+		if addon.functions and addon.functions.ShowOptionsPage then addon.functions.ShowOptionsPage(container, "ufplus") end
 	elseif group == "ufplus\001player" then
 		addOptions(container, false)
+	elseif group == "ufplus\001target" then
+		if addon.functions and addon.functions.ShowOptionsPage then addon.functions.ShowOptionsPage(container, "ufplus\001target") end
 	end
 end
 
@@ -1081,7 +1179,16 @@ end
 if not addon.Aura.UFInitialized then
 	addon.Aura.UFInitialized = true
 	local cfg = ensureDB("player")
-	if cfg.enabled then After(0.1, function() UF.Enable() end) end
+	if cfg.enabled then
+		ensureRootNode()
+		addTreeNode("ufplus\001player", { value = "player", text = L["UFPlayerFrame"] or PLAYER }, "ufplus")
+		After(0.1, function() UF.Enable() end)
+	end
+	local tc = ensureDB("target")
+	if tc.enabled then
+		ensureRootNode()
+		addTreeNode("ufplus\001target", { value = "target", text = L["UFTargetFrame"] or TARGET }, "ufplus")
+	end
 end
 
 return UF
