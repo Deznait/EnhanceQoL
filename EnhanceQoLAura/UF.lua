@@ -63,14 +63,14 @@ end
 local function findTreeNode(path)
 	if not addon.treeGroupData or type(path) ~= "string" then return nil end
 	local segments = {}
-	for seg in string.gmatch(path, "[^\001]+") do segments[#segments + 1] = seg end
+	for seg in string.gmatch(path, "[^\001]+") do
+		segments[#segments + 1] = seg
+	end
 	local function search(children, idx)
 		if not children then return nil end
 		for _, node in ipairs(children) do
 			if node.value == segments[idx] then
-				if idx == #segments then
-					return node
-				end
+				if idx == #segments then return node end
 				return search(node.children, idx + 1)
 			end
 		end
@@ -88,7 +88,9 @@ end
 local function removeTreeNode(path)
 	if not addon.treeGroupData or not addon.treeGroup then return end
 	local segments = {}
-	for seg in string.gmatch(path, "[^\001]+") do segments[#segments + 1] = seg end
+	for seg in string.gmatch(path, "[^\001]+") do
+		segments[#segments + 1] = seg
+	end
 	if #segments == 0 then return end
 	local function remove(children, idx)
 		if not children then return false end
@@ -111,9 +113,7 @@ local function removeTreeNode(path)
 	remove(addon.treeGroupData, 1)
 end
 
-local function ensureRootNode()
-	addTreeNode("ufplus", { value = "ufplus", text = L["UFPlusRoot"] or "UF Plus" }, nil)
-end
+local function ensureRootNode() addTreeNode("ufplus", { value = "ufplus", text = L["UFPlusRoot"] or "UF Plus" }, nil) end
 
 local function getPowerColor(pToken)
 	if not pToken then pToken = EnumPowerType.MANA end
@@ -406,7 +406,9 @@ local function updatePower(cfg)
 	end
 	if not cr then
 		cr, cg, cb, ca = getPowerColor(powerToken)
-		if pcfg.color and pcfg.color[1] then cr, cg, cb, ca = pcfg.color[1], pcfg.color[2], pcfg.color[3], pcfg.color[4] or 1 end
+		if pcfg.color and pcfg.color[1] then
+			cr, cg, cb, ca = pcfg.color[1], pcfg.color[2], pcfg.color[3], pcfg.color[4] or 1
+		end
 	end
 	bar:SetStatusBarColor(cr or 0.1, cg or 0.45, cb or 1, ca or 1)
 	if state.powerTextLeft then state.powerTextLeft:SetText(formatText(pcfg.textLeft or "PERCENT", cur, maxv, pcfg.useShortNumbers ~= false, percentVal)) end
@@ -440,7 +442,7 @@ local function updateStatus(cfg)
 	state.status:SetHeight((cfg.status and cfg.status.enabled) and (cfg.statusHeight or defaults.player.statusHeight) or 0.001)
 	state.status:SetShown(scfg.enabled ~= false)
 	if state.nameText then
-	applyFont(state.nameText, scfg.font, scfg.fontSize or 14, scfg.fontOutline)
+		applyFont(state.nameText, scfg.font, scfg.fontSize or 14, scfg.fontOutline)
 		local class = select(2, UnitClass(PLAYER_UNIT))
 		local nc
 		if scfg.nameColorMode == "CLASS" then
@@ -455,7 +457,7 @@ local function updateStatus(cfg)
 		state.nameText:SetShown(scfg.enabled ~= false)
 	end
 	if state.levelText then
-	applyFont(state.levelText, scfg.font, scfg.fontSize or 14, scfg.fontOutline)
+		applyFont(state.levelText, scfg.font, scfg.fontSize or 14, scfg.fontOutline)
 		local lc = scfg.levelColor or { 1, 0.85, 0, 1 }
 		state.levelText:SetText(UnitLevel(PLAYER_UNIT) or "")
 		state.levelText:SetTextColor(lc[1] or 1, lc[2] or 0.85, lc[3] or 0, lc[4] or 1)
@@ -655,10 +657,12 @@ local unitEvents = {
 	"UNIT_MAXHEALTH",
 	"UNIT_ABSORB_AMOUNT_CHANGED",
 	"UNIT_POWER_UPDATE",
+	"UNIT_POWER_FREQUENT",
 	"UNIT_MAXPOWER",
 	"UNIT_DISPLAYPOWER",
 	"UNIT_NAME_UPDATE",
 }
+local FREQUENT = { ENERGY = true, FOCUS = true, RAGE = true, RUNIC_POWER = true, LUNAR_POWER = true }
 
 local generalEvents = {
 	"PLAYER_ENTERING_WORLD",
@@ -669,7 +673,7 @@ local generalEvents = {
 
 local eventFrame
 
-local function onEvent(self, event, unit)
+local function onEvent(self, event, unit, arg1)
 	if event == "PLAYER_ENTERING_WORLD" then
 		applyConfig()
 		hideBlizzardPlayerFrame()
@@ -681,11 +685,17 @@ local function onEvent(self, event, unit)
 		updatePower(ensureDB("player"))
 	elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_ABSORB_AMOUNT_CHANGED" then
 		if unit == PLAYER_UNIT then updateHealth(ensureDB("player")) end
-	elseif event == "UNIT_POWER_UPDATE" or event == "UNIT_MAXPOWER" or event == "UNIT_DISPLAYPOWER" then
+	elseif event == "UNIT_MAXPOWER" or event == "UNIT_DISPLAYPOWER" then
 		if unit == PLAYER_UNIT then updatePower(ensureDB("player")) end
+	elseif event == "UNIT_POWER_UPDATE" and not FREQUENT[arg1] then
+		if unit == PLAYER_UNIT then updatePower(ensureDB("player")) end
+	elseif event == "UNIT_POWER_FREQUENT" and FREQUENT[arg1] then
+		if unit == PLAYER_UNIT then
+			updatePower(ensureDB("player")) end
 	elseif event == "UNIT_NAME_UPDATE" or event == "PLAYER_LEVEL_UP" then
 		updateNameAndLevel(ensureDB("player"))
 	end
+
 end
 
 function UF.Enable()
