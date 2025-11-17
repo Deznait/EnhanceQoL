@@ -31,6 +31,10 @@ local atlasByPower = {
 
 local UnitHealth, UnitHealthMax = UnitHealth, UnitHealthMax
 local UnitPower, UnitPowerMax, UnitPowerType = UnitPower, UnitPowerMax, UnitPowerType
+local UnitExists = UnitExists
+local InCombatLockdown = InCombatLockdown
+local BreakUpLargeNumbers = BreakUpLargeNumbers
+local AbbreviateNumbers = AbbreviateNumbers
 local EnumPowerType = Enum and Enum.PowerType
 local PowerBarColor = PowerBarColor
 local UnitName, UnitClass, UnitLevel, UnitClassification = UnitName, UnitClass, UnitLevel, UnitClassification
@@ -47,6 +51,7 @@ local After = C_Timer and C_Timer.After
 local floor = math.floor
 local max = math.max
 local abs = math.abs
+local wipe = wipe or (table and table.wipe)
 
 local PLAYER_UNIT = "player"
 local FRAME_NAME = "EQOLUFPlayerFrame"
@@ -145,6 +150,9 @@ local mainPowerEnum
 local mainPowerToken
 local states = {}
 local targetAuras = {}
+local auraList = {}
+local blizzardPlayerHooked = false
+local blizzardTargetHooked = false
 
 local function resetTargetAuras()
 	for k in pairs(targetAuras) do
@@ -203,7 +211,14 @@ local function updateTargetAuraIcons()
 	ac.max = ac.max or 16
 	if ac.max < 1 then ac.max = 1 end
 
-	local list = {}
+	local list = auraList
+	if wipe then
+		wipe(list)
+	else
+		for i = #list, 1, -1 do
+			list[i] = nil
+		end
+	end
 	for _, aura in pairs(targetAuras) do
 		list[#list + 1] = aura
 	end
@@ -377,13 +392,19 @@ end
 local function hideBlizzardPlayerFrame()
 	if not _G.PlayerFrame then return end
 	if not InCombatLockdown() then _G.PlayerFrame:Hide() end
-	_G.PlayerFrame:HookScript("OnShow", _G.PlayerFrame.Hide)
+	if not blizzardPlayerHooked then
+		_G.PlayerFrame:HookScript("OnShow", _G.PlayerFrame.Hide)
+		blizzardPlayerHooked = true
+	end
 end
 
 local function hideBlizzardTargetFrame()
 	if not _G.TargetFrame then return end
 	if not InCombatLockdown() then _G.TargetFrame:Hide() end
-	_G.TargetFrame:HookScript("OnShow", _G.TargetFrame.Hide)
+	if not blizzardTargetHooked then
+		_G.TargetFrame:HookScript("OnShow", _G.TargetFrame.Hide)
+		blizzardTargetHooked = true
+	end
 end
 
 do
@@ -885,6 +906,10 @@ local unitEvents = {
 	"UNIT_NAME_UPDATE",
 	"UNIT_AURA",
 }
+local unitEventsMap = {}
+for _, evt in ipairs(unitEvents) do
+	unitEventsMap[evt] = true
+end
 local FREQUENT = { ENERGY = true, FOCUS = true, RAGE = true, RUNIC_POWER = true, LUNAR_POWER = true }
 
 local generalEvents = {
@@ -904,7 +929,9 @@ local allowedEventUnit = {
 }
 
 local function onEvent(self, event, unit, arg1)
-	if unitEvents[unit] and not allowedEventUnit[unit] then return end
+	if unitEventsMap[event] and unit and not allowedEventUnit[unit] then return end
+	local playerCfg = ensureDB("player")
+	local targetCfg = ensureDB("target")
 	if event == "PLAYER_ENTERING_WORLD" then
 		refreshMainPower(PLAYER_UNIT)
 		applyConfig("player")
@@ -912,11 +939,11 @@ local function onEvent(self, event, unit, arg1)
 		hideBlizzardPlayerFrame()
 	elseif event == "PLAYER_DEAD" then
 		if states.player and states.player.health then states.player.health:SetValue(0) end
-		updateHealth(ensureDB("player"), "player")
+		updateHealth(playerCfg, "player")
 	elseif event == "PLAYER_ALIVE" then
 		refreshMainPower(PLAYER_UNIT)
-		updateHealth(ensureDB("player"), "player")
-		updatePower(ensureDB("player"), "player")
+		updateHealth(playerCfg, "player")
+		updatePower(playerCfg, "player")
 	elseif event == "PLAYER_TARGET_CHANGED" then
 		if UnitExists("target") then
 			refreshMainPower("target")
@@ -969,27 +996,27 @@ local function onEvent(self, event, unit, arg1)
 		end
 		updateTargetAuraIcons()
 	elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_ABSORB_AMOUNT_CHANGED" then
-		if unit == PLAYER_UNIT then updateHealth(ensureDB("player"), "player") end
-		if unit == "target" then updateHealth(ensureDB("target"), "target") end
+		if unit == PLAYER_UNIT then updateHealth(playerCfg, "player") end
+		if unit == "target" then updateHealth(targetCfg, "target") end
 	elseif event == "UNIT_MAXPOWER" then
-		if unit == PLAYER_UNIT then updatePower(ensureDB("player"), "player") end
-		if unit == "target" then updatePower(ensureDB("target"), "target") end
+		if unit == PLAYER_UNIT then updatePower(playerCfg, "player") end
+		if unit == "target" then updatePower(targetCfg, "target") end
 	elseif event == "UNIT_DISPLAYPOWER" then
 		if unit == PLAYER_UNIT then
 			refreshMainPower()
-			updatePower(ensureDB("player"), "player")
+			updatePower(playerCfg, "player")
 		elseif unit == "target" then
-			updatePower(ensureDB("target"), "target")
+			updatePower(targetCfg, "target")
 		end
 	elseif event == "UNIT_POWER_UPDATE" and not FREQUENT[arg1] then
-		if unit == PLAYER_UNIT then updatePower(ensureDB("player"), "player") end
-		if unit == "target" then updatePower(ensureDB("target"), "target") end
+		if unit == PLAYER_UNIT then updatePower(playerCfg, "player") end
+		if unit == "target" then updatePower(targetCfg, "target") end
 	elseif event == "UNIT_POWER_FREQUENT" and FREQUENT[arg1] then
-		if unit == PLAYER_UNIT then updatePower(ensureDB("player"), "player") end
-		if unit == "target" then updatePower(ensureDB("target"), "target") end
+		if unit == PLAYER_UNIT then updatePower(playerCfg, "player") end
+		if unit == "target" then updatePower(targetCfg, "target") end
 	elseif event == "UNIT_NAME_UPDATE" or event == "PLAYER_LEVEL_UP" then
-		if unit == PLAYER_UNIT or event == "PLAYER_LEVEL_UP" then updateNameAndLevel(ensureDB("player"), "player") end
-		if unit == "target" then updateNameAndLevel(ensureDB("target"), "target") end
+		if unit == PLAYER_UNIT or event == "PLAYER_LEVEL_UP" then updateNameAndLevel(playerCfg, "player") end
+		if unit == "target" then updateNameAndLevel(targetCfg, "target") end
 	end
 end
 
