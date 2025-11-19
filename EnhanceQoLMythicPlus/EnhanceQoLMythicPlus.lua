@@ -348,7 +348,7 @@ local function checkKeyStone()
 		for container = BACKPACK_CONTAINER, NUM_TOTAL_EQUIPPED_BAG_SLOTS do
 			for slot = 1, GetContainerNumSlots(container) do
 				local id = GetContainerItemID(container, slot)
-				if id == 180653 then
+				if id == 180653 or id == 151086 then
 					-- Button for ReadyCheck and Pulltimer
 					if UnitInParty("player") and UnitIsGroupLeader("player") then createButtons() end
 

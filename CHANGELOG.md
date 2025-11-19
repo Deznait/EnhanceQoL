@@ -13,6 +13,7 @@
 - Resource Bars
   - Optional auto-hide while mounted or inside vehicles, reacting instantly to mounting/vehicle events
 - Sync the width of your resource bars with the relative frame
+- Missing Mythic Keystone id for Keystone helper 
 
 ### ⏰ Temporarily disabled
 
