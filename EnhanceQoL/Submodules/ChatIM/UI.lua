@@ -286,6 +286,7 @@ function ChatIM:SelectTab(widget, value)
 end
 
 function ChatIM:CreateTab(sender, isBN, bnetID, battleTag)
+	if issecretvalue and issecretvalue(sender) then return end
 	self:CreateUI()
 	if self.tabs[sender] then return end
 
@@ -461,6 +462,7 @@ function ChatIM:CreateTab(sender, isBN, bnetID, battleTag)
 end
 
 function ChatIM:AddMessage(partner, text, outbound, isBN, bnetID)
+	if issecretvalue and issecretvalue(partner) then return end
 	local accountTag
 	if isBN and bnetID then
 		local info = C_BattleNet.GetAccountInfoByID(bnetID)

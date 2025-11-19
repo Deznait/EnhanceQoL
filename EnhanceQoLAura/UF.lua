@@ -172,6 +172,8 @@ local mainPowerEnum
 local mainPowerToken
 local states = {}
 local targetAuras = {}
+local targetAuraOrder = {}
+local targetAuraIndexById = {}
 local auraList = {}
 local blizzardPlayerHooked = false
 local blizzardTargetHooked = false
@@ -179,6 +181,12 @@ local blizzardTargetHooked = false
 local function resetTargetAuras()
 	for k in pairs(targetAuras) do
 		targetAuras[k] = nil
+	end
+	for i = #targetAuraOrder, 1, -1 do
+		targetAuraOrder[i] = nil
+	end
+	for k in pairs(targetAuraIndexById) do
+		targetAuraIndexById[k] = nil
 	end
 end
 
@@ -221,7 +229,94 @@ local function cacheTargetAura(aura)
 	}
 end
 
-local function updateTargetAuraIcons()
+local function addTargetAuraToOrder(auraInstanceID)
+	if not auraInstanceID or targetAuraIndexById[auraInstanceID] then return end
+	local idx = #targetAuraOrder + 1
+	targetAuraOrder[idx] = auraInstanceID
+	targetAuraIndexById[auraInstanceID] = idx
+	return idx
+end
+
+local function reindexTargetAuraOrder(startIndex)
+	for i = startIndex or 1, #targetAuraOrder do
+		targetAuraIndexById[targetAuraOrder[i]] = i
+	end
+end
+
+local function removeTargetAuraFromOrder(auraInstanceID)
+	local idx = targetAuraIndexById[auraInstanceID]
+	if not idx then return nil end
+	table.remove(targetAuraOrder, idx)
+	targetAuraIndexById[auraInstanceID] = nil
+	reindexTargetAuraOrder(idx)
+	return idx
+end
+
+local function ensureAuraButton(index, ac)
+	local st = states.target
+	if not st or not st.auraContainer then return nil end
+	local icons = st.auraButtons or {}
+	st.auraButtons = icons
+	local btn = icons[index]
+	if not btn then
+		btn = CreateFrame("Button", nil, st.auraContainer)
+		btn:SetSize(ac.size, ac.size)
+		btn.icon = btn:CreateTexture(nil, "ARTWORK")
+		btn.icon:SetAllPoints(btn)
+		btn.cd = CreateFrame("Cooldown", nil, btn, "CooldownFrameTemplate")
+		btn.cd:SetAllPoints(btn)
+		local overlay = CreateFrame("Frame", nil, btn.cd)
+		overlay:SetAllPoints(btn.cd)
+		overlay:SetFrameLevel(btn.cd:GetFrameLevel() + 5)
+
+		btn.count = overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+		btn.count:SetPoint("BOTTOMRIGHT", overlay, "BOTTOMRIGHT", -2, 2)
+		btn.cd:SetReverse(true)
+		btn.cd:SetDrawEdge(true)
+		btn.cd:SetDrawSwipe(true)
+		icons[index] = btn
+	else
+		btn:SetSize(ac.size, ac.size)
+	end
+	return btn
+end
+
+local function applyAuraToButton(btn, aura, ac)
+	if not btn or not aura then return end
+	btn.icon:SetTexture(aura.icon or "")
+	btn.cd:Clear()
+	if issecretvalue and issecretvalue(aura.duration) then
+		btn.cd:SetCooldown(GetTime(), C_UnitAuras.GetAuraDurationRemainingByAuraInstanceID("target", aura.auraInstanceID), aura.timeMod)
+	elseif aura.duration and aura.duration > 0 and aura.expirationTime then
+		btn.cd:SetCooldown(aura.expirationTime - aura.duration, aura.duration, aura.timeMod)
+	end
+	btn.cd:SetHideCountdownNumbers(ac.showCooldown == false)
+	if issecretvalue and issecretvalue(aura.applications) or aura.applications and aura.applications > 1 then
+		btn.count:SetText(aura.applications)
+		btn.count:Show()
+	else
+		btn.count:SetText("")
+		btn.count:Hide()
+	end
+	btn:Show()
+end
+
+local function anchorAuraButton(btn, index, ac, perRow, st)
+	if not btn or not st then return end
+	local row = math.floor((index - 1) / perRow)
+	local col = (index - 1) % perRow
+	btn:ClearAllPoints()
+	btn:SetPoint("TOPLEFT", st.auraContainer, "TOPLEFT", col * (ac.size + ac.padding), -row * (ac.size + ac.padding))
+end
+
+local function updateAuraContainerSize(shown, ac, perRow, st)
+	if not st then return end
+	local rows = math.ceil(shown / perRow)
+	st.auraContainer:SetHeight(rows > 0 and (rows * (ac.size + ac.padding) - ac.padding) or 0.001)
+	st.auraContainer:SetShown(shown > 0)
+end
+
+local function updateTargetAuraIcons(startIndex)
 	local st = states.target
 	if not st or not st.auraContainer or not st.frame then return end
 	local icons = st.auraButtons or {}
@@ -233,87 +328,35 @@ local function updateTargetAuraIcons()
 	ac.max = ac.max or 16
 	if ac.max < 1 then ac.max = 1 end
 
-	local list = auraList
-	if wipe then
-		wipe(list)
-	else
-		for i = #list, 1, -1 do
-			list[i] = nil
-		end
-	end
-	for _, aura in pairs(targetAuras) do
-		list[#list + 1] = aura
-	end
-	if not addon.variables.isMidnight then
-		table.sort(list, function(a, b)
-			local ea = a.expirationTime or math.huge
-			local eb = b.expirationTime or math.huge
-			if ea == eb then return (a.auraInstanceID or 0) < (b.auraInstanceID or 0) end
-			return ea < eb
-		end)
-	end
-
 	local width = st.frame:GetWidth() or 0
 	local perRow = math.max(1, math.floor((width + ac.padding) / (ac.size + ac.padding)))
-	local shown = 0
+	local shown = math.min(#targetAuraOrder, ac.max)
+	local startIdx = startIndex or 1
+	if startIdx < 1 then startIdx = 1 end
 
-	for i, aura in ipairs(list) do
-		if i > ac.max then break end
-		shown = shown + 1
-		local btn = icons[i]
-		if not btn then
-			btn = CreateFrame("Button", nil, st.auraContainer)
-			btn:SetSize(ac.size, ac.size)
-			btn.icon = btn:CreateTexture(nil, "ARTWORK")
-			btn.icon:SetAllPoints(btn)
-			btn.cd = CreateFrame("Cooldown", nil, btn, "CooldownFrameTemplate")
-			btn.cd:SetAllPoints(btn)
-			local overlay = CreateFrame("Frame", nil, btn.cd)
-			overlay:SetAllPoints(btn.cd)
-			overlay:SetFrameLevel(btn.cd:GetFrameLevel() + 5)
-
-			btn.count = overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-			btn.count:SetPoint("BOTTOMRIGHT", overlay, "BOTTOMRIGHT", -2, 2)
-			btn.cd:SetReverse(true)
-			btn.cd:SetDrawEdge(true)
-			btn.cd:SetDrawSwipe(true)
-			icons[i] = btn
+	local i = startIdx
+	while i <= shown do
+		local auraId = targetAuraOrder[i]
+		local aura = auraId and targetAuras[auraId]
+		if not aura then
+			table.remove(targetAuraOrder, i)
+			targetAuraIndexById[auraId] = nil
+			reindexTargetAuraOrder(i)
+			shown = math.min(#targetAuraOrder, ac.max)
 		else
-			btn:SetSize(ac.size, ac.size)
+			local btn = ensureAuraButton(i, ac)
+			applyAuraToButton(btn, aura, ac)
+			anchorAuraButton(btn, i, ac, perRow, st)
+			targetAuraIndexById[auraId] = i
+			i = i + 1
 		end
-		btn.cd:Clear()
-		btn.icon:SetTexture(aura.icon or "")
-		if issecretvalue and issecretvalue(aura.duration) then
-			btn.cd:SetCooldown(GetTime(), C_UnitAuras.GetAuraDurationRemainingByAuraInstanceID("target", aura.auraInstanceID), aura.timeMod)
-		elseif aura.duration and aura.duration > 0 and aura.expirationTime then
-			btn.cd:SetCooldown(aura.expirationTime - aura.duration, aura.duration, aura.timeMod)
-		end
-		if ac.showCooldown ~= false then
-			btn.cd:SetHideCountdownNumbers(false)
-		else
-			btn.cd:SetHideCountdownNumbers(true)
-		end
-		if issecretvalue and issecretvalue(aura.applications) or aura.applications and aura.applications > 1 then
-			btn.count:SetText(aura.applications)
-			btn.count:Show()
-		else
-			btn.count:SetText("")
-			btn.count:Hide()
-		end
-		local row = math.floor((shown - 1) / perRow)
-		local col = (shown - 1) % perRow
-		btn:ClearAllPoints()
-		btn:SetPoint("TOPLEFT", st.auraContainer, "TOPLEFT", col * (ac.size + ac.padding), -row * (ac.size + ac.padding))
-		btn:Show()
 	end
 
-	for i = shown + 1, #icons do
-		if icons[i] then icons[i]:Hide() end
+	for idx = shown + 1, #icons do
+		if icons[idx] then icons[idx]:Hide() end
 	end
 
-	local rows = math.ceil(shown / perRow)
-	st.auraContainer:SetHeight(rows > 0 and (rows * (ac.size + ac.padding) - ac.padding) or 0.001)
-	st.auraContainer:SetShown(shown > 0)
+	updateAuraContainerSize(shown, ac, perRow, st)
 end
 
 local function fullScanTargetAuras()
@@ -323,19 +366,27 @@ local function fullScanTargetAuras()
 		local helpful = C_UnitAuras.GetUnitAuras("target", "HELPFUL|CANCELABLE")
 		for i = 1, #helpful do
 			cacheTargetAura(helpful[i])
+			addTargetAuraToOrder(helpful[i].auraInstanceID)
 		end
 		local harmful = C_UnitAuras.GetUnitAuras("target", "HARMFUL|PLAYER|INCLUDE_NAME_PLATE_ONLY")
 		for i = 1, #harmful do
 			cacheTargetAura(harmful[i])
+			addTargetAuraToOrder(harmful[i].auraInstanceID)
 		end
 	elseif C_UnitAuras and C_UnitAuras.GetAuraSlots then
 		local helpful = { C_UnitAuras.GetAuraSlots("target", "HELPFUL|CANCELABLE") }
 		for i = 2, #helpful do
-			cacheTargetAura(C_UnitAuras.GetAuraDataBySlot("target", helpful[i]))
+			local slot = helpful[i]
+			local aura = C_UnitAuras.GetAuraDataBySlot("target", slot)
+			cacheTargetAura(aura)
+			addTargetAuraToOrder(aura and aura.auraInstanceID)
 		end
 		local harmful = { C_UnitAuras.GetAuraSlots("target", "HARMFUL|PLAYER|INCLUDE_NAME_PLATE_ONLY") }
 		for i = 2, #harmful do
-			cacheTargetAura(C_UnitAuras.GetAuraDataBySlot("target", harmful[i]))
+			local slot = harmful[i]
+			local aura = C_UnitAuras.GetAuraDataBySlot("target", slot)
+			cacheTargetAura(aura)
+			addTargetAuraToOrder(aura and aura.auraInstanceID)
 		end
 	end
 	updateTargetAuraIcons()
@@ -1048,7 +1099,6 @@ local function onEvent(self, event, unit, arg1)
 		end
 	elseif event == "UNIT_AURA" and unit == "target" then
 		local eventInfo = arg1
-		local changed = {}
 		if not UnitExists("target") then
 			resetTargetAuras()
 			updateTargetAuraIcons()
@@ -1058,12 +1108,31 @@ local function onEvent(self, event, unit, arg1)
 			fullScanTargetAuras()
 			return
 		end
+		local cfg = ensureDB("target")
+		local ac = cfg.auraIcons or defaults.target.auraIcons or { size = 24, padding = 2, max = 16, showCooldown = true }
+		ac.size = ac.size or 24
+		ac.padding = ac.padding or 0
+		ac.max = ac.max or 16
+		if ac.max < 1 then ac.max = 1 end
+		local st = states.target
+		if not st or not st.auraContainer then return end
+		local width = st.frame and st.frame:GetWidth() or 0
+		local perRow = math.max(1, math.floor((width + ac.padding) / (ac.size + ac.padding)))
+		local firstChanged
 		if eventInfo.addedAuras then
 			for _, aura in ipairs(eventInfo.addedAuras) do
 				if not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, aura.auraInstanceID, "HARMFUL|PLAYER|INCLUDE_NAME_PLATE_ONLY") then
 					cacheTargetAura(aura)
+					local idx = addTargetAuraToOrder(aura.auraInstanceID)
+					if idx and idx <= ac.max then
+						if not firstChanged or idx < firstChanged then firstChanged = idx end
+					end
 				elseif not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, aura.auraInstanceID, "HELPFUL|CANCELABLE") then
 					cacheTargetAura(aura)
+					local idx = addTargetAuraToOrder(aura.auraInstanceID)
+					if idx and idx <= ac.max then
+						if not firstChanged or idx < firstChanged then firstChanged = idx end
+					end
 				end
 			end
 		end
@@ -1073,18 +1142,22 @@ local function onEvent(self, event, unit, arg1)
 					local data = C_UnitAuras.GetAuraDataByAuraInstanceID("target", inst)
 					if data then cacheTargetAura(data) end
 				end
-				changed[inst] = true
+				local idx = targetAuraIndexById[inst]
+				if idx and idx <= ac.max then
+					if not firstChanged or idx < firstChanged then firstChanged = idx end
+				end
 			end
 		end
 		if eventInfo.removedAuraInstanceIDs then
 			for _, inst in ipairs(eventInfo.removedAuraInstanceIDs) do
 				targetAuras[inst] = nil
-				changed[inst] = true
+				local idx = removeTargetAuraFromOrder(inst)
+				if idx and idx <= (ac.max + 1) then -- +1 to relayout if we pulled a hidden aura into view
+					if not firstChanged or idx < firstChanged then firstChanged = idx end
+				end
 			end
 		end
-		if #changed then
-			-- updateTargetAuraIcons()
-		end
+		if firstChanged then updateTargetAuraIcons(firstChanged) end
 	elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_ABSORB_AMOUNT_CHANGED" then
 		if unit == PLAYER_UNIT then updateHealth(playerCfg, "player") end
 		if unit == "target" then updateHealth(targetCfg, "target") end

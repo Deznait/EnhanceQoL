@@ -84,6 +84,7 @@ local StaticPopup_Visible = StaticPopup_Visible
 local IsShiftKeyDown = IsShiftKeyDown
 local IsControlKeyDown = IsControlKeyDown
 local IsAltKeyDown = IsAltKeyDown
+local IsInGroup = IsInGroup
 local math = math
 local TooltipUtil = _G.TooltipUtil
 local GetTime = GetTime
@@ -407,6 +408,15 @@ local visibilityRuleMetadata = {
 		unitRequirement = "player",
 		order = 45,
 	},
+	ALWAYS_HIDE_IN_GROUP = {
+		key = "ALWAYS_HIDE_IN_GROUP",
+		label = L["visibilityRule_groupedHide"] or "Always hide in party/raid",
+		description = L["visibilityRule_groupedHide_desc"]
+			or "Hides the player frame whenever you are in a party or raid. While grouped, only this rule (and Mouseover, if enabled) is evaluated; other visibility rules are ignored.",
+		appliesTo = { frame = true },
+		unitRequirement = "player",
+		order = 47,
+	},
 	SKYRIDING_ACTIVE = {
 		key = "SKYRIDING_ACTIVE",
 		label = L["visibilityRule_skyriding"] or "While skyriding",
@@ -587,7 +597,13 @@ end
 
 local UpdateUnitFrameMouseover -- forward declaration
 
-local frameVisibilityContext = { inCombat = false, playerHealthMissing = false, playerHealthAlpha = 0, hasTarget = false }
+local frameVisibilityContext = {
+	inCombat = false,
+	playerHealthMissing = false,
+	playerHealthAlpha = 0,
+	hasTarget = false,
+	inGroup = false,
+}
 local frameVisibilityStates = {}
 local hookedUnitFrames = {}
 local frameVisibilityHealthEnabled = false
@@ -627,6 +643,7 @@ local function UpdateFrameVisibilityContext()
 
 	local hasTarget = UnitExists and UnitExists("target") and true or false
 	frameVisibilityContext.hasTarget = hasTarget
+	frameVisibilityContext.inGroup = (IsInGroup and IsInGroup()) and true or false
 
 	if frameVisibilityHealthEnabled then
 		local isMidnight = addon and addon.variables and addon.variables.isMidnight
@@ -664,6 +681,7 @@ end
 local function BuildUnitFrameDriverExpression(config)
 	if not config then return nil end
 	if config.ALWAYS_HIDDEN then return "hide" end
+	if config.ALWAYS_HIDE_IN_GROUP then return nil end
 	local inCombat = config.ALWAYS_IN_COMBAT == true
 	local outCombat = config.ALWAYS_OUT_OF_COMBAT == true
 	if inCombat and outCombat then return "show" end
@@ -764,6 +782,7 @@ local function EnsureFrameVisibilityWatcher()
 	watcher:RegisterEvent("PLAYER_REGEN_DISABLED")
 	watcher:RegisterEvent("PLAYER_REGEN_ENABLED")
 	watcher:RegisterEvent("PLAYER_TARGET_CHANGED")
+	watcher:RegisterEvent("GROUP_ROSTER_UPDATE")
 	addon.variables.frameVisibilityWatcher = watcher
 	UpdateFrameVisibilityContext()
 	UpdateFrameVisibilityHealthRegistration()
@@ -775,6 +794,11 @@ local function EvaluateFrameVisibility(state)
 
 	if cfg.ALWAYS_HIDDEN then return false, "ALWAYS_HIDDEN" end
 	local context = frameVisibilityContext
+
+	if cfg.ALWAYS_HIDE_IN_GROUP and state.supportsGroupRule and context.inGroup then
+		if cfg.MOUSEOVER and state.isMouseOver then return true, "MOUSEOVER" end
+		return false, "ALWAYS_HIDE_IN_GROUP"
+	end
 
 	if cfg.ALWAYS_IN_COMBAT and context.inCombat then return true, "ALWAYS_IN_COMBAT" end
 	if cfg.ALWAYS_OUT_OF_COMBAT and not context.inCombat then return true, "ALWAYS_OUT_OF_COMBAT" end
@@ -957,6 +981,7 @@ local function ApplyVisibilityToUnitFrame(frameName, cbData, config)
 	local isPlayerUnit = (cbData.unitToken == "player")
 	state.supportsPlayerHealthRule = isPlayerUnit
 	state.supportsPlayerTargetRule = isPlayerUnit
+	state.supportsGroupRule = isPlayerUnit
 
 	local driverExpression = BuildUnitFrameDriverExpression(config)
 	local needsHealth = config and config.PLAYER_HEALTH_NOT_FULL and state.supportsPlayerHealthRule
@@ -3820,34 +3845,37 @@ local function initParty()
 	local pending_update = false
 	local updateFrame = CreateFrame("Frame")
 
-	local function manage_raid_frame()
-		if not addon.db["showPartyFrameInSoloContent"] then return end
-		if InCombatLockdown() then
-			if not pending_update then
-				pending_update = true
-				updateFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+	-- TODO throws many errors in midnight in group content for now - maybe later in beta it works
+	if not addon.variables.isMidnight then
+		local function manage_raid_frame()
+			if not addon.db["showPartyFrameInSoloContent"] then return end
+			if InCombatLockdown() then
+				if not pending_update then
+					pending_update = true
+					updateFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+				end
+				return
 			end
-			return
+
+			local solo = 1
+			if IsInGroup() or IsInRaid() then solo = 0 end
+
+			if solo == 0 and last_solo == 0 then return end
+
+			CompactPartyFrame:SetShown(solo)
+			last_solo = solo
 		end
 
-		local solo = 1
-		if IsInGroup() or IsInRaid() then solo = 0 end
+		updateFrame:SetScript("OnEvent", function(self, event)
+			if event == "PLAYER_REGEN_ENABLED" and pending_update then
+				self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+				pending_update = false
+				manage_raid_frame()
+			end
+		end)
 
-		if solo == 0 and last_solo == 0 then return end
-
-		CompactPartyFrame:SetShown(solo)
-		last_solo = solo
+		hooksecurefunc(CompactPartyFrame, "UpdateVisibility", manage_raid_frame)
 	end
-
-	updateFrame:SetScript("OnEvent", function(self, event)
-		if event == "PLAYER_REGEN_ENABLED" and pending_update then
-			self:UnregisterEvent("PLAYER_REGEN_ENABLED")
-			pending_update = false
-			manage_raid_frame()
-		end
-	end)
-
-	hooksecurefunc(CompactPartyFrame, "UpdateVisibility", manage_raid_frame)
 end
 
 local function initQuest()
@@ -4164,7 +4192,6 @@ local function initUnitFrame()
 	addon.functions.InitDBValue("hideHitIndicatorPet", false)
 	-- Player resting visuals (ZZZ + glow)
 	addon.functions.InitDBValue("hideRestingGlow", false)
-	addon.functions.InitDBValue("hideRaidFrameBuffs", false)
 	addon.functions.InitDBValue("hidePartyFrameTitle", false)
 	addon.functions.InitDBValue("unitFrameTruncateNames", false)
 	addon.functions.InitDBValue("unitFrameMaxNameLength", addon.variables.unitFrameMaxNameLength)
@@ -4250,36 +4277,11 @@ local function initUnitFrame()
 	end) end
 	addon.functions.togglePartyFrameTitle(addon.db["hidePartyFrameTitle"])
 
-	if not addon.variables.isMidnight then
-		-- TODO actually no workaround for auras on raid frames so disabling this feature for now
-		local function DisableBlizzBuffs(cuf)
-			if addon.db["hideRaidFrameBuffs"] then
-				if not cuf.optionTable then return end
-				if cuf.optionTable.displayBuffs then
-					cuf.optionTable.displayBuffs = false
-					CompactUnitFrame_UpdateAuras(cuf) -- entfernt sofort bestehende Buff-Buttons
-				end
-			end
-		end
-		hooksecurefunc("CompactUnitFrame_SetUpFrame", DisableBlizzBuffs)
-
-		function addon.functions.updateRaidFrameBuffs()
-			if addon.variables.isMidnight then return end
-			for i = 1, 5 do
-				local f = _G["CompactPartyFrameMember" .. i]
-				if f then DisableBlizzBuffs(f) end
-			end
-			for i = 1, 40 do
-				local f = _G["CompactRaidFrame" .. i]
-				if f then DisableBlizzBuffs(f) end
-			end
-		end
-	end
-
 	local function TruncateFrameName(cuf)
 		if not addon.db["unitFrameTruncateNames"] then return end
 		if not addon.db["unitFrameMaxNameLength"] then return end
 		if not cuf then return end
+		if issecretvalue and issecretvalue(cuf.unit) then return end
 
 		if cuf.unit and cuf.unit:match("^nameplate") then return end
 
@@ -4291,6 +4293,8 @@ local function initUnitFrame()
 		elseif cuf.name and type(cuf.name.GetText) == "function" then
 			name = cuf.name:GetText()
 		end
+
+		if issecretvalue and issecretvalue(name) then return end
 
 		if name and cuf.name and type(cuf.name.SetText) == "function" then
 			-- Remove server names before truncation
@@ -4356,7 +4360,6 @@ local function initUnitFrame()
 		end
 	end
 
-	if addon.db["hideRaidFrameBuffs"] then addon.functions.updateRaidFrameBuffs() end
 	if addon.db["unitFrameTruncateNames"] then addon.functions.updateUnitFrameNames() end
 	if addon.db["unitFrameScaleEnabled"] then addon.functions.updatePartyFrameScale() end
 	-- Apply resting visuals if option is enabled

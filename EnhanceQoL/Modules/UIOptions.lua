@@ -618,6 +618,7 @@ local function addVisibilityHub(container)
 			scenarioGroup:AddChild(addon.functions.createSpacerAce())
 		end
 		local config = getCurrentConfig() or {}
+		local groupedRuleActive = config.ALWAYS_HIDE_IN_GROUP == true
 		local rules = getRulesForCurrentElement()
 		if #rules == 0 then
 			local none = addon.functions.createLabelAce(L["visibilityNoRules"] or "", nil, nil, 12)
@@ -640,6 +641,17 @@ local function addVisibilityHub(container)
 		end
 		if disableOthers then
 			local warn = addon.functions.createLabelAce(L["visibilityAlwaysHiddenActive"] or "", nil, nil, 10)
+			warn:SetFullWidth(true)
+			scenarioGroup:AddChild(addon.functions.createSpacerAce())
+			scenarioGroup:AddChild(warn)
+		elseif groupedRuleActive then
+			local warn = addon.functions.createLabelAce(
+				L["visibilityHideInGroupActive"]
+					or "When you are in a party or raid, only \"Always hide in party/raid\" (and Mouseover, if enabled) is evaluated; other visibility rules are ignored while grouped.",
+				nil,
+				nil,
+				10
+			)
 			warn:SetFullWidth(true)
 			scenarioGroup:AddChild(addon.functions.createSpacerAce())
 			scenarioGroup:AddChild(warn)
@@ -837,16 +849,6 @@ local function addUnitFrame2(container)
 		g:AddChild(labelHeadlineUF)
 		g:AddChild(addon.functions.createSpacerAce())
 
-		-- TODO actually no workaround for auras on raid frames so disabling this feature for now
-		if not addon.variables.isMidnight then
-			local cbRaid = addon.functions.createCheckboxAce(L["hideRaidFrameBuffs"], addon.db["hideRaidFrameBuffs"], function(_, _, value)
-				addon.db["hideRaidFrameBuffs"] = value
-				addon.functions.updateRaidFrameBuffs()
-				addon.variables.requireReload = true
-			end)
-			g:AddChild(cbRaid)
-		end
-
 		local cbLeader = addon.functions.createCheckboxAce(L["showLeaderIconRaidFrame"], addon.db["showLeaderIconRaidFrame"], function(_, _, value)
 			addon.db["showLeaderIconRaidFrame"] = value
 			if value then
@@ -857,14 +859,16 @@ local function addUnitFrame2(container)
 		end)
 		g:AddChild(cbLeader)
 
-		local cbSolo = addon.functions.createCheckboxAce(L["showPartyFrameInSoloContent"], addon.db["showPartyFrameInSoloContent"], function(_, _, value)
-			addon.db["showPartyFrameInSoloContent"] = value
-			addon.variables.requireReload = true
-			buildCoreUF()
-			ApplyUnitFrameSettingByVar("unitframeSettingPlayerFrame")
-			addon.functions.togglePartyFrameTitle(addon.db["hidePartyFrameTitle"])
-		end)
-		g:AddChild(cbSolo)
+		if not addon.variables.isMidnight then
+			local cbSolo = addon.functions.createCheckboxAce(L["showPartyFrameInSoloContent"], addon.db["showPartyFrameInSoloContent"], function(_, _, value)
+				addon.db["showPartyFrameInSoloContent"] = value
+				addon.variables.requireReload = true
+				buildCoreUF()
+				ApplyUnitFrameSettingByVar("unitframeSettingPlayerFrame")
+				addon.functions.togglePartyFrameTitle(addon.db["hidePartyFrameTitle"])
+			end)
+			g:AddChild(cbSolo)
+		end
 
 		local cbTitle = addon.functions.createCheckboxAce(L["hidePartyFrameTitle"], addon.db["hidePartyFrameTitle"], function(_, _, value)
 			addon.db["hidePartyFrameTitle"] = value

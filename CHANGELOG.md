@@ -7,11 +7,21 @@
 - Actionbar and Frame fading if you choose to hide it
 - PlayerFrame
   - Show when I target something
+  - New visibility rule: “Always hide in party/raid” (overrides other rules while grouped; mouseover can still reveal)
 - Sync the width of your resource bars with the relative frame
+
+### ⏰ Temporarily disabled
+
+- Show Party frame in solo content, this break in group content with secrets in midnight beta
+
+### ❌ Removed
+
+- Hide raid frame buffs (something changed as this now throws error in retail too)
 
 ### 🐛 Fixed
 
 - Error: attempt to perform indexed assignment on field 'moneyTracker'
+- Guard against ChatIM and Ignore feature in restricted content (Raid/M+) for midnight because of secret values
 
 ---
 

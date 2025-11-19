@@ -106,6 +106,7 @@ local INTERACTION_EVENTS = {
 Ignore.filtered = {}
 
 function Ignore:NormalizeName(name)
+	if issecretvalue and issecretvalue(name) then return end
 	if not name or name == "" then return nil end
 	local player, server = strsplit("-", name)
 	player = player or name
@@ -1035,6 +1036,7 @@ local function EQOL_AddUnitIgnoreEntry(owner, root, ctx)
 	if not Ignore.enabled then return end
 	local name = ctx and ctx.name
 	local realm = ctx and ctx.server
+	if issecretvalue and issecretvalue(name) then return end
 	if name and not name:find("-") then
 		realm = realm or (GetRealmName()):gsub("%s", "")
 		name = name .. "-" .. realm

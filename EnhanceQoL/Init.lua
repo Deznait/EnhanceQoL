@@ -1,7 +1,6 @@
 local addonName, addon = ...
 _G[addonName] = addon
 addon.saveVariables = {} -- Cross-Module variables for DB Save
-addon.saveVariables["hideRaidFrameBuffs"] = false -- Default for hiding buffs on raid-style frames
 addon.saveVariables["hidePartyFrameTitle"] = false -- Default for hiding party frame title
 addon.saveVariables["unitFrameTruncateNames"] = false -- Default for truncating unit names
 addon.saveVariables["unitFrameScaleEnabled"] = false -- Default for scaling compact unit frames

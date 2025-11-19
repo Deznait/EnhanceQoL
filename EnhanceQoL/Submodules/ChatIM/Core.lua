@@ -73,6 +73,7 @@ local function OpenChatIMForEditBox(editBox)
 end
 
 local function focusTab(target)
+	if issecretvalue and issecretvalue(target) then return end
 	ChatIM:CreateTab(target)
 	if ChatIM.widget and ChatIM.widget.frame and not ChatIM.widget.frame:IsShown() then
 		UIFrameFlashStop(ChatIM.widget.frame)
@@ -109,6 +110,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		end
 	elseif event == "CHAT_MSG_WHISPER" then
 		local msg, sender = ...
+		if issecretvalue and issecretvalue(sender) then return end
 		if addon.Ignore and addon.Ignore.CheckIgnore and addon.Ignore:CheckIgnore(sender) then return end
 		ChatIM:AddMessage(sender, msg)
 		if addon.db and addon.db["chatIMHideInCombat"] and ChatIM.inCombat then
@@ -120,6 +122,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		end
 	elseif event == "CHAT_MSG_BN_WHISPER" then
 		local msg, sender, _, _, _, _, _, _, _, _, _, _, bnetID = ...
+		if issecretvalue and issecretvalue(sender) then return end
 		ChatIM:AddMessage(sender, msg, nil, true, bnetID)
 		if addon.db and addon.db["chatIMHideInCombat"] and ChatIM.inCombat then
 			table.insert(ChatIM.soundQueue, sender)
@@ -130,10 +133,12 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		end
 	elseif event == "CHAT_MSG_WHISPER_INFORM" then
 		local msg, target = ...
+		if issecretvalue and issecretvalue(target) then return end
 		ChatIM:AddMessage(target, msg, true)
 		focusTab(target)
 	elseif event == "CHAT_MSG_BN_WHISPER_INFORM" then
 		local msg, target, _, _, _, _, _, _, _, _, _, _, bnetID = ...
+		if issecretvalue and issecretvalue(target) then return end
 		ChatIM:AddMessage(target, msg, true, true, bnetID)
 		focusTab(target)
 	end
