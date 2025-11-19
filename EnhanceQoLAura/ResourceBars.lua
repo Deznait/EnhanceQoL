@@ -42,6 +42,8 @@ local CUSTOM_CLASS_COLORS = CUSTOM_CLASS_COLORS
 local RegisterStateDriver = RegisterStateDriver
 local UnregisterStateDriver = UnregisterStateDriver
 local InCombatLockdown = InCombatLockdown
+local IsMounted = IsMounted
+local UnitInVehicle = UnitInVehicle
 
 local frameAnchor
 local mainFrame
@@ -952,6 +954,22 @@ function addon.Aura.functions.addResourceFrame(container)
 				if addon and addon.Aura and addon.Aura.ResourceBars and addon.Aura.ResourceBars.ApplyVisibilityPreference then addon.Aura.ResourceBars.ApplyVisibilityPreference() end
 			end,
 		},
+		{
+			text = L["Hide when mounted"] or "Hide resource bars while mounted",
+			var = "resourceBarsHideMounted",
+			func = function(self, _, value)
+				addon.db["resourceBarsHideMounted"] = value and true or false
+				if addon and addon.Aura and addon.Aura.ResourceBars and addon.Aura.ResourceBars.ApplyVisibilityPreference then addon.Aura.ResourceBars.ApplyVisibilityPreference() end
+			end,
+		},
+		{
+			text = L["Hide in vehicles"] or "Hide resource bars in vehicles",
+			var = "resourceBarsHideVehicle",
+			func = function(self, _, value)
+				addon.db["resourceBarsHideVehicle"] = value and true or false
+				if addon and addon.Aura and addon.Aura.ResourceBars and addon.Aura.ResourceBars.ApplyVisibilityPreference then addon.Aura.ResourceBars.ApplyVisibilityPreference() end
+			end,
+		},
 	}
 
 	tsort(data, function(a, b) return a.text < b.text end)
@@ -1144,7 +1162,7 @@ function addon.Aura.functions.addResourceFrame(container)
 			return pType
 		end
 
-			local buildSpec
+		local buildSpec
 
 		local function enforceMinWidthForSpec(barType, specIndex)
 			if not barType then return nil end
@@ -1230,9 +1248,7 @@ function addon.Aura.functions.addResourceFrame(container)
 				if not filtered[initial] then initial = "UIParent" end
 				-- Ensure DB reflects a valid selection
 				info.relativeFrame = initial
-				if (info.relativeFrame or "UIParent") == "UIParent" then
-					info.matchRelativeWidth = nil
-				end
+				if (info.relativeFrame or "UIParent") == "UIParent" then info.matchRelativeWidth = nil end
 				local dropFrame = addon.functions.createDropdownAce(L["Relative Frame"], filtered, nil, nil)
 				dropFrame:SetValue(initial)
 				dropFrame:SetFullWidth(false)
@@ -1290,13 +1306,23 @@ function addon.Aura.functions.addResourceFrame(container)
 							if specIndex == addon.variables.unitSpec then
 								local defH = (barType == "HEALTH") and (cfg and cfg.height or DEFAULT_HEALTH_HEIGHT) or (cfg and cfg.height or DEFAULT_POWER_HEIGHT)
 								if barType == "HEALTH" then
-									if addon.Aura and addon.Aura.ResourceBars and addon.Aura.ResourceBars.SetHealthBarSize then addon.Aura.ResourceBars.SetHealthBarSize(MIN_RESOURCE_BAR_WIDTH, defH) end
+									if addon.Aura and addon.Aura.ResourceBars and addon.Aura.ResourceBars.SetHealthBarSize then
+										addon.Aura.ResourceBars.SetHealthBarSize(MIN_RESOURCE_BAR_WIDTH, defH)
+									end
 								else
-									if addon.Aura and addon.Aura.ResourceBars and addon.Aura.ResourceBars.SetPowerBarSize then addon.Aura.ResourceBars.SetPowerBarSize(MIN_RESOURCE_BAR_WIDTH, defH, barType) end
+									if addon.Aura and addon.Aura.ResourceBars and addon.Aura.ResourceBars.SetPowerBarSize then
+										addon.Aura.ResourceBars.SetPowerBarSize(MIN_RESOURCE_BAR_WIDTH, defH, barType)
+									end
 								end
 							end
 						end
-						if ResourceBars and ResourceBars.ui and ResourceBars.ui.barWidthSliders and ResourceBars.ui.barWidthSliders[specIndex] and ResourceBars.ui.barWidthSliders[specIndex][barType] then
+						if
+							ResourceBars
+							and ResourceBars.ui
+							and ResourceBars.ui.barWidthSliders
+							and ResourceBars.ui.barWidthSliders[specIndex]
+							and ResourceBars.ui.barWidthSliders[specIndex][barType]
+						then
 							local slider = ResourceBars.ui.barWidthSliders[specIndex][barType]
 							slider:SetDisabled(info.matchRelativeWidth == true)
 							if info.matchRelativeWidth then slider:SetValue(MIN_RESOURCE_BAR_WIDTH) end
@@ -2860,9 +2886,7 @@ function getBarSettings(pType)
 	return nil
 end
 
-local function wantsRelativeFrameWidthMatch(anchor)
-	return anchor and (anchor.relativeFrame or "UIParent") ~= "UIParent" and anchor.matchRelativeWidth == true
-end
+local function wantsRelativeFrameWidthMatch(anchor) return anchor and (anchor.relativeFrame or "UIParent") ~= "UIParent" and anchor.matchRelativeWidth == true end
 
 local function getConfiguredBarWidth(pType)
 	local cfg = getBarSettings(pType)
@@ -3853,6 +3877,8 @@ local function setPowerbars()
 end
 
 local function shouldHideResourceBarsOutOfCombat() return addon and addon.db and addon.db.resourceBarsHideOutOfCombat == true end
+local function shouldHideResourceBarsMounted() return addon and addon.db and addon.db.resourceBarsHideMounted == true end
+local function shouldHideResourceBarsInVehicle() return addon and addon.db and addon.db.resourceBarsHideVehicle == true end
 
 local function forEachResourceBarFrame(callback)
 	if type(callback) ~= "function" then return end
@@ -3895,19 +3921,70 @@ local function buildDruidVisibilityExpression(cfg)
 end
 
 local function buildVisibilityDriverForBar(cfg)
-	if not shouldHideResourceBarsOutOfCombat() then return nil end
+	local hideOOC = shouldHideResourceBarsOutOfCombat()
+	local hideMounted = shouldHideResourceBarsMounted()
+	local hideVehicle = shouldHideResourceBarsInVehicle()
+	if not hideOOC and not hideMounted and not hideVehicle then return nil end
+
 	cfg = cfg or {}
-	local druidExpr = buildDruidVisibilityExpression(cfg)
-	return druidExpr or OOC_VISIBILITY_DRIVER
+	local clauses = {}
+	if hideVehicle then clauses[#clauses + 1] = "[unithasvehicleui] hide" end
+	if hideMounted then
+		clauses[#clauses + 1] = "[mounted] hide"
+		clauses[#clauses + 1] = "[stance:3] hide"
+	end
+
+	if hideOOC then
+		local druidExpr = buildDruidVisibilityExpression(cfg) or OOC_VISIBILITY_DRIVER
+		if #clauses == 0 then
+			return druidExpr
+		else
+			clauses[#clauses + 1] = druidExpr
+			return table.concat(clauses, "; ")
+		end
+	else
+		clauses[#clauses + 1] = "show"
+		return table.concat(clauses, "; ")
+	end
 end
 
 local function ensureVisibilityDriverWatcher()
 	if visibilityDriverWatcher then return end
 	visibilityDriverWatcher = CreateFrame("Frame")
 	visibilityDriverWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
-	visibilityDriverWatcher:SetScript("OnEvent", function()
-		if not ResourceBars._pendingVisibilityDriver then return end
-		ResourceBars.ApplyVisibilityPreference("pending")
+	visibilityDriverWatcher:RegisterEvent("PLAYER_MOUNT_DISPLAY_CHANGED")
+	if visibilityDriverWatcher.RegisterUnitEvent then
+		visibilityDriverWatcher:RegisterUnitEvent("UNIT_ENTERED_VEHICLE", "player")
+		visibilityDriverWatcher:RegisterUnitEvent("UNIT_EXITED_VEHICLE", "player")
+	else
+		visibilityDriverWatcher:RegisterEvent("UNIT_ENTERED_VEHICLE")
+		visibilityDriverWatcher:RegisterEvent("UNIT_EXITED_VEHICLE")
+	end
+	visibilityDriverWatcher._playerMounted = IsMounted and IsMounted() or false
+	visibilityDriverWatcher._playerVehicle = UnitInVehicle and UnitInVehicle("player") or false
+	visibilityDriverWatcher:SetScript("OnEvent", function(self, event, unit)
+		if event == "PLAYER_REGEN_ENABLED" then
+			if not ResourceBars._pendingVisibilityDriver then return end
+			ResourceBars.ApplyVisibilityPreference("pending")
+			return
+		end
+
+		if event == "PLAYER_MOUNT_DISPLAY_CHANGED" then
+			if not shouldHideResourceBarsMounted() and not shouldHideResourceBarsInVehicle() then return end
+			local mounted = IsMounted and IsMounted() or false
+			if not ResourceBars._pendingVisibilityDriver and self._playerMounted == mounted then return end
+			self._playerMounted = mounted
+		elseif event == "UNIT_ENTERED_VEHICLE" or event == "UNIT_EXITED_VEHICLE" then
+			if unit and unit ~= "player" then return end
+			if not shouldHideResourceBarsInVehicle() then return end
+			local inVehicle = UnitInVehicle and UnitInVehicle("player") or false
+			if not ResourceBars._pendingVisibilityDriver and self._playerVehicle == inVehicle then return end
+			self._playerVehicle = inVehicle
+		else
+			return
+		end
+
+		ResourceBars.ApplyVisibilityPreference(event)
 	end)
 end
 
@@ -3941,8 +4018,11 @@ function ResourceBars.ApplyVisibilityPreference(context)
 	if not canApplyVisibilityDriver() then return end
 	ResourceBars._pendingVisibilityDriver = nil
 	local hideOutOfCombat = shouldHideResourceBarsOutOfCombat()
+	local hideMounted = shouldHideResourceBarsMounted()
+	local hideVehicle = shouldHideResourceBarsInVehicle()
+	local hasAnyRule = hideOutOfCombat or hideMounted or hideVehicle
 	forEachResourceBarFrame(function(frame, pType)
-		if not hideOutOfCombat then
+		if not hasAnyRule then
 			applyVisibilityDriverToFrame(frame, nil)
 			return
 		end
@@ -3955,7 +4035,7 @@ function ResourceBars.ApplyVisibilityPreference(context)
 			applyVisibilityDriverToFrame(frame, nil)
 		end
 	end)
-	if not hideOutOfCombat and context ~= "fromSetPowerbars" and frameAnchor then setPowerbars() end
+	if not hasAnyRule and context ~= "fromSetPowerbars" and frameAnchor then setPowerbars() end
 end
 
 local resourceBarsLoaded = addon.Aura.ResourceBars ~= nil

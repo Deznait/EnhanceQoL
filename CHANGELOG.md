@@ -8,6 +8,8 @@
 - PlayerFrame
   - Show when I target something
   - New visibility rule: “Always hide in party/raid” (overrides other rules while grouped; mouseover can still reveal)
+- Resource Bars
+  - Optional auto-hide while mounted or inside vehicles, reacting instantly to mounting/vehicle events
 - Sync the width of your resource bars with the relative frame
 
 ### ⏰ Temporarily disabled
