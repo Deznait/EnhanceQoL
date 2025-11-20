@@ -2405,141 +2405,6 @@ end
 -- New modular Unit Frames UI builder
 -- New modular Vendor & Economy UI builder
 
-local function addDungeonFrame(container, d)
-	local scroll = addon.functions.createContainer("ScrollFrame", "Flow")
-	scroll:SetFullWidth(true)
-	scroll:SetFullHeight(true)
-	container:AddChild(scroll)
-
-	local wrapper = addon.functions.createContainer("SimpleGroup", "Flow")
-	scroll:AddChild(wrapper)
-
-	local groupCore = addon.functions.createContainer("InlineGroup", "List")
-	groupCore:SetTitle(LOOKING_FOR_DUNGEON_PVEFRAME)
-	wrapper:AddChild(groupCore)
-
-	local data = {
-		{
-			text = L["groupfinderAppText"],
-			var = "groupfinderAppText",
-			func = function(self, _, value)
-				addon.db["groupfinderAppText"] = value
-				toggleGroupApplication(value)
-			end,
-		},
-		{
-			text = L["groupfinderMoveResetButton"],
-			var = "groupfinderMoveResetButton",
-			func = function(self, _, value)
-				addon.db["groupfinderMoveResetButton"] = value
-				toggleLFGFilterPosition()
-			end,
-		},
-		{
-			text = L["groupfinderSkipRoleSelect"],
-			var = "groupfinderSkipRoleSelect",
-			func = function(self, _, value)
-				addon.db["groupfinderSkipRoleSelect"] = value
-				container:ReleaseChildren()
-				addDungeonFrame(container)
-			end,
-			desc = L["interruptWithShift"],
-		},
-		{
-			parent = DELVES_LABEL,
-			var = "autoChooseDelvePower",
-			text = L["autoChooseDelvePower"],
-			type = "CheckBox",
-			func = function(self, _, value) addon.db["autoChooseDelvePower"] = value end,
-		},
-		{
-			parent = DUNGEONS,
-			var = "persistSignUpNote",
-			text = L["Persist LFG signup note"],
-			type = "CheckBox",
-			func = function(self, _, value) addon.db["persistSignUpNote"] = value end,
-		},
-		{
-			parent = DUNGEONS,
-			var = "skipSignUpDialog",
-			text = L["Quick signup"],
-			type = "CheckBox",
-			func = function(self, _, value) addon.db["skipSignUpDialog"] = value end,
-		},
-		{
-			parent = DUNGEONS,
-			var = "lfgSortByRio",
-			text = L["lfgSortByRio"],
-			type = "CheckBox",
-			func = function(self, _, value) addon.db["lfgSortByRio"] = value end,
-		},
-		{
-			parent = DUNGEONS,
-			var = "enableChatIMRaiderIO",
-			text = L["enableChatIMRaiderIO"],
-			type = "CheckBox",
-			func = function(self, _, value) addon.db["enableChatIMRaiderIO"] = value end,
-		},
-	}
-	table.sort(data, function(a, b) return a.text < b.text end)
-
-	for _, cbData in ipairs(data) do
-		local desc
-		if cbData.desc then desc = cbData.desc end
-		local cbElement = addon.functions.createCheckboxAce(cbData.text, addon.db[cbData.var], cbData.func, desc)
-		groupCore:AddChild(cbElement)
-	end
-
-	local cbTimeoutRelease = addon.functions.createCheckboxAce(L["timeoutRelease"], addon.db["timeoutRelease"], function(_, _, value)
-		addon.db["timeoutRelease"] = value and true or false
-		if value and addon.db["timeoutReleaseDifficulties"] == nil then
-			addon.db["timeoutReleaseDifficulties"] = {}
-			for _, groupInfo in ipairs(timeoutReleaseGroups) do
-				addon.db["timeoutReleaseDifficulties"][groupInfo.key] = true
-			end
-		end
-		container:ReleaseChildren()
-		addDungeonFrame(container)
-	end, L["timeoutReleaseDesc"])
-	groupCore:AddChild(cbTimeoutRelease)
-
-	if addon.db["timeoutRelease"] then
-		local modifierDisplayNames = {
-			SHIFT = "SHIFT",
-			CTRL = "CTRL",
-			ALT = "ALT",
-		}
-		local modifierCheckers = {
-			SHIFT = function() return IsShiftKeyDown() end,
-			CTRL = function() return IsControlKeyDown() end,
-			ALT = function() return IsAltKeyDown() end,
-		}
-		local modifierOptions = {
-			SHIFT = modifierDisplayNames.SHIFT or "SHIFT",
-			CTRL = modifierDisplayNames.CTRL or "CTRL",
-			ALT = modifierDisplayNames.ALT or "ALT",
-		}
-		local modifierOrder = { "SHIFT", "CTRL", "ALT" }
-		local modifierDropdown = addon.functions.createDropdownAce(L["timeoutReleaseModifierLabel"] or "Modifier key", modifierOptions, modifierOrder, function(_, _, key)
-			if modifierCheckers[key] then addon.db["timeoutReleaseModifier"] = key end
-		end)
-		modifierDropdown:SetValue(addon.db["timeoutReleaseModifier"] or "SHIFT")
-		groupCore:AddChild(modifierDropdown)
-	end
-
-	if addon.db["groupfinderSkipRoleSelect"] then
-		local list, order = addon.functions.prepareListForDropdown({ [1] = L["groupfinderSkipRolecheckUseSpec"], [2] = L["groupfinderSkipRolecheckUseLFD"] }, true)
-
-		local dropRoleSelect = addon.functions.createDropdownAce("", list, order, function(self, _, value) addon.db["groupfinderSkipRoleSelectOption"] = value end)
-		dropRoleSelect:SetValue(addon.db["groupfinderSkipRoleSelectOption"])
-
-		local groupSkipRole = addon.functions.createContainer("InlineGroup", "List")
-		wrapper:AddChild(groupSkipRole)
-		groupSkipRole:SetTitle(L["groupfinderSkipRolecheckHeadline"])
-		groupSkipRole:AddChild(dropRoleSelect)
-	end
-end
-
 local function setCVarValue(cvarKey, newValue)
 	if newValue == nil then return end
 
@@ -5713,7 +5578,7 @@ local function CreateUI()
 			-- CraftShopper is integrated into the Selling root; no standalone panel
 			-- Combat & Dungeons
 		elseif group == "combat" then
-			addDungeonFrame(container)
+			Settings.OpenToCategory(addon.SettingsLayout.characterInspectCategory:GetID())
 		-- Forward Combat subtree for modules (Mythic+, Aura, Drink, CombatMeter)
 		elseif string.sub(group, 1, string.len("combat\001")) == "combat\001" then
 			-- Normalize and dispatch for known combat modules
@@ -6433,11 +6298,11 @@ local eventHandlers = {
 	["MODIFIER_STATE_CHANGED"] = function(arg1, arg2)
 		if not addon.db["timeoutRelease"] then return end
 		if not UnitIsDead("player") then return end
-		local modifierKey = getTimeoutReleaseModifierKey()
+		local modifierKey = addon.functions.getTimeoutReleaseModifierKey()
 		if not (arg1 and arg1:match(modifierKey)) then return end
 
 		local _, stp = StaticPopup_Visible("DEATH")
-		if stp and stp.GetButton and shouldUseTimeoutReleaseForCurrentContext() then
+		if stp and stp.GetButton and addon.functions.shouldUseTimeoutReleaseForCurrentContext() then
 			local btn = stp:GetButton(1)
 			if btn then btn:SetAlpha(arg2 or 0) end
 		end
