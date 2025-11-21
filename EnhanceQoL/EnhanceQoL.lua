@@ -3883,6 +3883,7 @@ local function CreateUI()
 			{ value = "loot", text = L["Loot"] },
 			{ value = "gear", text = L["GearUpgrades"] },
 			{ value = "economy", text = L["VendorsEconomy"] },
+			{ value = "container", text = L["ContainerActions"] }
 		},
 	})
 
@@ -3922,12 +3923,6 @@ local function CreateUI()
 
 	if addMediaRoot then addon.functions.addToTree(nil, { value = "media", text = L["Media & Sound"] or "Media & Sound" }) end
 
-	-- Conditionally add "Container Actions" under Items if a page is registered
-	if addon.functions.HasOptionsPage and addon.functions.HasOptionsPage("items\001container") then
-		addon.functions.addToTree("items", { value = "container", text = L["ContainerActions"] }, true)
-		addon.treeGroup:SetTree(addon.treeGroupData)
-	end
-
 	-- Top: Events
 	-- if addon.functions.IsTimerunner() then addon.functions.addToTree(nil, {
 	-- 	value = "events",
@@ -3957,6 +3952,8 @@ local function CreateUI()
 		-- Forward Combat subtree for modules (Mythic+, Aura, Drink, CombatMeter)
 		elseif group == "items" then
 			Settings.OpenToCategory(addon.SettingsLayout.inventoryCategory:GetID())
+		elseif group == "items\001container" then
+			Settings.OpenToCategory(addon.SettingsLayout.containerActionCategory:GetID())
 		-- Forward Combat subtree for modules (Mythic+, Aura, Drink, CombatMeter)
 		elseif string.sub(group, 1, string.len("combat\001")) == "combat\001" then
 			-- Normalize and dispatch for known combat modules
