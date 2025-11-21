@@ -142,6 +142,7 @@ function addon.functions.SettingsCreateDropdown(cat, cbData, searchtags)
 
 	local dropdown = Settings.CreateDropdown(cat, setting, options, cbData.desc)
 	if cbData.parent then dropdown:SetParentInitializer(cbData.element, cbData.parentCheck) end
+	if cbData.notify then addon.functions.SettingsCreateNotify(setting, cbData.notify) end
 end
 
 function addon.functions.SettingsCreateButton(layout, text, func, tooltip, searchtags)

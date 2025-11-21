@@ -139,7 +139,6 @@ local data = {
 		end,
 		children = {
 			{
-
 				var = "enableLootToastCustomSound",
 				text = L["enableLootToastCustomSound"],
 				get = function() return addon.db["lootToastUseCustomSound"] or false end,
@@ -153,6 +152,40 @@ local data = {
 				default = false,
 				type = Settings.VarType.Boolean,
 				sType = "checkbox",
+				children = {
+					{
+						listFunc = function()
+							if addon.ChatIM and addon.ChatIM.BuildSoundTable and not addon.ChatIM.availableSounds then addon.ChatIM:BuildSoundTable() end
+							local tList = { [""] = "" }
+							for name in pairs(addon.ChatIM.availableSounds or {}) do
+								tList[name] = name
+							end
+							return tList
+						end,
+						text = L["lootToastCustomSound"],
+						get = function() return addon.db.lootToastCustomSoundFile or "" end,
+						set = function(key)
+							addon.db.lootToastCustomSoundFile = key
+							local file = addon.ChatIM.availableSounds and addon.ChatIM.availableSounds[key]
+							if file then PlaySoundFile(file, "Master") end
+						end,
+						parentCheck = function()
+							return addon.SettingsLayout.elements["enableLootToastFilter"]
+								and addon.SettingsLayout.elements["enableLootToastFilter"].setting
+								and addon.SettingsLayout.elements["enableLootToastFilter"].setting:GetValue() == true
+								and addon.SettingsLayout.elements["enableLootToastCustomSound"]
+								and addon.SettingsLayout.elements["enableLootToastCustomSound"].setting
+								and addon.SettingsLayout.elements["enableLootToastCustomSound"].setting:GetValue() == true
+						end,
+						parent = true,
+						default = "",
+						var = "lootToastCustomSound",
+						type = Settings.VarType.String,
+						sType = "dropdown",
+						-- TODO notify geht nicht
+						notify = "enableLootToastFilter",
+					},
+				},
 			},
 		},
 	},
