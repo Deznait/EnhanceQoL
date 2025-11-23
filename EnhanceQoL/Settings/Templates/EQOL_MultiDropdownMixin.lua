@@ -121,7 +121,9 @@ function EQOL_MultiDropdownMixin:InitDropdown()
     self:SetupDropdownMenu(self.Control.Dropdown, setting, optionsFunc, initTooltip)
 
     -- Steppers brauchst du bei Multi-Select i.d.R. nicht
-    self.Control:SetSteppersShown(false)
+    if self.Control and self.Control.SetSteppersShown then
+        self.Control:SetSteppersShown(false)
+    end
 end
 
 -- OVERRIDE: kein Settings.InitDropdown mehr, wir bauen das Menü selbst
