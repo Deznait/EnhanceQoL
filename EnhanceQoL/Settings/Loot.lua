@@ -349,6 +349,8 @@ StaticPopupDialogs[includeDialogKey].EditBoxOnEnterPressed = function(editBox)
 	if parent and parent.button1 then parent.button1:Click() end
 end
 
+addon.functions.SettingsCreateHeadline(cLoot, L["Include"])
+
 local lootLayout = SettingsPanel:GetLayout(cLoot)
 local includeButton = CreateSettingsButtonInitializer("", L["Include"], function() StaticPopup_Show(includeDialogKey) end, L["includeInfoLoot"], true)
 includeButton:SetParentInitializer(addon.SettingsLayout.elements["enableLootToastFilter"].element, isLootToastFilterEnabled)
@@ -365,6 +367,34 @@ local function buildIncludeDropdownList()
 	return list
 end
 
+local function clearIncludeDropdownSelection()
+	local entry = addon.SettingsLayout.elements["lootToastIncludeRemove"]
+	if entry and entry.setting then entry.setting:SetValue("") end
+end
+
+local function removeIncludeEntry(key)
+	if not key or key == "" then return end
+	addon.db.lootToastIncludeIDs = addon.db.lootToastIncludeIDs or {}
+	local index = tonumber(key) or key
+	if not addon.db.lootToastIncludeIDs[index] then return end
+	addon.db.lootToastIncludeIDs[index] = nil
+	Settings.NotifyUpdate("EQOL_lootToastIncludeRemove")
+	clearIncludeDropdownSelection()
+end
+
+local includeRemoveDialogKey = "EQOL_LOOT_INCLUDE_REMOVE"
+StaticPopupDialogs[includeRemoveDialogKey] = StaticPopupDialogs[includeRemoveDialogKey]
+	or {
+		text = L["lootToastIncludeRemoveConfirm"],
+		button1 = ACCEPT,
+		button2 = CANCEL,
+		timeout = 0,
+		whileDead = true,
+		hideOnEscape = true,
+		preferredIndex = 3,
+	}
+StaticPopupDialogs[includeRemoveDialogKey].OnAccept = function(_, data) removeIncludeEntry(data) end
+
 addon.functions.SettingsCreateDropdown(cLoot, {
 	var = "lootToastIncludeRemove",
 	text = string.format("%s %s", REMOVE, L["Include"]),
@@ -372,14 +402,11 @@ addon.functions.SettingsCreateDropdown(cLoot, {
 	get = function() return "" end,
 	set = function(key)
 		if not key or key == "" then return end
-		addon.db.lootToastIncludeIDs = addon.db.lootToastIncludeIDs or {}
 		local index = tonumber(key) or key
-		addon.db.lootToastIncludeIDs[index] = nil
-
-		local entry = addon.SettingsLayout.elements["lootToastIncludeRemove"]
-		if entry and entry.setting then entry.setting:SetValue("") end
-
-		Settings.NotifyUpdate("EQOL_lootToastIncludeRemove")
+		addon.db.lootToastIncludeIDs = addon.db.lootToastIncludeIDs or {}
+		local label = addon.db.lootToastIncludeIDs[index] or tostring(index)
+		StaticPopup_Show(includeRemoveDialogKey, label, nil, index)
+		clearIncludeDropdownSelection()
 	end,
 	parent = true,
 	element = addon.SettingsLayout.elements["enableLootToastFilter"].element,

@@ -293,6 +293,7 @@ L["Include"] = "Include"
 L["IncludeVendorList"] = "Itemlist"
 L["Item id or drag item"] = "Item id or drag item"
 L["lootToastItemAdded"] = "Added %s (%d) to the include list"
+L["lootToastIncludeRemoveConfirm"] = "Remove %s from the include list?"
 L["Item id does not exist"] = "Item id does not exist"
 
 -- Mailbox Address Book
