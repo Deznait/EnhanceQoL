@@ -9,4 +9,5 @@
 	<Script file='Loot.lua'/>
 	<Script file='MapNavigation.lua'/>
 	<Script file='Quest.lua'/>
+	<Script file='ChatFrame.lua'/>
 </Ui>

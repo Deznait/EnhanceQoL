@@ -71,6 +71,15 @@ elseif classname == "DRUID" then
 			end
 		end,
 	})
+	table.insert(data, {
+		var = "autoCancelDruidFlightForm",
+		text = L["autoCancelDruidFlightForm"],
+		desc = L["autoCancelDruidFlightFormDesc"],
+		func = function(_, _, value)
+			addon.db["autoCancelDruidFlightForm"] = value and true or false
+			if addon.functions.updateDruidFlightFormWatcher then addon.functions.updateDruidFlightFormWatcher() end
+		end,
+	})
 elseif classname == "EVOKER" then
 	table.insert(data, {
 		var = "evoker_HideEssence",
@@ -246,6 +255,109 @@ data = {
 }
 addon.functions.SettingsCreateCheckboxes(cUIInput, data)
 
+addon.functions.SettingsCreateHeadline(cUIInput, AUCTION_CATEGORY_MISCELLANEOUS)
+
+data = {
+	{
+		var = "ignoreTalkingHead",
+		text = string.format(L["ignoreTalkingHeadN"], HUD_EDIT_MODE_TALKING_HEAD_FRAME_LABEL),
+		func = function(v) addon.db["ignoreTalkingHead"] = v end,
+	},
+	{
+		var = "hideDynamicFlightBar",
+		text = L["hideDynamicFlightBar"]:format(DYNAMIC_FLIGHT),
+		func = function(v)
+			addon.db["hideDynamicFlightBar"] = v
+			addon.functions.toggleDynamicFlightBar(addon.db["hideDynamicFlightBar"])
+		end,
+	},
+	{
+		var = "hideQuickJoinToast",
+		text = HIDE .. " " .. COMMUNITIES_NOTIFICATION_SETTINGS_DIALOG_QUICK_JOIN_LABEL,
+		func = function(v)
+			addon.db["hideQuickJoinToast"] = v
+			addon.functions.toggleQuickJoinToastButton(addon.db["hideQuickJoinToast"])
+		end,
+	},
+	{
+		var = "hideZoneText",
+		text = L["hideZoneText"],
+		func = function(v)
+			addon.db["hideZoneText"] = v
+			addon.functions.toggleZoneText(addon.db["hideZoneText"])
+		end,
+	},
+	{
+		var = "hideOrderHallBar",
+		text = L["hideOrderHallBar"],
+		func = function(v)
+			addon.db["hideOrderHallBar"] = v
+			if OrderHallCommandBar then
+				if v then
+					OrderHallCommandBar:Hide()
+				else
+					OrderHallCommandBar:Show()
+				end
+			end
+		end,
+	},
+	{
+		var = "hideMinimapButton",
+		text = L["hideMinimapButton"],
+		func = function(v)
+			addon.db["hideMinimapButton"] = v
+			addon.functions.toggleMinimapButton(addon.db["hideMinimapButton"])
+		end,
+	},
+	{
+		var = "hideRaidTools",
+		text = L["hideRaidTools"],
+		func = function(v)
+			addon.db["hideRaidTools"] = v
+			addon.functions.toggleRaidTools(addon.db["hideRaidTools"], _G.CompactRaidFrameManager)
+		end,
+	},
+	{
+		var = "gameMenuScaleEnabled",
+		text = L["gameMenuScaleEnabled"],
+		func = function(v)
+			addon.db["gameMenuScaleEnabled"] = v
+			if value then
+				addon.functions.applyGameMenuScale()
+			else
+				-- Only restore default if we were the last to apply a scale
+				if GameMenuFrame and addon.variables and addon.variables.gameMenuScaleLastApplied then
+					local current = GameMenuFrame:GetScale() or 1.0
+					if math.abs(current - addon.variables.gameMenuScaleLastApplied) < 0.0001 then GameMenuFrame:SetScale(1.0) end
+				end
+			end
+		end,
+		children = {
+			{
+				var = "gameMenuScale",
+				text = L["gameMenuScale"],
+				get = function() return addon.db and addon.db.gameMenuScale or 1 end,
+				set = function(val)
+					local rounded = math.floor(val * 100 + 0.5) / 100
+					addon.db["gameMenuScale"] = rounded
+					addon.functions.applyGameMenuScale()
+				end,
+				parentCheck = function()
+					return addon.SettingsLayout.elements["gameMenuScaleEnabled"]
+						and addon.SettingsLayout.elements["gameMenuScaleEnabled"].setting
+						and addon.SettingsLayout.elements["gameMenuScaleEnabled"].setting:GetValue() == true
+				end,
+				min = 0.5,
+				max = 3,
+				step = 0.05,
+				parent = true,
+				default = 1,
+				sType = "slider",
+			},
+		},
+	},
+}
+addon.functions.SettingsCreateCheckboxes(cUIInput, data)
 ----- REGION END
 
 function addon.functions.initUIInput()

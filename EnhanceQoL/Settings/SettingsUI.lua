@@ -67,6 +67,8 @@ function addon.functions.SettingsCreateCheckbox(cat, cbData)
 				addon.functions.SettingsCreateText(cat, v.text)
 			elseif v.sType == "colorpicker" then
 				addon.functions.SettingsCreateColorPicker(cat, v)
+			elseif v.sType == "button" then
+				addon.functions.SettingsCreateButton(cat, v)
 			end
 		end
 	end
@@ -119,12 +121,6 @@ function addon.functions.SettingsCreateText(cat, text)
 	charHeader:AddSearchTags(text)
 end
 
-function addon.functions.SettingsCreateButton(layout, text, func, searchtags)
-	searchtags = searchtags or false
-	local btn = CreateSettingsButtonInitializer("", text, func or function() end, nil, searchtags)
-	layout:AddInitializer(btn)
-end
-
 function addon.functions.SettingsCreateDropdown(cat, cbData, searchtags)
 	local options = function()
 		local container = Settings.CreateControlTextContainer()
@@ -152,10 +148,12 @@ function addon.functions.SettingsCreateDropdown(cat, cbData, searchtags)
 	if cbData.notify then addon.functions.SettingsCreateNotify(setting, cbData.notify) end
 end
 
-function addon.functions.SettingsCreateButton(layout, text, func, tooltip, searchtags)
-	local btn = CreateSettingsButtonInitializer("", text, func, tooltip, searchtags)
-	layout:AddInitializer(btn)
-	addon.SettingsLayout.elements[text] = { element = btn }
+function addon.functions.SettingsCreateButton(cat, cbData)
+	cbData.searchtags = cbData.searchtags or false
+	local btn = CreateSettingsButtonInitializer("", cbData.text, cbData.func, cbData.desc, cbData.searchtags)
+	SettingsPanel:GetLayout(cat):AddInitializer(btn)
+	addon.SettingsLayout.elements[cbData.var] = { element = btn }
+	if cbData.parent then btn:SetParentInitializer(cbData.element, cbData.parentCheck) end
 end
 
 local function SortMixedKeys(keys)
@@ -227,7 +225,7 @@ function addon.functions.SettingsCreateColorPicker(cat, cbData)
 			return col.r or 0, col.g or 0, col.b or 0
 		end,
 		setColor = function(_, r, g, b)
-			if cbData.subvar then 
+			if cbData.subvar then
 				addon.db[cbData.var][cbData.subvar] = { r = r, g = g, b = b }
 			else
 				addon.db[cbData.var] = { r = r, g = g, b = b }
