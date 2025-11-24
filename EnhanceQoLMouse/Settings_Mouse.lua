@@ -144,8 +144,89 @@ local data = {
 				end,
 				parent = true,
 				default = false,
-                headerText = "Test",
+				headerText = "Test",
 				sType = "colorpicker",
+			},
+		},
+	},
+}
+table.sort(data[1].children, function(a, b) return a.text < b.text end)
+addon.functions.SettingsCreateCheckboxes(cMouse, data)
+
+addon.functions.SettingsCreateHeadline(cMouse, L["mouseTrail"])
+addon.functions.SettingsCreateText(cMouse, "|cff99e599" .. L["Trailinfo"] .. "|r")
+
+data = {
+	{
+		var = "mouseTrailEnabled",
+		text = L["mouseTrailEnabled"],
+		func = function(v) addon.db["mouseTrailEnabled"] = v end,
+		children = {
+			{
+
+				var = "mouseTrailOnlyInCombat",
+				text = L["mouseTrailOnlyInCombat"],
+				func = function(v) addon.db["mouseTrailOnlyInCombat"] = v end,
+				parentCheck = function()
+					return addon.SettingsLayout.elements["mouseTrailEnabled"]
+						and addon.SettingsLayout.elements["mouseTrailEnabled"].setting
+						and addon.SettingsLayout.elements["mouseTrailEnabled"].setting:GetValue() == true
+				end,
+				parent = true,
+				default = false,
+				type = Settings.VarType.Boolean,
+				sType = "checkbox",
+			},
+			{
+
+				var = "mouseTrailUseClassColor",
+				text = L["mouseTrailUseClassColor"],
+				func = function(v) addon.db["mouseTrailUseClassColor"] = v end,
+				parentCheck = function()
+					return addon.SettingsLayout.elements["mouseTrailEnabled"]
+						and addon.SettingsLayout.elements["mouseTrailEnabled"].setting
+						and addon.SettingsLayout.elements["mouseTrailEnabled"].setting:GetValue() == true
+				end,
+				parent = true,
+				default = false,
+				type = Settings.VarType.Boolean,
+				sType = "checkbox",
+				notify = "mouseTrailEnabled",
+			},
+			{
+				var = "mouseTrailColor",
+				text = L["Trail Color"],
+				parentCheck = function()
+					return addon.SettingsLayout.elements["mouseTrailEnabled"]
+						and addon.SettingsLayout.elements["mouseTrailEnabled"].setting
+						and addon.SettingsLayout.elements["mouseTrailEnabled"].setting:GetValue() == true
+						and addon.SettingsLayout.elements["mouseTrailUseClassColor"]
+						and addon.SettingsLayout.elements["mouseTrailUseClassColor"].setting
+						and addon.SettingsLayout.elements["mouseTrailUseClassColor"].setting:GetValue() == false
+				end,
+				parent = true,
+				default = false,
+				sType = "colorpicker",
+			},
+			{
+				list = { [1] = VIDEO_OPTIONS_LOW, [2] = VIDEO_OPTIONS_MEDIUM, [3] = VIDEO_OPTIONS_HIGH, [4] = VIDEO_OPTIONS_ULTRA, [5] = VIDEO_OPTIONS_ULTRA_HIGH, _order = { 1, 2, 3, 4, 5 } },
+
+				text = L["mouseTrailDensity"],
+				get = function() return addon.db["mouseTrailDensity"] or 1 end,
+				set = function(key)
+					addon.db["mouseTrailDensity"] = key
+					addon.Mouse.functions.applyPreset(addon.db["mouseTrailDensity"])
+				end,
+				parentCheck = function()
+					return addon.SettingsLayout.elements["mouseTrailEnabled"]
+						and addon.SettingsLayout.elements["mouseTrailEnabled"].setting
+						and addon.SettingsLayout.elements["mouseTrailEnabled"].setting:GetValue() == true
+				end,
+				parent = true,
+				default = 1,
+				var = "mouseTrailDensity",
+				type = Settings.VarType.Number,
+				sType = "dropdown",
 			},
 		},
 	},
