@@ -158,6 +158,21 @@ function addon.functions.SettingsCreateButton(layout, text, func, tooltip, searc
 	addon.SettingsLayout.elements[text] = { element = btn }
 end
 
+local function SortMixedKeys(keys)
+	table.sort(keys, function(a, b)
+		local ta, tb = type(a), type(b)
+		if ta == tb then
+			if ta == "number" then return a < b end
+			if ta == "string" then return a < b end
+			return tostring(a) < tostring(b)
+		end
+		if ta == "number" then return true end
+		if tb == "number" then return false end
+		return tostring(a) < tostring(b)
+	end)
+	return keys
+end
+
 function addon.functions.SettingsCreateMultiDropdown(cat, cbData)
 	addon.db = addon.db or {}
 	addon.db[cbData.var] = addon.db[cbData.var] or {}
@@ -165,12 +180,13 @@ function addon.functions.SettingsCreateMultiDropdown(cat, cbData)
 	-- Setting nur als „Träger“ im Settings-System (kannst du auch weglassen)
 	local setting = Settings.RegisterProxySetting(cat, "EQOL_" .. cbData.var, Settings.VarType.String, cbData.text, "", function()
 		-- Summary-String (für Settings-System, wenn du willst)
-		local t = addon.db[cbData.var] or {}
+		local t = addon.db[cbData.var]
+		if type(t) ~= "table" then t = {} end
 		local keys = {}
-		for k in pairs(t) do
-			table.insert(keys, k)
+		for k, v in pairs(t) do
+			if v then table.insert(keys, k) end
 		end
-		table.sort(keys)
+		SortMixedKeys(keys)
 		return table.concat(keys, ",")
 	end, function(_, _, value)
 	end)

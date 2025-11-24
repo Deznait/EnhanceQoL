@@ -341,20 +341,51 @@ addon.functions.SettingsCreateCheckboxes(cMapNav, data)
 
 addon.functions.SettingsCreateText(cMapNav, "|cff99e599" .. L["landingPageHide"] .. "|r")
 
+local function resolveLandingPageId(value)
+	if type(value) == "number" then return value end
+	if type(value) == "string" then
+		local reverse = addon.variables and addon.variables.landingPageReverse
+		return (reverse and reverse[value]) or tonumber(value)
+	end
+end
+
+local function normalizeHiddenLandingPages()
+	addon.db.hiddenLandingPages = addon.db.hiddenLandingPages or {}
+	local toClear = {}
+	for key, flag in pairs(addon.db.hiddenLandingPages) do
+		if type(key) ~= "number" then
+			local resolved = resolveLandingPageId(key)
+			if resolved then
+				addon.db.hiddenLandingPages[resolved] = flag and true or nil
+				table.insert(toClear, key)
+			end
+		end
+	end
+	for _, key in ipairs(toClear) do addon.db.hiddenLandingPages[key] = nil end
+end
+
+normalizeHiddenLandingPages()
+
 local function getIgnoreStateLandingPage(value)
 	if not value then return false end
-	return (addon.db["hiddenLandingPages"] and addon.db["hiddenLandingPages"][value]) and true or false
+	addon.db.hiddenLandingPages = addon.db.hiddenLandingPages or {}
+	local resolved = resolveLandingPageId(value)
+	if not resolved then return false end
+	return addon.db.hiddenLandingPages[resolved] and true or false
 end
 
 local function setIgnoreStateLandingPage(value, shouldSelect)
 	if not value then return end
+	addon.db.hiddenLandingPages = addon.db.hiddenLandingPages or {}
+	local resolved = resolveLandingPageId(value)
+	if not resolved then return end
 	if shouldSelect then
-		addon.db["hiddenLandingPages"][value] = true
+		addon.db.hiddenLandingPages[resolved] = true
 	else
-		addon.db["hiddenLandingPages"][value] = nil
+		addon.db.hiddenLandingPages[resolved] = nil
 	end
-	local page = addon.variables.landingPageType[value]
-	addon.functions.toggleLandingPageButton(page.title, shouldSelect)
+	local page = addon.variables and addon.variables.landingPageType and addon.variables.landingPageType[resolved]
+	if page and addon.functions.toggleLandingPageButton then addon.functions.toggleLandingPageButton(page.title, shouldSelect) end
 end
 
 addon.functions.SettingsCreateMultiDropdown(cMapNav, {

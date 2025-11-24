@@ -3,6 +3,20 @@ local addonName, addon = ...
 EQOL_MultiDropdownMixin = CreateFromMixins(SettingsDropdownControlMixin)
 
 local SUMMARY_CHAR_LIMIT = 80
+local function SortMixedKeys(keys)
+	table.sort(keys, function(a, b)
+		local ta, tb = type(a), type(b)
+		if ta == tb then
+			if ta == "number" then return a < b end
+			if ta == "string" then return a < b end
+			return tostring(a) < tostring(b)
+		end
+		if ta == "number" then return true end
+		if tb == "number" then return false end
+		return tostring(a) < tostring(b)
+	end)
+	return keys
+end
 
 function EQOL_MultiDropdownMixin:OnLoad()
 	-- erzeugt self.Control, self.Control.Dropdown, Tooltip-Verhalten etc.
@@ -171,11 +185,10 @@ end
 
 function EQOL_MultiDropdownMixin:SerializeSelection(tbl)
 	local keys = {}
-	for k in pairs(tbl) do
-		print(k, type(k))
-		table.insert(keys, k)
+	for k, v in pairs(tbl) do
+		if v then table.insert(keys, k) end
 	end
-	table.sort(keys)
+	SortMixedKeys(keys)
 	return table.concat(keys, ",")
 end
 
