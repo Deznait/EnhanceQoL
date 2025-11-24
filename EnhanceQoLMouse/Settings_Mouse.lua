@@ -144,6 +144,7 @@ local data = {
 				end,
 				parent = true,
 				default = false,
+                headerText = "Test",
 				sType = "colorpicker",
 			},
 		},

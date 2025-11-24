@@ -72,8 +72,12 @@
 		</Scripts>
 	</Frame>
 
-	<Frame name="EQOL_ColorOverridesPanelNoHead" mixin="EQOL_ColorOverridesMixin" virtual="true">
-		<Size x="200" y="25"/>
+	<Frame name="EQOL_ColorOverridesPanelNoHead" 
+		mixin="EQOL_ColorOverridesMixin" 
+		inherits="SettingsListElementTemplate"
+		virtual="true"
+	>		
+	<Size x="200" y="25"/>
 		<Layers>
 			<Layer level="ARTWORK">
 				<FontString parentKey="Header" inherits="GameFontNormal" justifyH="LEFT">

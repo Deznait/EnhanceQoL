@@ -4,7 +4,7 @@ local DEFAULT_ROW_HEIGHT = 20
 local DEFAULT_PADDING = 16
 local DEFAULT_SPACING = 6
 
-EQOL_ColorOverridesMixin = {}
+EQOL_ColorOverridesMixin = CreateFromMixins(SettingsListElementMixin)
 
 local function WipeTable(tbl)
 	if not tbl then return end
@@ -14,12 +14,16 @@ local function WipeTable(tbl)
 end
 
 function EQOL_ColorOverridesMixin:OnLoad()
+	SettingsListElementMixin.OnLoad(self)
+
 	self.container = self.ItemQualities or self.List or self
 	self.ColorOverrideFramePool = CreateFramePool("FRAME", self.container, "ColorOverrideTemplate")
 	self.colorOverrideFrames = {}
 end
 
 function EQOL_ColorOverridesMixin:Init(initializer)
+	SettingsListElementMixin.Init(self, initializer)
+
 	self.categoryID = initializer.data.categoryID
 	self.entries = initializer.data.entries or {}
 	self.getColor = initializer.data.getColor
@@ -31,6 +35,7 @@ function EQOL_ColorOverridesMixin:Init(initializer)
 	self.minHeight = initializer.data.minHeight
 	self.fixedHeight = initializer.data.height
 	self.fixedSpacing = initializer.data.spacing
+	self.parentCheck = initializer.data.parentCheck
 
 	if self.Header then self.Header:SetText(self.headerText) end
 	if self.NewFeature then self.NewFeature:SetShown(false) end
@@ -89,34 +94,6 @@ function EQOL_ColorOverridesMixin:RefreshAll()
 	end
 end
 
-function EQOL_ColorOverridesMixin:UpdatePanelHeight()
-	local container = self.container
-	local desired
-
-	if container and container.Layout then
-		container:Layout()
-		desired = self.basePadding + (container:GetHeight() or 0)
-	else
-		local spacing = self:GetSpacing()
-		local total, shown = 0, 0
-		for _, frame in ipairs(self.colorOverrideFrames or {}) do
-			if frame:IsShown() then
-				local h = frame:GetHeight()
-				if not h or h == 0 then h = self.rowHeight end
-				total = total + h
-				shown = shown + 1
-			end
-		end
-		if shown == 0 then total = self.rowHeight end
-		desired = self.basePadding + total + math.max(shown - 1, 0) * spacing
-	end
-
-	if self.minHeight then desired = math.max(desired, self.minHeight) end
-
-	local height = self.fixedHeight or desired
-	self:SetHeight(height)
-end
-
 function EQOL_ColorOverridesMixin:ResetToDefaults()
 	if not (self.getDefaultColor and self.setColor) then return end
 	for _, entry in ipairs(self.entries or {}) do
@@ -149,4 +126,21 @@ function EQOL_ColorOverridesMixin:OpenColorPicker(frame)
 			self:RefreshRow(frame)
 		end,
 	})
+end
+
+function EQOL_ColorOverridesMixin:Release()
+	if self.ColorOverrideFramePool then self.ColorOverrideFramePool:ReleaseAll() end
+	SettingsListElementMixin.Release(self)
+end
+
+function EQOL_ColorOverridesMixin:EvaluateState()
+	SettingsListElementMixin.EvaluateState(self)
+
+	local enabled = true
+	if self.parentCheck then enabled = self.parentCheck() end
+
+	for _, frame in ipairs(self.colorOverrideFrames or {}) do
+		if frame.ColorSwatch then frame.ColorSwatch:SetEnabled(enabled) end
+		if frame.Text then frame.Text:SetFontObject(enabled and GameFontNormalSmall or GameFontDisableSmall) end
+	end
 end

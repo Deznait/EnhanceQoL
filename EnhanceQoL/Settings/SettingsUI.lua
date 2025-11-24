@@ -192,7 +192,7 @@ function addon.functions.SettingsCreateMultiDropdown(cat, cbData)
 end
 
 function addon.functions.SettingsCreateColorPicker(cat, cbData)
-	local colorPicker = Settings.CreatePanelInitializer("EQOL_ColorOverridesPanelNoHead", {
+	local colorPicker = Settings.CreateElementInitializer("EQOL_ColorOverridesPanelNoHead", {
 		categoryID = cat:GetID(),
 		entries = {
 			{ key = cbData.var, label = cbData.text, tooltip = cbData.tooltip },
@@ -206,9 +206,10 @@ function addon.functions.SettingsCreateColorPicker(cat, cbData)
 			if cbData.callback then cbData.callback(r, g, b, 1) end
 		end,
 		getDefaultColor = function() return 1, 1, 1 end,
+		parentCheck = cbData.parentCheck,
 	})
 	Settings.RegisterInitializer(cat, colorPicker)
-	-- if cbData.parent then colorPicker:SetParentInitializer(cbData.element, cbData.parentCheck) end
+	if cbData.parent then colorPicker:SetParentInitializer(cbData.element, cbData.parentCheck) end
 
 	addon.SettingsLayout = addon.SettingsLayout or {}
 	addon.SettingsLayout.elements = addon.SettingsLayout.elements or {}
