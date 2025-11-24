@@ -118,6 +118,7 @@ table.sort(data, function(a, b) return a.text < b.text end)
 addon.functions.SettingsCreateCheckboxes(cChatFrame, data)
 
 addon.functions.SettingsCreateHeadline(cChatFrame, L["Instant Chats"])
+addon.functions.SettingsCreateText(cChatFrame, "|cff99e599" .. L["RightClickCloseTab"] .. "|r")
 
 data = {
 	{
@@ -270,6 +271,44 @@ data = {
 table.sort(data[1].children, function(a, b) return a.text < b.text end)
 table.sort(data, function(a, b) return a.text < b.text end)
 addon.functions.SettingsCreateCheckboxes(cChatFrame, data)
+
+data = {
+	listFunc = function()
+		local tList = { [""] = "" }
+		for name in pairs(EnhanceQoL_IMHistory or {}) do
+			tList[name] = name
+		end
+		return tList
+	end,
+	text = L["ChatIMHistoryDelete"],
+	get = function() return "" end,
+	set = function(key)
+		StaticPopupDialogs["EQOL_DELETE_IM_HISTORY"] = StaticPopupDialogs["EQOL_DELETE_IM_HISTORY"]
+			or {
+				text = L["ChatIMHistoryDeleteConfirm"],
+				button1 = YES,
+				button2 = CANCEL,
+				timeout = 0,
+				whileDead = true,
+				hideOnEscape = true,
+				preferredIndex = 3,
+			}
+		StaticPopupDialogs["EQOL_DELETE_IM_HISTORY"].OnAccept = function()
+			EnhanceQoL_IMHistory[key] = nil
+			if addon.ChatIM and addon.ChatIM.history then addon.ChatIM.history[key] = nil end
+		end
+		StaticPopup_Show("EQOL_DELETE_IM_HISTORY", key)
+	end,
+	parentCheck = function()
+		return addon.SettingsLayout.elements["enableChatIM"] and addon.SettingsLayout.elements["enableChatIM"].setting and addon.SettingsLayout.elements["enableChatIM"].setting:GetValue() == true
+	end,
+	parent = true,
+	element = addon.SettingsLayout.elements["enableChatIM"].element,
+	default = "",
+	var = "ChatIMHistoryClear",
+	type = Settings.VarType.String,
+}
+addon.functions.SettingsCreateDropdown(cChatFrame, data)
 
 data = {
 	var = "ChatIMHistoryClearAll",

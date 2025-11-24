@@ -14,12 +14,14 @@ Starting to change stuff to blizzard options, for now only a small part is there
     - Vendors & Economy
     - Map & Navigation
       - Quest
-  - Mouse Module
-  
+  - UI & Input
+    - Mouse
+    - Chat Frame
+
 ### ✨ Added
 
 - Shortening per _Currency_ in _Currency Stream_ added
-- Hide border and/or background of *Button Sink*
+- Hide border and/or background of _Button Sink_
 - Scaling, width, height of Reputation and XP-Bar implemented
 
 ### 🔄 Changed
@@ -28,7 +30,7 @@ Starting to change stuff to blizzard options, for now only a small part is there
 
 ### 🐛 Fixed
 
-- *Enhance Ignore List* Strata was to high
+- _Enhance Ignore List_ Strata was to high
 
 ---
 
@@ -45,7 +47,7 @@ Starting to change stuff to blizzard options, for now only a small part is there
 - Resource Bars
   - Optional auto-hide while mounted or inside vehicles, reacting instantly to mounting/vehicle events
 - Sync the width of your resource bars with the relative frame
-- Missing Mythic Keystone id for Keystone helper 
+- Missing Mythic Keystone id for Keystone helper
 
 ### ⏰ Temporarily disabled
 
