@@ -13,6 +13,7 @@ Starting to change stuff to blizzard options, for now only a small part is there
     - Gear & Upgrade
     - Vendors & Economy
     - Map & Navigation
+      - Quest
   - Mouse Module
   
 ### ✨ Added

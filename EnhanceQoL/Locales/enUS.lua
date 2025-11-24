@@ -199,6 +199,7 @@ L["Quest"] = "Quest"
 L["Loot"] = "Loot"
 L["ignoreNPCTipp"] = "Add a NPC to the exclude list by right clicking the target frame and choose Ignore"
 L["LootPopups"] = "Loot popups"
+L["ignoredQuestNPCRemoveConfirm"] = 'Remove "%s" from the ignored quest NPC list? Press Accept to delete this entry.'
 
 L["hideBagsBar"] = "Hide Bagsbar"
 L["hideMicroMenu"] = "Hide Micro Menu"
