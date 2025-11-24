@@ -3191,32 +3191,16 @@ local function CreateUI()
 		value = "items",
 		text = L["ItemsInventory"],
 		children = {
-			{ value = "loot", text = L["Loot"] },
-			{ value = "gear", text = L["GearUpgrades"] },
 			{ value = "economy", text = L["VendorsEconomy"] },
-			{ value = "container", text = L["ContainerActions"] },
 		},
 	})
-
-	-- Top: Map & Navigation (Teleports added by Mythic+)
-	addon.functions.addToTree(nil, {
-		value = "nav",
-		text = L["MapNavigation"],
-		children = {
-			{ value = "quest", text = L["Quest"] },
-		},
-	})
-
 	-- Top: UI & Input
 	addon.functions.addToTree(nil, {
 		value = "ui",
 		text = L["UIInput"],
 		children = {
 			{ value = "actionbar", text = L["VisibilityHubName"] or ACTIONBARS_LABEL },
-			{ value = "chatframe", text = HUD_EDIT_MODE_CHAT_FRAME_LABEL },
 			{ value = "unitframe", text = UNITFRAME_LABEL },
-			{ value = "datapanel", text = "Datapanel" },
-			{ value = "social", text = L["Social"] },
 			{ value = "system", text = L["System"] },
 		},
 	})

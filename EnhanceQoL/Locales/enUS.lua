@@ -622,8 +622,8 @@ L["IgnoreTooltipNote"] = "Show ignore note in tooltip"
 L["ignoreTooltipNote"] = "Show ignore note in tooltip"
 L["IgnoreTooltipMaxChars"] = "Ignore note max characters"
 L["IgnoreTooltipWordsPerLine"] = "Ignore note words per line"
-L["IgnoreDesc"] =
-	'Blocks duel, pet-battle, trade, invite and whisper requests from ignored players. Automatically adds same-realm names to Blizzard’s ignore list when space is available.\nIn the Dungeon Finder ignored players are shown as "!!! <Name> !!!".\n\nOpen the list with /eil.'
+L["IgnoreDesc2"] =
+	'Blocks duel, pet-battle, trade, invite and whisper requests from ignored players. \nAutomatically adds same-realm names to Blizzard’s ignore list when space is available.\nIn the Dungeon Finder ignored players are shown as "!!! <Name> !!!".\n\nOpen the list with /eil.'
 L["blockDuelRequests"] = "Block duel requests"
 L["blockPetBattleRequests"] = "Block pet battle duel requests"
 L["blockPartyInvites"] = "Block party invites"
