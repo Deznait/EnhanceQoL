@@ -67,6 +67,11 @@ L["MapNavigation"] = "Map & Navigation"
 L["UIInput"] = "UI & Input"
 L["System"] = "System"
 L["Media & Sound"] = "Media & Sound"
+L["Sound"] = "Sound"
+L["sound"] = "Sound"
+L["previewSound"] = "Preview sound"
+L["Preview Sound"] = "Preview sound"
+L["soundDropdownPlaceholder"] = "Select a sound"
 
 -- Category intro texts (no longer used)
 

@@ -2386,7 +2386,6 @@ local function initUI()
 	end
 	addon.functions.toggleQuickJoinToastButton(addon.db["hideQuickJoinToast"])
 
-
 	-- Hide/show specific minimap elements based on multi-select
 	local function getMinimapElementFrames()
 		local t = {}
@@ -3148,25 +3147,6 @@ local function CreateUI()
 		},
 	})
 
-	-- Top: Media & Sound (only if at least one media addon is available)
-	local addMediaRoot = false
-
-	local ok1 = false
-	local ok2 = false
-	if C_AddOns and C_AddOns.GetAddOnEnableState then
-		ok1 = C_AddOns.GetAddOnEnableState("EnhanceQoLSharedMedia", UnitName("player")) == 2
-		ok2 = C_AddOns.GetAddOnEnableState("EnhanceQoLSound", UnitName("player")) == 2
-	end
-	if ok1 or ok2 then addMediaRoot = true end
-
-	if addMediaRoot then addon.functions.addToTree(nil, { value = "media", text = L["Media & Sound"] or "Media & Sound" }) end
-
-	-- Top: Events
-	-- if addon.functions.IsTimerunner() then addon.functions.addToTree(nil, {
-	-- 	value = "events",
-	-- 	text = EVENTS_LABEL or L["Events"] or "Events",
-	-- }) end
-
 	-- Top: Profiles
 	table.insert(addon.treeGroupData, {
 		value = "profiles",
@@ -3252,9 +3232,6 @@ local function CreateUI()
 			AceConfigDlg:Open("EQOL_Profiles", sub)
 			scroll:DoLayout()
 		-- Media & Sound wrappers
-		elseif group == "media" then
-			-- Show Shared Media content directly when available
-			if addon.SharedMedia and addon.SharedMedia.functions and addon.SharedMedia.functions.treeCallback then addon.SharedMedia.functions.treeCallback(container, "media") end
 		elseif string.sub(group, 1, string.len("media\001")) == "media\001" then
 			-- Route any Media children to Sound module (flattened categories)
 			if addon.Sounds and addon.Sounds.functions and addon.Sounds.functions.treeCallback then addon.Sounds.functions.treeCallback(container, group) end
@@ -3268,8 +3245,6 @@ local function CreateUI()
 			addon.Aura.functions.treeCallback(container, group)
 		elseif string.match(group, "^sound") then
 			addon.Sounds.functions.treeCallback(container, group)
-		elseif string.match(group, "^sharedmedia") then
-			addon.SharedMedia.functions.treeCallback(container, group)
 		elseif string.match(group, "^mouse") then
 			addon.Mouse.functions.treeCallback(container, group)
 		elseif string.match(group, "^combatmeter") then

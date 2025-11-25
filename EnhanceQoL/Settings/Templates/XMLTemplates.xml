@@ -107,4 +107,14 @@
 			<OnLoad method="OnLoad"/>
 		</Scripts>
 	</Frame>
+
+	<Frame name="EQOL_SoundDropdownTemplate"
+		inherits="SettingsListElementTemplate"
+		mixin="EQOL_SoundDropdownMixin"
+		virtual="true"
+	>
+		<Scripts>
+			<OnLoad method="OnLoad"/>
+		</Scripts>
+	</Frame>
 </Ui>

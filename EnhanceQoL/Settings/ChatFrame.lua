@@ -182,7 +182,11 @@ data = {
 				sType = "checkbox",
 				children = {
 					{
-						listFunc = function()
+
+						var = "ChatIMCustomSound",
+						text = L["ChatIMCustomSound"],
+						default = "",
+						optionfunc = function()
 							if addon.ChatIM and addon.ChatIM.BuildSoundTable and not addon.ChatIM.availableSounds then addon.ChatIM:BuildSoundTable() end
 							local tList = { [""] = "" }
 							for name in pairs(addon.ChatIM.availableSounds or {}) do
@@ -190,13 +194,8 @@ data = {
 							end
 							return tList
 						end,
-						text = L["ChatIMCustomSound"],
 						get = function() return addon.db.chatIMCustomSoundFile or "" end,
-						set = function(key)
-							addon.db.chatIMCustomSoundFile = key
-							local file = addon.ChatIM.availableSounds and addon.ChatIM.availableSounds[key]
-							if file then PlaySoundFile(file, "Master") end
-						end,
+						set = function(key) addon.db.chatIMCustomSoundFile = key end,
 						parentCheck = function()
 							return addon.SettingsLayout.elements["chatIMUseCustomSound"]
 								and addon.SettingsLayout.elements["chatIMUseCustomSound"].setting
@@ -206,10 +205,7 @@ data = {
 								and addon.SettingsLayout.elements["enableChatIM"].setting:GetValue() == true
 						end,
 						parent = true,
-						default = "",
-						var = "chatIMCustomSoundFile",
-						type = Settings.VarType.String,
-						sType = "dropdown",
+						sType = "sounddropdown",
 					},
 				},
 			},

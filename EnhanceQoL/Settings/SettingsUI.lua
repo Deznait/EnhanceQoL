@@ -71,6 +71,8 @@ function addon.functions.SettingsCreateCheckbox(cat, cbData)
 				addon.functions.SettingsCreateColorPicker(cat, v)
 			elseif v.sType == "button" then
 				addon.functions.SettingsCreateButton(cat, v)
+			elseif v.sType == "sounddropdown" then
+				addon.functions.SettingsCreateSoundDropdown(cat, v)
 			end
 		end
 	end
@@ -217,6 +219,96 @@ function addon.functions.SettingsCreateMultiDropdown(cat, cbData)
 	addon.SettingsLayout = addon.SettingsLayout or {}
 	addon.SettingsLayout.elements = addon.SettingsLayout.elements or {}
 	addon.SettingsLayout.elements[cbData.var] = { setting = setting, initializer = initializer }
+
+	return setting, initializer
+end
+
+function addon.functions.SettingsCreateSoundDropdown(cat, cbData)
+	if not (cat and cbData and cbData.var) then return end
+
+	addon.db = addon.db or {}
+	local defaultValue = cbData.default or ""
+	local getFunc = cbData.get
+	if not getFunc then
+		if cbData.subvar then
+			getFunc = function()
+				addon.db[cbData.var] = addon.db[cbData.var] or {}
+				local container = addon.db[cbData.var]
+				local value = container[cbData.subvar]
+				return value ~= nil and value or defaultValue
+			end
+		else
+			getFunc = function()
+				local value = addon.db[cbData.var]
+				return value ~= nil and value or defaultValue
+			end
+		end
+	end
+
+	local setFunc = cbData.set
+	if not setFunc then
+		if cbData.subvar then
+			setFunc = function(value)
+				addon.db[cbData.var] = addon.db[cbData.var] or {}
+				addon.db[cbData.var][cbData.subvar] = value
+			end
+		else
+			setFunc = function(value) addon.db[cbData.var] = value end
+		end
+	end
+
+	local setting = Settings.RegisterProxySetting(cat, "EQOL_" .. cbData.var, cbData.varType or Settings.VarType.String, cbData.text or cbData.var, defaultValue, getFunc, setFunc)
+
+	local initializer = Settings.CreateElementInitializer("EQOL_SoundDropdownTemplate", {
+		name = cbData.text or cbData.var,
+		tooltip = cbData.desc,
+		options = cbData.options or cbData.list,
+		optionfunc = cbData.optionfunc or cbData.listFunc,
+		callback = cbData.callback,
+		parentCheck = cbData.parentCheck,
+		placeholderText = cbData.placeholderText,
+		previewTooltip = cbData.previewTooltip,
+		frameWidth = cbData.frameWidth,
+		frameHeight = cbData.frameHeight,
+		menuHeight = cbData.menuHeight,
+		dropdownTemplate = cbData.dropdownTemplate,
+		dropdownAnchors = cbData.dropdownAnchors,
+		previewButtonAnchor = cbData.previewButtonAnchor,
+		previewIconTexture = cbData.previewIconTexture,
+		previewIconAtlas = cbData.previewIconAtlas,
+		previewWidth = cbData.previewWidth,
+		previewSoundFunc = cbData.previewSoundFunc,
+		soundResolver = cbData.soundResolver,
+		playbackChannel = cbData.playbackChannel,
+		getPlaybackChannel = cbData.getPlaybackChannel,
+		getValue = cbData.valueGetter,
+		setValue = cbData.valueSetter,
+	})
+
+	initializer:SetSetting(setting)
+
+	if cbData.parent then initializer:SetParentInitializer(cbData.element, cbData.parentCheck) end
+
+	if cbData.searchtags == nil then
+		if cbData.text then initializer:AddSearchTags(cbData.text) end
+	elseif cbData.searchtags then
+		if type(cbData.searchtags) == "table" then
+			for _, tag in ipairs(cbData.searchtags) do
+				initializer:AddSearchTags(tag)
+			end
+		else
+			initializer:AddSearchTags(cbData.searchtags)
+		end
+	end
+
+	local layout = SettingsPanel:GetLayout(cat)
+	layout:AddInitializer(initializer)
+
+	addon.SettingsLayout = addon.SettingsLayout or {}
+	addon.SettingsLayout.elements = addon.SettingsLayout.elements or {}
+	addon.SettingsLayout.elements[cbData.var] = { setting = setting, initializer = initializer }
+
+	if cbData.notify then addon.functions.SettingsCreateNotify(setting, cbData.notify) end
 
 	return setting, initializer
 end
