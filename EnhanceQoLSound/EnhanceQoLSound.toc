@@ -24,3 +24,4 @@ Init.lua
 locales.xml
 
 EnhanceQoLSound.lua
+Settings_Sound.lua
