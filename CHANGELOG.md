@@ -2,6 +2,12 @@
 
 ## [6.2.0] – 2025-11-22
 
+### Important note
+
+Changing minimap Button behaviour 
+- Leftclick now opens the new option menu
+- Rightclick has an option to open the old Legacy Settings until everything is transfered
+
 ### Options Update
 
 Starting to change stuff to blizzard options, for now only a small part is there but more and more will follow
