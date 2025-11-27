@@ -342,6 +342,239 @@ if cMythic then
 		end,
 	})
 
+	-- Talent Reminder (own group)
+	local cTalent = addon.functions.SettingsCreateCategory(nil, L["TalentReminder"], nil, "TalentReminder")
+	if cTalent then
+		addon.functions.SettingsCreateHeadline(cTalent, L["TalentReminder"])
+
+		addon.MythicPlus.functions.getAllLoadouts()
+		if #addon.MythicPlus.variables.seasonMapInfo == 0 then addon.MythicPlus.functions.createSeasonInfo() end
+
+		local function ensureTalentSettings(specID)
+			local guid = addon.variables.unitPlayerGUID
+			if not guid or not specID then return end
+			addon.db["talentReminderSettings"] = addon.db["talentReminderSettings"] or {}
+			addon.db["talentReminderSettings"][guid] = addon.db["talentReminderSettings"][guid] or {}
+			addon.db["talentReminderSettings"][guid][specID] = addon.db["talentReminderSettings"][guid][specID] or {}
+			return addon.db["talentReminderSettings"][guid][specID]
+		end
+
+		local function buildTalentLoadoutList(specID)
+			local source = (specID and addon.MythicPlus.variables.knownLoadout and addon.MythicPlus.variables.knownLoadout[specID]) or {}
+			local normalized = {}
+			for key, value in pairs(source) do
+				normalized[tostring(key)] = value
+			end
+			if not normalized["0"] then normalized["0"] = "" end
+			local list, order = addon.functions.prepareListForDropdown(normalized)
+			list._order = order
+			return list
+		end
+
+		local function buildTalentSoundOptions()
+			local soundList = {}
+			if addon.ChatIM and addon.ChatIM.BuildSoundTable and not addon.ChatIM.availableSounds then addon.ChatIM:BuildSoundTable() end
+			local soundTable = (addon.ChatIM and addon.ChatIM.availableSounds) or (LSM and LSM:HashTable("sound"))
+			for name, file in pairs(soundTable or {}) do
+				if type(name) == "string" and name ~= "" then
+					soundList[name] = { value = name, label = name, file = file }
+				end
+			end
+			return soundList
+		end
+
+		local talentEnable = addon.functions.SettingsCreateCheckbox(cTalent, {
+			var = "talentReminderEnabled",
+			text = L["talentReminderEnabled"],
+			desc = L["talentReminderEnabledDesc"]:format(PLAYER_DIFFICULTY6, PLAYER_DIFFICULTY_MYTHIC_PLUS),
+			func = function(v)
+				addon.db["talentReminderEnabled"] = v
+				addon.MythicPlus.functions.checkLoadout()
+				addon.MythicPlus.functions.refreshTalentFrameIfOpen()
+				addon.MythicPlus.functions.updateActiveTalentText()
+			end,
+		})
+		local function isTalentReminderEnabled() return talentEnable and talentEnable.setting and talentEnable.setting:GetValue() == true end
+
+		addon.functions.SettingsCreateCheckbox(cTalent, {
+			var = "talentReminderLoadOnReadyCheck",
+			text = L["talentReminderLoadOnReadyCheck"]:format(READY_CHECK),
+			func = function(v)
+				addon.db["talentReminderLoadOnReadyCheck"] = v
+				addon.MythicPlus.functions.checkLoadout()
+			end,
+			parent = true,
+			element = talentEnable.element,
+			parentCheck = isTalentReminderEnabled,
+		})
+
+		local soundDifference = addon.functions.SettingsCreateCheckbox(cTalent, {
+			var = "talentReminderSoundOnDifference",
+			text = L["talentReminderSoundOnDifference"],
+			func = function(v)
+				addon.db["talentReminderSoundOnDifference"] = v
+				addon.MythicPlus.functions.checkLoadout()
+			end,
+			parent = true,
+			element = talentEnable.element,
+			parentCheck = isTalentReminderEnabled,
+		})
+		local function isSoundReminderEnabled() return soundDifference and soundDifference.setting and soundDifference.setting:GetValue() == true end
+
+		local customSound = addon.functions.SettingsCreateCheckbox(cTalent, {
+			var = "talentReminderUseCustomSound",
+			text = L["talentReminderUseCustomSound"],
+			func = function(v) addon.db["talentReminderUseCustomSound"] = v end,
+			parent = true,
+			element = soundDifference.element,
+			parentCheck = function() return isTalentReminderEnabled() and isSoundReminderEnabled() end,
+		})
+
+		addon.functions.SettingsCreateSoundDropdown(cTalent, {
+			var = "talentReminderCustomSoundFile",
+			text = L["talentReminderCustomSound"],
+			listFunc = buildTalentSoundOptions,
+			default = "",
+			get = function()
+				local value = addon.db["talentReminderCustomSoundFile"]
+				return value ~= nil and value or ""
+			end,
+			set = function(value) addon.db["talentReminderCustomSoundFile"] = value end,
+			callback = function(value)
+				local soundTable = (addon.ChatIM and addon.ChatIM.availableSounds) or (LSM and LSM:HashTable("sound"))
+				local file = soundTable and soundTable[value]
+				if file then PlaySoundFile(file, "Master") end
+			end,
+			parent = true,
+			element = customSound and customSound.element or soundDifference.element,
+			parentCheck = function() return isTalentReminderEnabled() and isSoundReminderEnabled() and addon.db["talentReminderUseCustomSound"] == true end,
+		})
+
+		local showActiveBuild = addon.functions.SettingsCreateCheckbox(cTalent, {
+			var = "talentReminderShowActiveBuild",
+			text = L["talentReminderShowActiveBuild"],
+			func = function(v)
+				addon.db["talentReminderShowActiveBuild"] = v
+				addon.MythicPlus.functions.updateActiveTalentText()
+				addon.MythicPlus.functions.refreshTalentFrameIfOpen()
+			end,
+			parent = true,
+			element = talentEnable.element,
+			parentCheck = isTalentReminderEnabled,
+		})
+		local function isActiveBuildShown() return showActiveBuild and showActiveBuild.setting and showActiveBuild.setting:GetValue() == true end
+
+		addon.functions.SettingsCreateSlider(cTalent, {
+			var = "talentReminderActiveBuildSize",
+			text = L["talentReminderActiveBuildTextSize"],
+			min = 6,
+			max = 64,
+			step = 1,
+			default = addon.db["talentReminderActiveBuildSize"] or 14,
+			get = function() return addon.db["talentReminderActiveBuildSize"] or 14 end,
+			set = function(value)
+				addon.db["talentReminderActiveBuildSize"] = value
+				addon.MythicPlus.functions.updateActiveTalentText()
+				addon.MythicPlus.functions.refreshTalentFrameIfOpen()
+			end,
+			parent = true,
+			element = showActiveBuild.element,
+			parentCheck = function() return isTalentReminderEnabled() and isActiveBuildShown() end,
+		})
+
+		addon.functions.SettingsCreateCheckbox(cTalent, {
+			var = "talentReminderActiveBuildLocked",
+			text = L["talentReminderLockActiveBuild"],
+			func = function(v)
+				addon.db["talentReminderActiveBuildLocked"] = v
+				addon.MythicPlus.functions.updateActiveTalentText()
+			end,
+			parent = true,
+			element = showActiveBuild.element,
+			parentCheck = function() return isTalentReminderEnabled() and isActiveBuildShown() end,
+		})
+
+		local showOptions = {
+			{ value = 1, text = L["talentReminderShowActiveBuildOutside"] },
+			{ value = 2, text = L["talentReminderShowActiveBuildInstance"] },
+			{ value = 3, text = L["talentReminderShowActiveBuildRaid"] },
+		}
+		addon.functions.SettingsCreateMultiDropdown(cTalent, {
+			var = "talentReminderActiveBuildShowOnly",
+			text = L["talentReminderShowActiveBuildDropdown"],
+			options = showOptions,
+			isSelectedFunc = function(key)
+				local data = addon.db["talentReminderActiveBuildShowOnly"]
+				return type(data) == "table" and data[key] == true
+			end,
+			setSelectedFunc = function(key, shouldSelect)
+				if type(addon.db["talentReminderActiveBuildShowOnly"]) ~= "table" then addon.db["talentReminderActiveBuildShowOnly"] = {} end
+				if shouldSelect then
+					addon.db["talentReminderActiveBuildShowOnly"][key] = true
+				else
+					addon.db["talentReminderActiveBuildShowOnly"][key] = nil
+				end
+				addon.MythicPlus.functions.updateActiveTalentText()
+			end,
+			parent = true,
+			element = showActiveBuild.element,
+			parentCheck = function() return isTalentReminderEnabled() and isActiveBuildShown() end,
+		})
+
+		if TalentLoadoutEx then
+			addon.functions.SettingsCreateText(cTalent, "|cffffd700" .. L["labelExplainedlineTLE"] .. "|r")
+			addon.functions.SettingsCreateButton(cTalent, {
+				var = "talentReminderReloadLoadouts",
+				text = L["ReloadLoadouts"],
+				func = function()
+					addon.MythicPlus.functions.getAllLoadouts()
+					addon.MythicPlus.functions.checkRemovedLoadout()
+					addon.MythicPlus.functions.refreshTalentFrameIfOpen()
+				end,
+				parent = true,
+				element = talentEnable.element,
+				parentCheck = isTalentReminderEnabled,
+			})
+		end
+
+		if #addon.MythicPlus.variables.specNames > 0 and #addon.MythicPlus.variables.seasonMapInfo > 0 then
+			for _, specData in ipairs(addon.MythicPlus.variables.specNames) do
+				addon.functions.SettingsCreateHeadline(cTalent, specData.text)
+				for _, mapData in ipairs(addon.MythicPlus.variables.seasonMapInfo) do
+					addon.functions.SettingsCreateDropdown(cTalent, {
+						var = string.format("talentReminder_%s_%s", specData.value, mapData.id),
+						text = mapData.name,
+						type = Settings.VarType.String,
+						default = "0",
+						listFunc = function() return buildTalentLoadoutList(specData.value) end,
+						get = function()
+							local specSettings = ensureTalentSettings(specData.value)
+							local current = specSettings and specSettings[mapData.id]
+							if type(current) == "number" then return tostring(current) end
+							if current == nil then return "0" end
+							return current
+						end,
+						set = function(value)
+							local specSettings = ensureTalentSettings(specData.value)
+							if not specSettings then return end
+							local converted = tonumber(value)
+							if converted ~= nil then
+								specSettings[mapData.id] = converted
+							else
+								specSettings[mapData.id] = value
+							end
+							addon.MythicPlus.functions.refreshTalentFrameIfOpen()
+							C_Timer.After(1, function() addon.MythicPlus.functions.checkLoadout() end)
+						end,
+						parent = true,
+						element = talentEnable.element,
+						parentCheck = isTalentReminderEnabled,
+					})
+				end
+			end
+		end
+	end
+
 	-- Dungeon Finder filters
 	local filterEnable = addon.functions.SettingsCreateCheckbox(cMythic, {
 		var = "mythicPlusEnableDungeonFilter",
