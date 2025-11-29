@@ -13,6 +13,18 @@ local EditMode = addon.EditMode
 local ResourceBars = addon.Aura and addon.Aura.ResourceBars
 if not ResourceBars then return end
 
+local specSettingVars = {}
+
+local function notifyResourceBarSettings()
+	if not Settings or not Settings.NotifyUpdate then return end
+	Settings.NotifyUpdate("EQOL_enableResourceFrame")
+	Settings.NotifyUpdate("EQOL_resourceBarsHideOutOfCombat")
+	Settings.NotifyUpdate("EQOL_resourceBarsHideMounted")
+	Settings.NotifyUpdate("EQOL_resourceBarsHideVehicle")
+	for var in pairs(specSettingVars) do
+		Settings.NotifyUpdate("EQOL_" .. var)
+	end
+end
 local function ensureSpecCfg(specIndex)
 	local class = addon.variables.unitClass
 	if not class or not specIndex then return end
@@ -158,18 +170,29 @@ local function buildSpecToggles(specIndex, specName, available)
 
 	if #options == 0 then return nil end
 
+	local varKey = ("rb_spec_%s"):format(specIndex)
+	specSettingVars[varKey] = true
+	local class = addon.variables.unitClass
+
 	return {
 		sType = "multidropdown",
-		var = "rb_" .. specName .. "_" .. specIndex,
+		var = varKey,
 		text = specName,
 		options = options,
 		isSelectedFunc = function(key)
-			local cfg = specCfg[key]
-			return cfg and cfg.enabled == true
+			local class = addon.variables.unitClass
+			if not class or not specIndex then return false end
+			return addon.db.personalResourceBarSettings
+					and addon.db.personalResourceBarSettings[class]
+					and addon.db.personalResourceBarSettings[class][specIndex]
+					and addon.db.personalResourceBarSettings[class][specIndex]
+					and addon.db.personalResourceBarSettings[class][specIndex][key]
+					and addon.db.personalResourceBarSettings[class][specIndex][key].enabled
+				or false
 		end,
 		setSelectedFunc = function(key, shouldSelect)
-			specCfg[key] = specCfg[key] or {}
-			specCfg[key].enabled = shouldSelect and true or false
+			addon.db.personalResourceBarSettings[class][specIndex][key] = addon.db.personalResourceBarSettings[class][specIndex][key] or {}
+			addon.db.personalResourceBarSettings[class][specIndex][key].enabled = shouldSelect and true or false
 			setBarEnabled(specIndex, key, shouldSelect)
 		end,
 		parent = true,
@@ -365,6 +388,7 @@ local function buildSettings()
 							addon.Aura.functions.requestActiveRefresh(specIndex)
 						end
 					end
+					notifyResourceBarSettings()
 					if applied and #applied > 0 then
 						local specNames = {}
 						for _, specIndex in ipairs(applied) do
