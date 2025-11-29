@@ -118,15 +118,16 @@ local function registerEditModeBars()
 	end
 end
 
-local function buildSpecToggles(parent, specIndex, specName, available)
-	addon.functions.SettingsCreateHeadline(parent, specName)
+local function buildSpecToggles(specIndex, specName, available)
+	local items = {}
 
 	local specCfg = ensureSpecCfg(specIndex)
-	if not specCfg then return end
+	if not specCfg then return items end
 
-	-- Health toggle
+	items[#items + 1] = { sType = "hint", text = specName, parent = true, parentCheck = function() return addon.db["enableResourceFrame"] == true end }
+
 	local hCfg = specCfg.HEALTH or {}
-	addon.functions.SettingsCreateCheckbox(parent, {
+	items[#items + 1] = {
 		var = ("rb_health_%s"):format(specIndex),
 		text = HEALTH,
 		get = function() return hCfg.enabled == true end,
@@ -134,15 +135,17 @@ local function buildSpecToggles(parent, specIndex, specName, available)
 			hCfg.enabled = val and true or false
 			setBarEnabled(specIndex, "HEALTH", val)
 		end,
-	})
-	print(("rb_health_%s"):format(specIndex))
+		parent = true,
+		parentCheck = function() return addon.db["enableResourceFrame"] == true end,
+		sType = "checkbox",
+	}
 
 	for _, pType in ipairs(ResourceBars.classPowerTypes or {}) do
 		if available[pType] then
 			specCfg[pType] = specCfg[pType] or {}
 			local cfg = specCfg[pType]
 			local label = _G["POWER_TYPE_" .. pType] or _G[pType] or pType
-			addon.functions.SettingsCreateCheckbox(parent, {
+			items[#items + 1] = {
 				var = ("rb_%s_%s"):format(pType, specIndex),
 				text = label,
 				get = function() return cfg.enabled == true end,
@@ -150,9 +153,14 @@ local function buildSpecToggles(parent, specIndex, specName, available)
 					cfg.enabled = val and true or false
 					setBarEnabled(specIndex, pType, val)
 				end,
-			})
+				parent = true,
+				parentCheck = function() return addon.db["enableResourceFrame"] == true end,
+				sType = "checkbox",
+			}
 		end
 	end
+
+	return items
 end
 
 local function buildSettings()
@@ -184,47 +192,52 @@ local function buildSettings()
 						if ResourceBars.ApplyVisibilityPreference then ResourceBars.ApplyVisibilityPreference("settings") end
 					end,
 					parent = true,
-					parentCheck = function()
-						return addon.SettingsLayout.elements["enableResourceFrame"]
-							and addon.SettingsLayout.elements["enableResourceFrame"].setting
-							and addon.SettingsLayout.elements["enableResourceFrame"].setting:GetValue() == true
+					parentCheck = function() return addon.db["enableResourceFrame"] == true end,
+					sType = "checkbox",
+				},
+				{
+					var = "resourceBarsHideMounted",
+					text = L["Hide when mounted"],
+					get = function() return addon.db["resourceBarsHideMounted"] end,
+					func = function(val)
+						addon.db["resourceBarsHideMounted"] = val and true or false
+						if ResourceBars.ApplyVisibilityPreference then ResourceBars.ApplyVisibilityPreference("settings") end
 					end,
-					default = false,
+					parent = true,
+					parentCheck = function() return addon.db["enableResourceFrame"] == true end,
+					sType = "checkbox",
+				},
+				{
+					var = "resourceBarsHideVehicle",
+					text = L["Hide in vehicles"],
+					get = function() return addon.db["resourceBarsHideVehicle"] end,
+					func = function(val)
+						addon.db["resourceBarsHideVehicle"] = val and true or false
+						if ResourceBars.ApplyVisibilityPreference then ResourceBars.ApplyVisibilityPreference("settings") end
+					end,
+					parent = true,
+					parentCheck = function() return addon.db["enableResourceFrame"] == true end,
 					sType = "checkbox",
 				},
 			},
 		},
 	}
 
-	addon.functions.SettingsCreateCheckboxes(cat, data)
-
-	addon.functions.SettingsCreateCheckbox(cat, {
-		var = "resourceBarsHideMounted",
-		text = L["Hide when mounted"],
-		get = function() return addon.db["resourceBarsHideMounted"] end,
-		func = function(val)
-			addon.db["resourceBarsHideMounted"] = val and true or false
-			if ResourceBars.ApplyVisibilityPreference then ResourceBars.ApplyVisibilityPreference("settings") end
-		end,
-	})
-	addon.functions.SettingsCreateCheckbox(cat, {
-		var = "resourceBarsHideVehicle",
-		text = L["Hide in vehicles"],
-		get = function() return addon.db["resourceBarsHideVehicle"] end,
-		func = function(val)
-			addon.db["resourceBarsHideVehicle"] = val and true or false
-			if ResourceBars.ApplyVisibilityPreference then ResourceBars.ApplyVisibilityPreference("settings") end
-		end,
-	})
-
 	local class = addon.variables.unitClassID
 	if class and ResourceBars.powertypeClasses and ResourceBars.powertypeClasses[addon.variables.unitClass] then
 		for specIndex = 1, C_SpecializationInfo.GetNumSpecializationsForClassID(class) do
 			local specID, specName = GetSpecializationInfoForClassID(class, specIndex)
 			local available = ResourceBars.powertypeClasses[addon.variables.unitClass][specIndex] or {}
-			if specID and specName then buildSpecToggles(cat, specIndex, specName, available) end
+			if specID and specName then
+				local entries = buildSpecToggles(specIndex, specName, available)
+				for _, e in ipairs(entries or {}) do
+					table.insert(data[1].children, e)
+				end
+			end
 		end
 	end
+
+	addon.functions.SettingsCreateCheckboxes(cat, data)
 
 	do -- Profile export/import
 		local classKey = addon.variables.unitClass or "UNKNOWN"
