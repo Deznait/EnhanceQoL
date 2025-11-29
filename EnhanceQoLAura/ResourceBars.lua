@@ -4229,6 +4229,7 @@ function ResourceBars.EnableResourceBars()
 	end
 	if ResourceBars and ResourceBars.SyncRelativeFrameWidths then ResourceBars.SyncRelativeFrameWidths() end
 	if addon and addon.Aura and addon.Aura.ResourceBars and addon.Aura.ResourceBars.UpdateRuneEventRegistration then addon.Aura.ResourceBars.UpdateRuneEventRegistration() end
+	if ResourceBars.RegisterEditModeFrames and not ResourceBars._editModeRegistered then ResourceBars.RegisterEditModeFrames() end
 end
 
 function ResourceBars.DisableResourceBars()

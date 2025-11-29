@@ -58,6 +58,7 @@ end
 
 local function registerEditModeBars()
 	if not EditMode or not EditMode.RegisterFrame then return end
+	local registered = 0
 
 	local function registerBar(idSuffix, frameName, barType, widthDefault, heightDefault)
 		local frame = _G[frameName]
@@ -101,7 +102,7 @@ local function registerEditModeBars()
 			end,
 			settings = EditMode.lib and EditMode.lib.SettingType and {
 				{
-					name = L["Width"] or WIDTH,
+					name = HUD_EDIT_MODE_SETTING_CHAT_FRAME_WIDTH,
 					kind = EditMode.lib.SettingType.Slider,
 					field = "width",
 					minValue = 50,
@@ -110,7 +111,7 @@ local function registerEditModeBars()
 					default = cfg and cfg.width or widthDefault or 200,
 				},
 				{
-					name = L["Height"] or HEIGHT,
+					name = HUD_EDIT_MODE_SETTING_CHAT_FRAME_HEIGHT,
 					kind = EditMode.lib.SettingType.Slider,
 					field = "height",
 					minValue = 6,
@@ -118,9 +119,10 @@ local function registerEditModeBars()
 					valueStep = 1,
 					default = cfg and cfg.height or heightDefault or 20,
 				},
-			} or nil,
+				} or nil,
 			showOutsideEditMode = true,
 		})
+		registered = registered + 1
 	end
 
 	registerBar("HEALTH", "EQOLHealthBar", "HEALTH", ResourceBars.DEFAULT_HEALTH_WIDTH, ResourceBars.DEFAULT_HEALTH_HEIGHT)
@@ -128,7 +130,11 @@ local function registerEditModeBars()
 		local frameName = "EQOL" .. pType .. "Bar"
 		registerBar(pType, frameName, pType, ResourceBars.DEFAULT_POWER_WIDTH, ResourceBars.DEFAULT_POWER_HEIGHT)
 	end
+
+	if registered > 0 then ResourceBars._editModeRegistered = true end
 end
+
+ResourceBars.RegisterEditModeFrames = registerEditModeBars
 
 local function buildSpecToggles(specIndex, specName, available)
 	local specCfg = ensureSpecCfg(specIndex)
