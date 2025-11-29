@@ -86,6 +86,19 @@ local function registerEditModeBars()
 		local cfg = ResourceBars and ResourceBars.getBarSettings and ResourceBars.getBarSettings(barType) or ResourceBars and ResourceBars.GetBarSettings and ResourceBars.GetBarSettings(barType)
 		local anchor = ResourceBars and ResourceBars.getAnchor and ResourceBars.getAnchor(barType, addon.variables.unitSpec)
 		local frameId = "resourceBar_" .. idSuffix
+		local titleLabel = (barType == "HEALTH") and (HEALTH or "Health") or (_G["POWER_TYPE_" .. barType] or _G[barType] or barType)
+
+		-- Ensure backdrop defaults for current spec view
+		cfg = cfg or {}
+		cfg.backdrop = cfg.backdrop or {}
+		if cfg.backdrop.enabled == nil then cfg.backdrop.enabled = true end
+		cfg.backdrop.backgroundTexture = cfg.backdrop.backgroundTexture or "Interface\\DialogFrame\\UI-DialogBox-Background"
+		cfg.backdrop.backgroundColor = cfg.backdrop.backgroundColor or { 0, 0, 0, 0.8 }
+		cfg.backdrop.borderTexture = cfg.backdrop.borderTexture or "Interface\\Tooltips\\UI-Tooltip-Border"
+		cfg.backdrop.borderColor = cfg.backdrop.borderColor or { 0, 0, 0, 0 }
+		cfg.backdrop.edgeSize = cfg.backdrop.edgeSize or 3
+		cfg.backdrop.outset = cfg.backdrop.outset or 0
+		cfg.backdrop.backgroundInset = max(0, cfg.backdrop.backgroundInset or 0)
 		local function curSpecCfg()
 			local spec = addon.variables.unitSpec
 			local specCfg = ensureSpecCfg(spec)
@@ -110,9 +123,60 @@ local function registerEditModeBars()
 				ResourceBars.SetPowerBarSize(c.width or widthDefault, c.height or heightDefault, barType)
 			end
 		end
+		local function ensureBackdropTable(target)
+			if not target then return nil end
+			target.backdrop = target.backdrop or {}
+			local bd = target.backdrop
+			local base = (cfg and cfg.backdrop) or {}
+			if bd.enabled == nil then
+				if base.enabled ~= nil then
+					bd.enabled = base.enabled
+				else
+					bd.enabled = true
+				end
+			end
+			bd.backgroundTexture = bd.backgroundTexture or base.backgroundTexture or "Interface\\DialogFrame\\UI-DialogBox-Background"
+			bd.backgroundColor = bd.backgroundColor or toColorArray(base.backgroundColor, { 0, 0, 0, 0.8 })
+			bd.borderTexture = bd.borderTexture or base.borderTexture or "Interface\\Tooltips\\UI-Tooltip-Border"
+			bd.borderColor = bd.borderColor or toColorArray(base.borderColor, { 0, 0, 0, 0 })
+			bd.edgeSize = bd.edgeSize or base.edgeSize or 3
+			bd.outset = bd.outset or base.outset or 0
+			bd.backgroundInset = max(0, bd.backgroundInset or base.backgroundInset or 0)
+			bd.innerPadding = nil
+			return bd
+		end
 		local settingType = EditMode.lib and EditMode.lib.SettingType
 		local settingsList
 		if settingType then
+			local function backgroundDropdownData()
+				local map = {
+					["Interface\\DialogFrame\\UI-DialogBox-Background"] = "Dialog Background",
+					["Interface\\Buttons\\WHITE8x8"] = "Solid (tintable)",
+				}
+				if LibStub then
+					local media = LibStub("LibSharedMedia-3.0", true)
+					if media then
+						for name, path in pairs(media:HashTable("background") or {}) do
+							if type(path) == "string" and path ~= "" then map[path] = tostring(name) end
+						end
+					end
+				end
+				return addon.functions.prepareListForDropdown(map)
+			end
+
+			local function borderDropdownData()
+				local map = { ["Interface\\Tooltips\\UI-Tooltip-Border"] = "Tooltip Border" }
+				if LibStub then
+					local media = LibStub("LibSharedMedia-3.0", true)
+					if media then
+						for name, path in pairs(media:HashTable("border") or {}) do
+							if type(path) == "string" and path ~= "" then map[path] = tostring(name) end
+						end
+					end
+				end
+				return addon.functions.prepareListForDropdown(map)
+			end
+
 			settingsList = {
 				{
 					name = HUD_EDIT_MODE_SETTING_CHAT_FRAME_WIDTH,
@@ -266,7 +330,7 @@ local function registerEditModeBars()
 
 				settingsList[#settingsList + 1] = {
 					name = L["Font"] or FONT,
-					kind = settingType.Dropdown,
+					kind = settingType.DropdownColor,
 					field = "fontFace",
 					generator = function(_, root)
 						local currentPath
@@ -315,6 +379,20 @@ local function registerEditModeBars()
 						c.fontFace = value
 						queueRefresh()
 					end,
+					colorDefault = { r = 1, g = 1, b = 1, a = 1 },
+					colorGet = function()
+						local c = curSpecCfg()
+						local col = (c and c.fontColor) or (cfg and cfg.fontColor) or { 1, 1, 1, 1 }
+						local r, g, b, a = toColorComponents(col, { 1, 1, 1, 1 })
+						return { r = r, g = g, b = b, a = a }
+					end,
+					colorSet = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						c.fontColor = toColorArray(value, { 1, 1, 1, 1 })
+						queueRefresh()
+					end,
+					hasOpacity = true,
 					default = addon.variables.defaultFont,
 				}
 
@@ -353,38 +431,6 @@ local function registerEditModeBars()
 						queueRefresh()
 					end,
 					default = "OUTLINE",
-				}
-
-				settingsList[#settingsList + 1] = {
-					name = L["Font color"] or FONT_COLOR,
-					kind = settingType.CheckboxColor,
-					field = "fontColor",
-					default = { r = 1, g = 1, b = 1, a = 1 },
-					get = function()
-						local c = curSpecCfg()
-						return c and c.fontColorEnabled ~= false
-					end,
-					set = function(_, value)
-						local c = curSpecCfg()
-						if not c then return end
-						c.fontColorEnabled = value and true or false
-						queueRefresh()
-					end,
-					colorDefault = { r = 1, g = 1, b = 1, a = 1 },
-					colorGet = function()
-						local c = curSpecCfg()
-						if c and c.fontColorEnabled == false then return { r = 1, g = 1, b = 1, a = 1 } end
-						local col = (c and c.fontColor) or (cfg and cfg.fontColor) or { 1, 1, 1, 1 }
-						local r, g, b, a = toColorComponents(col, { 1, 1, 1, 1 })
-						return { r = r, g = g, b = b, a = a }
-					end,
-					colorSet = function(_, value)
-						local c = curSpecCfg()
-						if not c then return end
-						c.fontColor = toColorArray(value, { 1, 1, 1, 1 })
-						queueRefresh()
-					end,
-					hasOpacity = true,
 				}
 
 				settingsList[#settingsList + 1] = {
@@ -515,11 +561,219 @@ local function registerEditModeBars()
 					default = cfg and cfg.barTexture or "DEFAULT",
 				}
 			end
+
+			do -- Backdrop
+				local function backdropEnabled()
+					local c = curSpecCfg()
+					local bd = ensureBackdropTable(c)
+					return not (bd and bd.enabled == false)
+				end
+
+				settingsList[#settingsList + 1] = {
+					name = L["Show backdrop"] or "Show backdrop",
+					kind = settingType.Checkbox,
+					field = "backdropEnabled",
+					get = function()
+						local c = curSpecCfg()
+						local bd = ensureBackdropTable(c)
+						return bd and bd.enabled ~= false
+					end,
+					set = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						local bd = ensureBackdropTable(c)
+						bd.enabled = value and true or false
+						queueRefresh()
+						if addon.EditModeLib and addon.EditModeLib.internal then addon.EditModeLib.internal:RefreshSettings() end
+					end,
+					default = cfg and cfg.backdrop and cfg.backdrop.enabled ~= false,
+				}
+
+				settingsList[#settingsList + 1] = {
+					name = L["Background texture"],
+					kind = settingType.DropdownColor,
+					field = "backdropBackground",
+					generator = function(_, root)
+						local list, order = backgroundDropdownData()
+						if not list or not order then return end
+						for _, key in ipairs(order) do
+							local label = list[key] or key
+							root:CreateRadio(label, function()
+								local c = curSpecCfg()
+								local bd = ensureBackdropTable(c)
+								return bd and bd.backgroundTexture == key
+							end, function()
+								local c = curSpecCfg()
+								if not c then return end
+								local bd = ensureBackdropTable(c)
+								bd.backgroundTexture = key
+								queueRefresh()
+							end)
+						end
+					end,
+					get = function()
+						local c = curSpecCfg()
+						local bd = ensureBackdropTable(c)
+						return bd and bd.backgroundTexture or (cfg and cfg.backdrop and cfg.backdrop.backgroundTexture) or "Interface\\DialogFrame\\UI-DialogBox-Background"
+					end,
+					set = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						local bd = ensureBackdropTable(c)
+						bd.backgroundTexture = value
+						queueRefresh()
+					end,
+					colorDefault = toUIColor(cfg and cfg.backdrop and cfg.backdrop.backgroundColor, { 0, 0, 0, 0.8 }),
+					colorGet = function()
+						local c = curSpecCfg()
+						local bd = ensureBackdropTable(c)
+						local col = bd and bd.backgroundColor or { 0, 0, 0, 0.8 }
+						local r, g, b, a = toColorComponents(col, { 0, 0, 0, 0.8 })
+						return { r = r, g = g, b = b, a = a }
+					end,
+					colorSet = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						local bd = ensureBackdropTable(c)
+						bd.backgroundColor = toColorArray(value, { 0, 0, 0, 0.8 })
+						queueRefresh()
+					end,
+					hasOpacity = true,
+					isEnabled = backdropEnabled,
+					default = (cfg and cfg.backdrop and cfg.backdrop.backgroundTexture) or "Interface\\DialogFrame\\UI-DialogBox-Background",
+				}
+
+				settingsList[#settingsList + 1] = {
+					name = L["Border texture"],
+					kind = settingType.DropdownColor,
+					field = "backdropBorder",
+					generator = function(_, root)
+						local list, order = borderDropdownData()
+						if not list or not order then return end
+						for _, key in ipairs(order) do
+							local label = list[key] or key
+							root:CreateRadio(label, function()
+								local c = curSpecCfg()
+								local bd = ensureBackdropTable(c)
+								return bd and bd.borderTexture == key
+							end, function()
+								local c = curSpecCfg()
+								if not c then return end
+								local bd = ensureBackdropTable(c)
+								bd.borderTexture = key
+								queueRefresh()
+							end)
+						end
+					end,
+					get = function()
+						local c = curSpecCfg()
+						local bd = ensureBackdropTable(c)
+						return bd and bd.borderTexture or (cfg and cfg.backdrop and cfg.backdrop.borderTexture) or "Interface\\Tooltips\\UI-Tooltip-Border"
+					end,
+					set = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						local bd = ensureBackdropTable(c)
+						bd.borderTexture = value
+						queueRefresh()
+					end,
+					colorDefault = toUIColor(cfg and cfg.backdrop and cfg.backdrop.borderColor, { 0, 0, 0, 0 }),
+					colorGet = function()
+						local c = curSpecCfg()
+						local bd = ensureBackdropTable(c)
+						local col = bd and bd.borderColor or { 0, 0, 0, 0 }
+						local r, g, b, a = toColorComponents(col, { 0, 0, 0, 0 })
+						return { r = r, g = g, b = b, a = a }
+					end,
+					colorSet = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						local bd = ensureBackdropTable(c)
+						bd.borderColor = toColorArray(value, { 0, 0, 0, 0 })
+						queueRefresh()
+					end,
+					hasOpacity = true,
+					isEnabled = backdropEnabled,
+					default = (cfg and cfg.backdrop and cfg.backdrop.borderTexture) or "Interface\\Tooltips\\UI-Tooltip-Border",
+				}
+
+				settingsList[#settingsList + 1] = {
+					name = L["Border size"] or "Border size",
+					kind = settingType.Slider,
+					field = "backdropEdgeSize",
+					minValue = 0,
+					maxValue = 64,
+					valueStep = 1,
+					get = function()
+						local c = curSpecCfg()
+						local bd = ensureBackdropTable(c)
+						return bd and bd.edgeSize or 3
+					end,
+					set = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						local bd = ensureBackdropTable(c)
+						bd.edgeSize = value or 0
+						queueRefresh()
+					end,
+					default = (cfg and cfg.backdrop and cfg.backdrop.edgeSize) or 3,
+					isEnabled = backdropEnabled,
+				}
+
+				settingsList[#settingsList + 1] = {
+					name = L["Border offset"] or "Border offset",
+					kind = settingType.Slider,
+					field = "backdropOutset",
+					minValue = 0,
+					maxValue = 64,
+					valueStep = 1,
+					get = function()
+						local c = curSpecCfg()
+						local bd = ensureBackdropTable(c)
+						return bd and bd.outset or 0
+					end,
+					set = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						local bd = ensureBackdropTable(c)
+						bd.outset = value or 0
+						queueRefresh()
+					end,
+					default = (cfg and cfg.backdrop and cfg.backdrop.outset) or 0,
+					isEnabled = backdropEnabled,
+				}
+
+				settingsList[#settingsList + 1] = {
+					name = L["Background inset"] or "Background inset",
+					kind = settingType.Slider,
+					field = "backdropBackgroundInset",
+					minValue = 0,
+					maxValue = 128,
+					valueStep = 1,
+					get = function()
+						local c = curSpecCfg()
+						local bd = ensureBackdropTable(c)
+						return bd and bd.backgroundInset or 0
+					end,
+					set = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						local bd = ensureBackdropTable(c)
+						bd.backgroundInset = max(0, value or 0)
+						queueRefresh()
+					end,
+					default = (cfg and cfg.backdrop and cfg.backdrop.backgroundInset) or 0,
+					isEnabled = backdropEnabled,
+				}
+			end
 		end
 
-		EditMode:RegisterFrame("resourceBar_" .. idSuffix, {
+		local frameId = "resourceBar_" .. idSuffix
+		local titleLabel = (barType == "HEALTH") and HEALTH or (_G["POWER_TYPE_" .. barType] or _G[barType] or barType)
+
+		EditMode:RegisterFrame(frameId, {
 			frame = frame,
-			title = L["Resource Bars"],
+			title = titleLabel,
 			layoutDefaults = {
 				point = anchor and anchor.point or "CENTER",
 				relativePoint = anchor and anchor.relativePoint or "CENTER",
@@ -555,6 +809,7 @@ local function registerEditModeBars()
 			settings = settingsList,
 			showOutsideEditMode = true,
 		})
+		-- if addon.EditModeLib and addon.EditModeLib.SetFrameResetVisible then addon.EditModeLib:SetFrameResetVisible(frame, false) end
 		registered = registered + 1
 	end
 

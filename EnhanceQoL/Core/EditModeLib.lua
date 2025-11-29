@@ -412,13 +412,9 @@ function dropdownColorMixin:Setup(data)
 	self.ignoreInLayout = nil
 
 	local function createEntries(rootDescription)
-		if data.height then
-			rootDescription:SetScrollMode(data.height)
-		end
+		if data.height then rootDescription:SetScrollMode(data.height) end
 
-		local function getCurrent()
-			return data.get(lib.activeLayoutName)
-		end
+		local function getCurrent() return data.get(lib.activeLayoutName) end
 
 		local function makeSetter(value)
 			return function()
@@ -430,26 +426,18 @@ function dropdownColorMixin:Setup(data)
 		if data.values then
 			for _, value in next, data.values do
 				if value.isRadio then
-					rootDescription:CreateRadio(value.text, function()
-						return getCurrent() == value.text
-					end, makeSetter(value.text))
+					rootDescription:CreateRadio(value.text, function() return getCurrent() == value.text end, makeSetter(value.text))
 				else
-					rootDescription:CreateCheckbox(value.text, function()
-						return getCurrent() == value.text
-					end, makeSetter(value.text))
+					rootDescription:CreateCheckbox(value.text, function() return getCurrent() == value.text end, makeSetter(value.text))
 				end
 			end
 		end
 	end
 
 	if data.generator then
-		self.Dropdown:SetupMenu(function(owner, rootDescription)
-			pcall(data.generator, owner, rootDescription, data)
-		end)
+		self.Dropdown:SetupMenu(function(owner, rootDescription) pcall(data.generator, owner, rootDescription, data) end)
 	elseif data.values then
-		self.Dropdown:SetupMenu(function(_, rootDescription)
-			createEntries(rootDescription)
-		end)
+		self.Dropdown:SetupMenu(function(_, rootDescription) createEntries(rootDescription) end)
 	end
 
 	local colorVal
@@ -661,16 +649,19 @@ function dialogMixin:UpdateButtons()
 		end
 	end
 
+	local resetPosition = internal:GetPool("button"):Acquire(self.Buttons)
+	resetPosition.layoutIndex = num + 1
+	resetPosition:SetText(HUD_EDIT_MODE_RESET_POSITION)
+	resetPosition:SetOnClickHandler(GenerateClosure(self.ResetPosition, self))
+
 	local showReset = true
-	if lib.frameResetVisible and lib.frameResetVisible[self.selection.parent] == false then
-		showReset = false
-	end
+	if lib.frameResetVisible and lib.frameResetVisible[self.selection.parent] == false then showReset = false end
 	if showReset then
-		local resetPosition = internal:GetPool("button"):Acquire(self.Buttons)
-		resetPosition.layoutIndex = num + 1
-		resetPosition:SetText(HUD_EDIT_MODE_RESET_POSITION)
-		resetPosition:SetOnClickHandler(GenerateClosure(self.ResetPosition, self))
+		resetPosition.ignoreInLayout = nil
 		resetPosition:Show()
+	else
+		resetPosition.ignoreInLayout = true
+		resetPosition:Hide()
 	end
 end
 
@@ -681,9 +672,7 @@ function dialogMixin:ResetSettings()
 			data.set(lib.activeLayoutName, data.default)
 			if data.kind == lib.SettingType.CheckboxColor then
 				local apply = data.colorSet or data.setColor
-				if apply then
-					apply(lib.activeLayoutName, data.colorDefault or { 1, 1, 1, 1 })
-				end
+				if apply then apply(lib.activeLayoutName, data.colorDefault or { 1, 1, 1, 1 }) end
 			end
 		end
 
@@ -775,9 +764,7 @@ local function resetSelection()
 	end
 end
 
-local function isInCombat()
-	return InCombatLockdown and InCombatLockdown()
-end
+local function isInCombat() return InCombatLockdown and InCombatLockdown() end
 
 local function onDragStart(self)
 	if isInCombat() then return end
