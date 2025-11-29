@@ -236,6 +236,24 @@ local function registerEditModeBars()
 					end,
 					default = 0,
 				}
+
+				settingsList[#settingsList + 1] = {
+					name = L["Bar color"] or "Bar color",
+					kind = EditMode.lib.SettingType.Color,
+					field = "color",
+					default = cfg and cfg.color or { r = 1, g = 1, b = 1, a = 1 },
+					get = function()
+						local c = curSpecCfg()
+						return c and c.color or (cfg and cfg.color) or { 1, 1, 1, 1 }
+					end,
+					set = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						c.color = value
+						queueRefresh()
+					end,
+					hasOpacity = true,
+				}
 			end
 		end
 
@@ -272,9 +290,9 @@ local function registerEditModeBars()
 					ResourceBars.SetPowerBarSize(bcfg.width, bcfg.height, barType)
 				end
 				if ResourceBars.ReanchorAll then ResourceBars.ReanchorAll() end
-					if ResourceBars.Refresh then ResourceBars.Refresh() end
-				end,
-				settings = settingsList,
+				if ResourceBars.Refresh then ResourceBars.Refresh() end
+			end,
+			settings = settingsList,
 			showOutsideEditMode = true,
 		})
 		registered = registered + 1

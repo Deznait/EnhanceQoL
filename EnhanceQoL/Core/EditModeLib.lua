@@ -59,6 +59,7 @@ function internal:ReleaseAllPools()
 end
 
 lib.SettingType = CopyTable(Enum.EditModeSettingDisplayType)
+lib.SettingType.Color = "Color"
 
 -- Widgets ---------------------------------------------------------------------
 local checkboxMixin = {}
@@ -173,6 +174,93 @@ internal:CreatePool(lib.SettingType.Slider, function()
 	frame.Label:SetPoint("LEFT")
 
 	frame:OnLoad()
+	return frame
+end, function(_, frame)
+	frame:Hide()
+	frame.layoutIndex = nil
+end)
+
+local function normalizeColor(value)
+	if type(value) == "table" then
+		return value.r or value[1] or 1, value.g or value[2] or 1, value.b or value[3] or 1, value.a or value[4]
+	elseif type(value) == "number" then
+		return value, value, value
+	end
+	return 1, 1, 1
+end
+
+local colorMixin = {}
+function colorMixin:Setup(data)
+	self.setting = data
+	self.Label:SetText(data.name)
+
+	local r, g, b, a = normalizeColor(data.get(lib.activeLayoutName) or data.default)
+	self.hasOpacity = not not (data.hasOpacity or a)
+	self:SetColor(r, g, b, a)
+end
+
+function colorMixin:SetColor(r, g, b, a)
+	self.r, self.g, self.b, self.a = r, g, b, a
+	self.Swatch:SetColorTexture(r, g, b, 1)
+end
+
+function colorMixin:OnClick()
+	local prev = { r = self.r or 1, g = self.g or 1, b = self.b or 1, a = self.a }
+
+	ColorPickerFrame:SetupColorPickerAndShow({
+		r = prev.r,
+		g = prev.g,
+		b = prev.b,
+		opacity = prev.a,
+		hasOpacity = self.hasOpacity,
+		swatchFunc = function()
+			local r, g, b = ColorPickerFrame:GetColorRGB()
+			local a = self.hasOpacity and (ColorPickerFrame.GetColorAlpha and ColorPickerFrame:GetColorAlpha() or prev.a)
+			self:SetColor(r, g, b, a)
+			self.setting.set(lib.activeLayoutName, { r = r, g = g, b = b, a = a })
+		end,
+		opacityFunc = function()
+			if not self.hasOpacity then return end
+			local r, g, b = ColorPickerFrame:GetColorRGB()
+			local a = ColorPickerFrame.GetColorAlpha and ColorPickerFrame:GetColorAlpha() or prev.a
+			self:SetColor(r, g, b, a)
+			self.setting.set(lib.activeLayoutName, { r = r, g = g, b = b, a = a })
+		end,
+		cancelFunc = function()
+			self:SetColor(prev.r, prev.g, prev.b, prev.a)
+			self.setting.set(lib.activeLayoutName, { r = prev.r, g = prev.g, b = prev.b, a = prev.a })
+		end,
+	})
+end
+
+internal:CreatePool(lib.SettingType.Color, function()
+	local frame = CreateFrame("Frame", nil, UIParent, "ResizeLayoutFrame")
+	frame.fixedHeight = 32
+	Mixin(frame, colorMixin)
+
+	local label = frame:CreateFontString(nil, nil, "GameFontHighlightMedium")
+	label:SetPoint("LEFT")
+	label:SetWidth(100)
+	label:SetJustifyH("LEFT")
+	frame.Label = label
+
+	local button = CreateFrame("Button", nil, frame)
+	button:SetSize(36, 22)
+	button:SetPoint("LEFT", label, "RIGHT", 8, 0)
+
+	local border = button:CreateTexture(nil, "BACKGROUND")
+	border:SetColorTexture(0, 0, 0, 1)
+	border:SetAllPoints()
+
+	local swatch = button:CreateTexture(nil, "ARTWORK")
+	swatch:SetPoint("TOPLEFT", 2, -2)
+	swatch:SetPoint("BOTTOMRIGHT", -2, 2)
+	swatch:SetColorTexture(1, 1, 1, 1)
+	frame.Swatch = swatch
+
+	button:SetScript("OnClick", function() frame:OnClick() end)
+	frame.Button = button
+
 	return frame
 end, function(_, frame)
 	frame:Hide()
