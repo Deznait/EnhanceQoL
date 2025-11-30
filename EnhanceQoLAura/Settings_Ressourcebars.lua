@@ -231,6 +231,7 @@ local function registerEditModeBars()
 				{
 					name = HUD_EDIT_MODE_SETTING_CHAT_FRAME_WIDTH,
 					kind = settingType.Slider,
+					allowInput = true,
 					field = "width",
 					minValue = 50,
 					maxValue = 600,
@@ -240,14 +241,14 @@ local function registerEditModeBars()
 						local c = curSpecCfg()
 						return c and c.width or widthDefault or 200
 					end,
-						set = function(_, value)
-							local c = curSpecCfg()
-							if not c then return end
-							if not setIfChanged(c, "width", value) then return end
-							if EditMode and EditMode.SetValue then EditMode:SetValue(frameId, "width", value, nil, true) end
-							applyBarSize()
-							queueRefresh()
-						end,
+					set = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						if not setIfChanged(c, "width", value) then return end
+						if EditMode and EditMode.SetValue then EditMode:SetValue(frameId, "width", value, nil, true) end
+						applyBarSize()
+						queueRefresh()
+					end,
 					isEnabled = function()
 						if anchorUsesUIParent() then return true end
 						local c = curSpecCfg()
@@ -258,6 +259,7 @@ local function registerEditModeBars()
 				{
 					name = HUD_EDIT_MODE_SETTING_CHAT_FRAME_HEIGHT,
 					kind = settingType.Slider,
+					allowInput = true,
 					field = "height",
 					minValue = 6,
 					maxValue = 80,
@@ -267,14 +269,14 @@ local function registerEditModeBars()
 						local c = curSpecCfg()
 						return c and c.height or heightDefault or 20
 					end,
-						set = function(_, value)
-							local c = curSpecCfg()
-							if not c then return end
-							if not setIfChanged(c, "height", value) then return end
-							if EditMode and EditMode.SetValue then EditMode:SetValue(frameId, "height", value, nil, true) end
-							applyBarSize()
-							queueRefresh()
-						end,
+					set = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						if not setIfChanged(c, "height", value) then return end
+						if EditMode and EditMode.SetValue then EditMode:SetValue(frameId, "height", value, nil, true) end
+						applyBarSize()
+						queueRefresh()
+					end,
 				},
 			}
 
@@ -529,6 +531,7 @@ local function registerEditModeBars()
 				settingsList[#settingsList + 1] = {
 					name = "X Offset",
 					kind = settingType.Slider,
+					allowInput = true,
 					field = "anchorOffsetX",
 					minValue = -1000,
 					maxValue = 1000,
@@ -543,6 +546,7 @@ local function registerEditModeBars()
 						local new = value or 0
 						if a.x == new then return end
 						a.x = new
+						a.autoSpacing = false
 						queueRefresh()
 					end,
 					default = 0,
@@ -551,6 +555,7 @@ local function registerEditModeBars()
 				settingsList[#settingsList + 1] = {
 					name = "Y Offset",
 					kind = settingType.Slider,
+					allowInput = true,
 					field = "anchorOffsetY",
 					minValue = -1000,
 					maxValue = 1000,
@@ -565,6 +570,7 @@ local function registerEditModeBars()
 						local new = value or 0
 						if a.y == new then return end
 						a.y = new
+						a.autoSpacing = false
 						queueRefresh()
 					end,
 					default = 0,
@@ -616,6 +622,7 @@ local function registerEditModeBars()
 				settingsList[#settingsList + 1] = {
 					name = HUD_EDIT_MODE_SETTING_OBJECTIVE_TRACKER_TEXT_SIZE,
 					kind = settingType.Slider,
+					allowInput = true,
 					field = "fontSize",
 					minValue = 6,
 					maxValue = 64,
@@ -636,6 +643,7 @@ local function registerEditModeBars()
 				settingsList[#settingsList + 1] = {
 					name = L["Text X Offset"] or "Text Offset X",
 					kind = settingType.Slider,
+					allowInput = true,
 					field = "textOffsetX",
 					minValue = -500,
 					maxValue = 500,
@@ -660,6 +668,7 @@ local function registerEditModeBars()
 				settingsList[#settingsList + 1] = {
 					name = L["Text Y Offset"] or "Text Offset Y",
 					kind = settingType.Slider,
+					allowInput = true,
 					field = "textOffsetY",
 					minValue = -500,
 					maxValue = 500,
@@ -925,6 +934,7 @@ local function registerEditModeBars()
 				settingsList[#settingsList + 1] = {
 					name = L["Separator thickness"] or "Separator thickness",
 					kind = settingType.Slider,
+					allowInput = true,
 					field = "separatorThickness",
 					minValue = 1,
 					maxValue = 10,
@@ -1201,6 +1211,7 @@ local function registerEditModeBars()
 					name = L["Border size"] or "Border size",
 					kind = settingType.Slider,
 					allowInput = true,
+					allowInput = true,
 					field = "backdropEdgeSize",
 					minValue = 0,
 					maxValue = 64,
@@ -1225,6 +1236,7 @@ local function registerEditModeBars()
 					parentId = "CheckboxGroup",
 					name = L["Border offset"] or "Border offset",
 					kind = settingType.Slider,
+					allowInput = true,
 					field = "backdropOutset",
 					minValue = 0,
 					maxValue = 64,
@@ -1249,6 +1261,7 @@ local function registerEditModeBars()
 					parentId = "CheckboxGroup",
 					name = L["Background inset"] or "Background inset",
 					kind = settingType.Slider,
+					allowInput = true,
 					field = "backdropBackgroundInset",
 					minValue = 0,
 					maxValue = 128,
