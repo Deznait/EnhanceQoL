@@ -1257,6 +1257,7 @@ local function registerEditModeBars()
 		EditMode:RegisterFrame(frameId, {
 			frame = frame,
 			title = titleLabel,
+			enableOverlayToggle = true,
 			layoutDefaults = {
 				point = anchor and anchor.point or "CENTER",
 				relativePoint = anchor and anchor.relativePoint or "CENTER",
@@ -1298,7 +1299,7 @@ local function registerEditModeBars()
 				return c and c.enabled == true
 			end,
 			settings = settingsList,
-			showOutsideEditMode = false,
+			showOutsideEditMode = true,
 		})
 		if addon.EditModeLib and addon.EditModeLib.SetFrameResetVisible then addon.EditModeLib:SetFrameResetVisible(frame, false) end
 		registered = registered + 1
