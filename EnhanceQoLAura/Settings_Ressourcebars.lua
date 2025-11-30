@@ -50,6 +50,12 @@ local function ensureSpecCfg(specIndex)
 	return addon.db.personalResourceBarSettings[class][specIndex]
 end
 
+local function refreshSettingsUI()
+	local lib = addon.EditModeLib
+	if lib and lib.internal and lib.internal.RefreshSettings then lib.internal:RefreshSettings() end
+	if lib and lib.internal and lib.internal.RefreshSettingValues then lib.internal:RefreshSettingValues() end
+end
+
 local function setBarEnabled(specIndex, barType, enabled)
 	local specCfg = ensureSpecCfg(specIndex)
 	if not specCfg then return end
@@ -70,6 +76,11 @@ local function setBarEnabled(specIndex, barType, enabled)
 	end
 	if ResourceBars.QueueRefresh then ResourceBars.QueueRefresh(specIndex) end
 	if ResourceBars.MaybeRefreshActive then ResourceBars.MaybeRefreshActive(specIndex) end
+	if EditMode and EditMode.RefreshFrame then
+		local id = "resourceBar_" .. tostring(barType)
+		local layout = EditMode.GetActiveLayoutName and EditMode:GetActiveLayoutName()
+		EditMode:RefreshFrame(id, layout)
+	end
 	if EditMode and EditMode:IsInEditMode() then
 		if ResourceBars.Refresh then ResourceBars.Refresh() end
 		if ResourceBars.ReanchorAll then ResourceBars.ReanchorAll() end
@@ -86,6 +97,19 @@ local function registerEditModeBars()
 		local cfg = ResourceBars and ResourceBars.getBarSettings and ResourceBars.getBarSettings(barType) or ResourceBars and ResourceBars.GetBarSettings and ResourceBars.GetBarSettings(barType)
 		local anchor = ResourceBars and ResourceBars.getAnchor and ResourceBars.getAnchor(barType, addon.variables.unitSpec)
 		local frameId = "resourceBar_" .. idSuffix
+		local titleLabel = (barType == "HEALTH") and (HEALTH or "Health") or (_G["POWER_TYPE_" .. barType] or _G[barType] or barType)
+
+		-- Ensure backdrop defaults for current spec view
+		cfg = cfg or {}
+		cfg.backdrop = cfg.backdrop or {}
+		if cfg.backdrop.enabled == nil then cfg.backdrop.enabled = true end
+		cfg.backdrop.backgroundTexture = cfg.backdrop.backgroundTexture or "Interface\\DialogFrame\\UI-DialogBox-Background"
+		cfg.backdrop.backgroundColor = cfg.backdrop.backgroundColor or { 0, 0, 0, 0.8 }
+		cfg.backdrop.borderTexture = cfg.backdrop.borderTexture or "Interface\\Tooltips\\UI-Tooltip-Border"
+		cfg.backdrop.borderColor = cfg.backdrop.borderColor or { 0, 0, 0, 0 }
+		cfg.backdrop.edgeSize = cfg.backdrop.edgeSize or 3
+		cfg.backdrop.outset = cfg.backdrop.outset or 0
+		cfg.backdrop.backgroundInset = max(0, cfg.backdrop.backgroundInset or 0)
 		local function curSpecCfg()
 			local spec = addon.variables.unitSpec
 			local specCfg = ensureSpecCfg(spec)
@@ -101,9 +125,99 @@ local function registerEditModeBars()
 				if ResourceBars.ReanchorAll then ResourceBars.ReanchorAll() end
 			end
 		end
+		local function applyBarSize()
+			local c = curSpecCfg()
+			if not c then return end
+			if barType == "HEALTH" then
+				ResourceBars.SetHealthBarSize(c.width or widthDefault, c.height or heightDefault)
+			else
+				ResourceBars.SetPowerBarSize(c.width or widthDefault, c.height or heightDefault, barType)
+			end
+		end
+		local function ensureBackdropTable(target)
+			if not target then return nil end
+			target.backdrop = target.backdrop or {}
+			local bd = target.backdrop
+			local base = (cfg and cfg.backdrop) or {}
+			if bd.enabled == nil then
+				if base.enabled ~= nil then
+					bd.enabled = base.enabled
+				else
+					bd.enabled = true
+				end
+			end
+			bd.backgroundTexture = bd.backgroundTexture or base.backgroundTexture or "Interface\\DialogFrame\\UI-DialogBox-Background"
+			bd.backgroundColor = bd.backgroundColor or toColorArray(base.backgroundColor, { 0, 0, 0, 0.8 })
+			bd.borderTexture = bd.borderTexture or base.borderTexture or "Interface\\Tooltips\\UI-Tooltip-Border"
+			bd.borderColor = bd.borderColor or toColorArray(base.borderColor, { 0, 0, 0, 0 })
+			bd.edgeSize = bd.edgeSize or base.edgeSize or 3
+			bd.outset = bd.outset or base.outset or 0
+			bd.backgroundInset = max(0, bd.backgroundInset or base.backgroundInset or 0)
+			bd.innerPadding = nil
+			return bd
+		end
+		local function ensureAnchorTable()
+			local c = curSpecCfg()
+			if not c then return nil end
+			c.anchor = c.anchor or {}
+			local a = c.anchor
+			if not a.point then a.point = "CENTER" end
+			if not a.relativePoint then a.relativePoint = a.point end
+			if a.x == nil then a.x = 0 end
+			if a.y == nil then a.y = 0 end
+			if not a.relativeFrame or a.relativeFrame == "" then a.relativeFrame = "UIParent" end
+			return a
+		end
+		local function anchorUsesUIParent()
+			local a = ensureAnchorTable()
+			return not a or (a.relativeFrame or "UIParent") == "UIParent"
+		end
+		local function forceUIParentAnchor()
+			local a = ensureAnchorTable()
+			if not a then return end
+			if (a.relativeFrame or "UIParent") ~= "UIParent" then
+				a.relativeFrame = "UIParent"
+				a.point = "CENTER"
+				a.relativePoint = "CENTER"
+				a.x = 0
+				a.y = 0
+				a.autoSpacing = nil
+				a.matchRelativeWidth = nil
+				refreshSettingsUI()
+			end
+		end
 		local settingType = EditMode.lib and EditMode.lib.SettingType
 		local settingsList
 		if settingType then
+			local function backgroundDropdownData()
+				local map = {
+					["Interface\\DialogFrame\\UI-DialogBox-Background"] = "Dialog Background",
+					["Interface\\Buttons\\WHITE8x8"] = "Solid (tintable)",
+				}
+				if LibStub then
+					local media = LibStub("LibSharedMedia-3.0", true)
+					if media then
+						for name, path in pairs(media:HashTable("background") or {}) do
+							if type(path) == "string" and path ~= "" then map[path] = tostring(name) end
+						end
+					end
+				end
+				return addon.functions.prepareListForDropdown(map)
+			end
+
+			local function borderDropdownData()
+				local map = { ["Interface\\Tooltips\\UI-Tooltip-Border"] = "Tooltip Border" }
+				if LibStub then
+					local media = LibStub("LibSharedMedia-3.0", true)
+					if media then
+						for name, path in pairs(media:HashTable("border") or {}) do
+							if type(path) == "string" and path ~= "" then map[path] = tostring(name) end
+						end
+					end
+				end
+				return addon.functions.prepareListForDropdown(map)
+			end
+
 			settingsList = {
 				{
 					name = HUD_EDIT_MODE_SETTING_CHAT_FRAME_WIDTH,
@@ -112,7 +226,7 @@ local function registerEditModeBars()
 					minValue = 50,
 					maxValue = 600,
 					valueStep = 1,
-					default = cfg and cfg.width or widthDefault or 200,
+					default = widthDefault or 200,
 					get = function()
 						local c = curSpecCfg()
 						return c and c.width or widthDefault or 200
@@ -122,7 +236,14 @@ local function registerEditModeBars()
 						if not c then return end
 						c.width = value
 						if EditMode and EditMode.SetValue then EditMode:SetValue(frameId, "width", value, nil, true) end
+						applyBarSize()
 						queueRefresh()
+					end,
+					isEnabled = function()
+						if anchorUsesUIParent() then return true end
+						local c = curSpecCfg()
+						local a = c and c.anchor
+						return not (a and a.matchRelativeWidth == true)
 					end,
 				},
 				{
@@ -132,7 +253,7 @@ local function registerEditModeBars()
 					minValue = 6,
 					maxValue = 80,
 					valueStep = 1,
-					default = cfg and cfg.height or heightDefault or 20,
+					default = heightDefault or 20,
 					get = function()
 						local c = curSpecCfg()
 						return c and c.height or heightDefault or 20
@@ -142,10 +263,300 @@ local function registerEditModeBars()
 						if not c then return end
 						c.height = value
 						if EditMode and EditMode.SetValue then EditMode:SetValue(frameId, "height", value, nil, true) end
+						applyBarSize()
 						queueRefresh()
 					end,
 				},
 			}
+
+			do -- Anchoring
+				local points = { "TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "CENTER", "RIGHT", "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT" }
+				local function displayNameForBarType(pType)
+					if pType == "HEALTH" then return HEALTH or "Health" end
+					local s = _G["POWER_TYPE_" .. pType] or _G[pType]
+					if type(s) == "string" and s ~= "" then return s end
+					return pType
+				end
+				local function frameNameToBarType(fname)
+					if fname == "EQOLHealthBar" then return "HEALTH" end
+					return type(fname) == "string" and fname:match("^EQOL(.+)Bar$") or nil
+				end
+				local function wouldCauseLoop(fromType, candidateName)
+					if candidateName == "UIParent" then return false end
+					local candType = frameNameToBarType(candidateName)
+					if not candType then return false end
+					if candType == fromType then return true end
+					local targetFrameName = (fromType == "HEALTH") and "EQOLHealthBar" or ("EQOL" .. fromType .. "Bar")
+					local seen = {}
+					local name = candidateName
+					local spec = addon.variables.unitSpec
+					local limit = 10
+					while name and name ~= "UIParent" and limit > 0 do
+						if seen[name] then break end
+						seen[name] = true
+						if name == targetFrameName then return true end
+						local bt = frameNameToBarType(name)
+						if not bt then break end
+						local specCfg = ensureSpecCfg(spec)
+						local anch = specCfg and specCfg[bt] and specCfg[bt].anchor
+						name = anch and anch.relativeFrame or "UIParent"
+						limit = limit - 1
+					end
+					return false
+				end
+				local function isBarEnabled(pType)
+					local spec = addon.variables.unitSpec
+					local specCfg = ensureSpecCfg(spec)
+					return specCfg and specCfg[pType] and specCfg[pType].enabled == true
+				end
+				local function enforceMinWidth()
+					local c = curSpecCfg()
+					if not c then return end
+					local minWidth = MIN_RESOURCE_BAR_WIDTH or 50
+					c.width = minWidth
+					if barType == "HEALTH" then
+						ResourceBars.SetHealthBarSize(c.width or minWidth, c.height or heightDefault or 20)
+					else
+						ResourceBars.SetPowerBarSize(c.width or minWidth, c.height or heightDefault or 20, barType)
+					end
+				end
+
+				local function relativeFrameEntries()
+					local entries = {}
+					local seen = {}
+					local function add(key, label)
+						if not key or key == "" or seen[key] then return end
+						if wouldCauseLoop(barType, key) then return end
+						seen[key] = true
+						entries[#entries + 1] = { key = key, label = label or key }
+					end
+
+					add("UIParent", "UIParent")
+					add("PlayerFrame", "PlayerFrame")
+					add("TargetFrame", "TargetFrame")
+					add("EssentialCooldownViewer", "EssentialCooldownViewer")
+					add("UtilityCooldownViewer", "UtilityCooldownViewer")
+					add("BuffBarCooldownViewer", "BuffBarCooldownViewer")
+					add("BuffIconCooldownViewer", "BuffIconCooldownViewer")
+
+					if addon.variables and addon.variables.actionBarNames then
+						for _, info in ipairs(addon.variables.actionBarNames) do
+							if info.name then add(info.name, info.text or info.name) end
+						end
+					end
+
+					if isBarEnabled("HEALTH") then add("EQOLHealthBar", displayNameForBarType("HEALTH")) end
+					for _, pType in ipairs(ResourceBars.classPowerTypes or {}) do
+						if isBarEnabled(pType) then
+							local fname = "EQOL" .. pType .. "Bar"
+							add(fname, displayNameForBarType(pType))
+						end
+					end
+
+					local a = ensureAnchorTable()
+					local cur = a and a.relativeFrame
+					if cur and not seen[cur] and not wouldCauseLoop(barType, cur) then add(cur, cur) end
+
+					return entries
+				end
+				local function validateRelativeFrame(a)
+					if not a then return "UIParent" end
+					local cur = a.relativeFrame or "UIParent"
+					local entries = relativeFrameEntries()
+					local ok = false
+					for _, e in ipairs(entries) do
+						if e.key == cur then
+							ok = true
+							break
+						end
+					end
+					if not ok then
+						cur = "UIParent"
+						a.relativeFrame = cur
+					end
+					return cur
+				end
+				local function applyAnchorDefaults(a, target)
+					if not a then return end
+					if target == "UIParent" then
+						a.point = "CENTER"
+						a.relativePoint = "CENTER"
+						a.x = 0
+						a.y = 0
+						a.autoSpacing = nil
+						a.matchRelativeWidth = nil
+					else
+						a.point = "TOPLEFT"
+						a.relativePoint = "BOTTOMLEFT"
+						a.x = 0
+						a.y = 0
+						a.autoSpacing = nil
+					end
+				end
+				settingsList[#settingsList + 1] = {
+					name = "Relative frame",
+					kind = settingType.Dropdown,
+					field = "anchorRelativeFrame",
+					generator = function(_, root)
+						local entries = relativeFrameEntries()
+						for _, entry in ipairs(entries) do
+							root:CreateRadio(entry.label, function()
+								local a = ensureAnchorTable()
+								local cur = validateRelativeFrame(a)
+								return cur == entry.key
+							end, function()
+								local a = ensureAnchorTable()
+								if not a then return end
+								local target = entry.key
+								if wouldCauseLoop(barType, target) then target = "UIParent" end
+								a.relativeFrame = target
+								applyAnchorDefaults(a, target)
+								if target ~= "UIParent" and a.matchRelativeWidth == true then enforceMinWidth() end
+								queueRefresh()
+								refreshSettingsUI()
+							end)
+						end
+					end,
+					get = function()
+						local a = ensureAnchorTable()
+						return validateRelativeFrame(a)
+					end,
+					set = function(_, value)
+						local a = ensureAnchorTable()
+						if not a then return end
+						local target = value or "UIParent"
+						if wouldCauseLoop(barType, target) then target = "UIParent" end
+						a.relativeFrame = target
+						applyAnchorDefaults(a, target)
+						if target ~= "UIParent" and a.matchRelativeWidth == true then enforceMinWidth() end
+						queueRefresh()
+						refreshSettingsUI()
+					end,
+					default = "UIParent",
+				}
+
+				settingsList[#settingsList + 1] = {
+					name = "Anchor point",
+					kind = settingType.Dropdown,
+					field = "anchorPoint",
+					generator = function(_, root)
+						for _, p in ipairs(points) do
+							root:CreateRadio(p, function()
+								local a = ensureAnchorTable()
+								return a and (a.point or "CENTER") == p
+							end, function()
+								local a = ensureAnchorTable()
+								if not a then return end
+								a.point = p
+								if not a.relativePoint then a.relativePoint = p end
+								queueRefresh()
+							end)
+						end
+					end,
+					get = function()
+						local a = ensureAnchorTable()
+						return a and a.point or "CENTER"
+					end,
+					set = function(_, value)
+						local a = ensureAnchorTable()
+						if not a then return end
+						a.point = value
+						if not a.relativePoint then a.relativePoint = value end
+						queueRefresh()
+					end,
+					default = "CENTER",
+				}
+
+				settingsList[#settingsList + 1] = {
+					name = "Relative point",
+					kind = settingType.Dropdown,
+					field = "anchorRelativePoint",
+					generator = function(_, root)
+						for _, p in ipairs(points) do
+							root:CreateRadio(p, function()
+								local a = ensureAnchorTable()
+								return a and (a.relativePoint or "CENTER") == p
+							end, function()
+								local a = ensureAnchorTable()
+								if not a then return end
+								a.relativePoint = p
+								queueRefresh()
+							end)
+						end
+					end,
+					get = function()
+						local a = ensureAnchorTable()
+						return a and a.relativePoint or "CENTER"
+					end,
+					set = function(_, value)
+						local a = ensureAnchorTable()
+						if not a then return end
+						a.relativePoint = value
+						queueRefresh()
+					end,
+					default = "CENTER",
+				}
+
+				settingsList[#settingsList + 1] = {
+					name = L["MatchRelativeFrameWidth"] or "Match Relative Frame width",
+					kind = settingType.Checkbox,
+					field = "matchRelativeWidth",
+					get = function()
+						local a = ensureAnchorTable()
+						return a and a.matchRelativeWidth == true
+					end,
+					set = function(_, value)
+						local a = ensureAnchorTable()
+						if not a then return end
+						a.matchRelativeWidth = value and true or nil
+						if a.matchRelativeWidth then enforceMinWidth() end
+						queueRefresh()
+						refreshSettingsUI()
+					end,
+					isEnabled = function() return not anchorUsesUIParent() end,
+					default = false,
+				}
+
+				settingsList[#settingsList + 1] = {
+					name = "X Offset",
+					kind = settingType.Slider,
+					field = "anchorOffsetX",
+					minValue = -1000,
+					maxValue = 1000,
+					valueStep = 1,
+					get = function()
+						local a = ensureAnchorTable()
+						return a and a.x or 0
+					end,
+					set = function(_, value)
+						local a = ensureAnchorTable()
+						if not a then return end
+						a.x = value or 0
+						queueRefresh()
+					end,
+					default = 0,
+				}
+
+				settingsList[#settingsList + 1] = {
+					name = "Y Offset",
+					kind = settingType.Slider,
+					field = "anchorOffsetY",
+					minValue = -1000,
+					maxValue = 1000,
+					valueStep = 1,
+					get = function()
+						local a = ensureAnchorTable()
+						return a and a.y or 0
+					end,
+					set = function(_, value)
+						local a = ensureAnchorTable()
+						if not a then return end
+						a.y = value or 0
+						queueRefresh()
+					end,
+					default = 0,
+				}
+			end
 
 			if barType ~= "RUNES" then
 				local function defaultStyle()
@@ -186,7 +597,7 @@ local function registerEditModeBars()
 							end)
 						end
 					end,
-					default = cfg and cfg.textStyle or defaultStyle(),
+					default = defaultStyle(),
 				}
 
 				settingsList[#settingsList + 1] = {
@@ -206,7 +617,7 @@ local function registerEditModeBars()
 						c.fontSize = value
 						queueRefresh()
 					end,
-					default = cfg and cfg.fontSize or 16,
+					default = 16,
 				}
 
 				settingsList[#settingsList + 1] = {
@@ -255,7 +666,7 @@ local function registerEditModeBars()
 
 				settingsList[#settingsList + 1] = {
 					name = L["Font"] or FONT,
-					kind = settingType.Dropdown,
+					kind = settingType.DropdownColor,
 					field = "fontFace",
 					generator = function(_, root)
 						local currentPath
@@ -304,6 +715,21 @@ local function registerEditModeBars()
 						c.fontFace = value
 						queueRefresh()
 					end,
+					colorDefault = { r = 1, g = 1, b = 1, a = 1 },
+					colorGet = function()
+						local c = curSpecCfg()
+						local col = (c and c.fontColor) or (cfg and cfg.fontColor) or { 1, 1, 1, 1 }
+						local r, g, b, a = toColorComponents(col, { 1, 1, 1, 1 })
+						return { r = r, g = g, b = b, a = a }
+					end,
+					colorSet = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						c.fontColor = toColorArray(value, { 1, 1, 1, 1 })
+						queueRefresh()
+					end,
+					hasOpacity = true,
+					default = addon.variables.defaultFont,
 				}
 
 				local outlineOptions = {
@@ -312,11 +738,11 @@ local function registerEditModeBars()
 					{ key = "THICKOUTLINE", label = "Thick Outline" },
 					{ key = "MONOCHROMEOUTLINE", label = "Mono Outline" },
 				}
-					settingsList[#settingsList + 1] = {
-						name = L["Outline"],
-						kind = settingType.Dropdown,
-						field = "fontOutline",
-						generator = function(_, root)
+				settingsList[#settingsList + 1] = {
+					name = L["Outline"],
+					kind = settingType.Dropdown,
+					field = "fontOutline",
+					generator = function(_, root)
 						for _, entry in ipairs(outlineOptions) do
 							root:CreateRadio(entry.label, function()
 								local c = curSpecCfg()
@@ -329,44 +755,448 @@ local function registerEditModeBars()
 								queueRefresh()
 							end)
 						end
-						end,
-						get = function()
-							local c = curSpecCfg()
-							return (c and c.fontOutline) or cfg.fontOutline or "OUTLINE"
-						end,
-						set = function(_, value)
-							local c = curSpecCfg()
-							if not c then return end
-							c.fontOutline = value
-							queueRefresh()
-						end,
-						default = (cfg and cfg.fontOutline) or "OUTLINE",
-					}
-
-				settingsList[#settingsList + 1] = {
-					name = L["Font color"] or FONT_COLOR,
-					kind = EditMode.lib.SettingType.Color,
-					field = "fontColor",
-					default = toUIColor(cfg and cfg.fontColor, { 1, 1, 1, 1 }),
+					end,
 					get = function()
 						local c = curSpecCfg()
-						local col = (c and c.fontColor) or (cfg and cfg.fontColor) or { 1, 1, 1, 1 }
-						return toUIColor(col, { 1, 1, 1, 1 })
+						return (c and c.fontOutline) or cfg.fontOutline or "OUTLINE"
 					end,
 					set = function(_, value)
 						local c = curSpecCfg()
 						if not c then return end
-						c.fontColor = toColorArray(value, { 1, 1, 1, 1 })
+						c.fontOutline = value
+						queueRefresh()
+					end,
+					default = "OUTLINE",
+				}
+
+				settingsList[#settingsList + 1] = {
+					name = "Colortest",
+					kind = settingType.Collapsible,
+					id = "Colortest",
+					defaultCollapsed = true,
+				}
+
+				settingsList[#settingsList + 1] = {
+					name = L["Custom bar color"] or "Custom bar color",
+					kind = settingType.CheckboxColor,
+					field = "useBarColor",
+					default = false,
+					get = function()
+						local c = curSpecCfg()
+						return c and c.useBarColor == true
+					end,
+					set = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						c.useBarColor = value and true or false
+						if c.useBarColor and c.useClassColor then c.useClassColor = false end
+						queueRefresh()
+						addon.EditModeLib.internal:RefreshSettings()
+					end,
+					colorDefault = toUIColor(cfg and cfg.barColor, { 1, 1, 1, 1 }),
+					colorGet = function()
+						local c = curSpecCfg()
+						local col = (c and c.barColor) or (cfg and cfg.barColor) or { 1, 1, 1, 1 }
+						local r, g, b, a = toColorComponents(col, { 1, 1, 1, 1 })
+						return { r = r, g = g, b = b, a = a }
+					end,
+					colorSet = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						c.barColor = toColorArray(value, { 1, 1, 1, 1 })
+						queueRefresh()
+					end,
+					isShown = function()
+						local c = curSpecCfg()
+						return not (c and c.useClassColor == true)
+					end,
+					hasOpacity = true,
+					parentId = "Colortest",
+				}
+
+				settingsList[#settingsList + 1] = {
+					name = L["Use class color"] or "Use class color",
+					kind = settingType.Checkbox,
+					field = "useClassColor",
+					get = function()
+						local c = curSpecCfg()
+						return c and c.useClassColor == true
+					end,
+					set = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						c.useClassColor = value and true or false
+						if c.useClassColor and c.useBarColor then c.useBarColor = false end
+						queueRefresh()
+						addon.EditModeLib.internal:RefreshSettings()
+					end,
+					isEnabled = function()
+						local c = curSpecCfg()
+						return not (c and c.useBarColor == true)
+					end,
+					default = false,
+					parentId = "Colortest",
+				}
+
+				settingsList[#settingsList + 1] = {
+					name = L["Use max color"] or "Use max color",
+					kind = settingType.CheckboxColor,
+					field = "useMaxColor",
+					default = false,
+					get = function()
+						local c = curSpecCfg()
+						return c and c.useMaxColor == true
+					end,
+					set = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						c.useMaxColor = value and true or false
+						queueRefresh()
+					end,
+					colorDefault = toUIColor(cfg and cfg.maxColor, { 0, 1, 0, 1 }),
+					colorGet = function()
+						local c = curSpecCfg()
+						local col = (c and c.maxColor) or (cfg and cfg.maxColor) or { 0, 1, 0, 1 }
+						local r, g, b, a = toColorComponents(col, { 0, 1, 0, 1 })
+						return { r = r, g = g, b = b, a = a }
+					end,
+					colorSet = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						c.maxColor = toColorArray(value, { 0, 1, 0, 1 })
 						queueRefresh()
 					end,
 					hasOpacity = true,
 				}
+
+				settingsList[#settingsList + 1] = {
+					name = L["Bar Texture"] or "Bar Texture",
+					kind = settingType.Dropdown,
+					field = "barTexture",
+					generator = function(_, root)
+						local listTex, orderTex = addon.Aura.functions.getStatusbarDropdownLists(true)
+						if not listTex or not orderTex then
+							listTex, orderTex = { DEFAULT = DEFAULT }, { "DEFAULT" }
+						end
+						if not listTex or not orderTex then return end
+						for _, key in ipairs(orderTex) do
+							local label = listTex[key] or key
+							root:CreateRadio(label, function()
+								local c = curSpecCfg()
+								local cur = c and c.barTexture or cfg.barTexture or "DEFAULT"
+								return cur == key
+							end, function()
+								local c = curSpecCfg()
+								if not c then return end
+								c.barTexture = key
+								queueRefresh()
+							end)
+						end
+					end,
+					get = function()
+						local c = curSpecCfg()
+						return (c and c.barTexture) or cfg.barTexture or "DEFAULT"
+					end,
+					set = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						c.barTexture = value
+						queueRefresh()
+					end,
+					default = cfg and cfg.barTexture or "DEFAULT",
+				}
+			end
+
+			do -- Behavior
+				local behaviorValues = ResourceBars.BehaviorOptionsForType and ResourceBars.BehaviorOptionsForType(barType)
+				if not behaviorValues then
+					behaviorValues = {
+						{ value = "reverseFill", text = L["Reverse fill"] or "Reverse fill" },
+					}
+					if barType ~= "RUNES" then
+						behaviorValues[#behaviorValues + 1] = { value = "verticalFill", text = L["Vertical orientation"] or "Vertical orientation" }
+						behaviorValues[#behaviorValues + 1] = { value = "smoothFill", text = L["Smooth fill"] or "Smooth fill" }
+					end
+				end
+
+				local function currentBehaviorSelection()
+					if ResourceBars and ResourceBars.BehaviorSelectionFromConfig then return ResourceBars.BehaviorSelectionFromConfig(curSpecCfg(), barType) end
+					local c = curSpecCfg()
+					local map = {}
+					if c then
+						if c.reverseFill == true then map.reverseFill = true end
+						if barType ~= "RUNES" then
+							if c.verticalFill == true then map.verticalFill = true end
+							if c.smoothFill == true then map.smoothFill = true end
+						end
+					end
+					return map
+				end
+
+				local function applyBehaviorFlag(key, enabled)
+					local cfg = curSpecCfg()
+					if not cfg then return end
+					local selection = currentBehaviorSelection()
+					if key then selection[key] = enabled and true or nil end
+					local swapped = false
+					if ResourceBars and ResourceBars.ApplyBehaviorSelection then
+						swapped = ResourceBars.ApplyBehaviorSelection(cfg, selection, barType, addon.variables.unitSpec) and true or false
+					else
+						cfg.reverseFill = selection.reverseFill == true
+						if barType ~= "RUNES" then
+							cfg.verticalFill = selection.verticalFill == true
+							cfg.smoothFill = selection.smoothFill == true
+						else
+							cfg.verticalFill = nil
+							cfg.smoothFill = nil
+						end
+					end
+					queueRefresh()
+					if swapped then refreshSettingsUI() end
+				end
+
+				if settingType.MultiDropdown and behaviorValues and #behaviorValues > 0 then
+					settingsList[#settingsList + 1] = {
+						name = L["Behavior"] or "Behavior",
+						kind = settingType.MultiDropdown,
+						field = "behavior",
+						default = currentBehaviorSelection(),
+						values = behaviorValues,
+						isSelected = function(_, value)
+							local selection = currentBehaviorSelection()
+							return selection[value] == true
+						end,
+						setSelected = function(_, value, state) applyBehaviorFlag(value, state) end,
+					}
+				end
+			end
+
+			do -- Backdrop
+				local function backdropEnabled()
+					local c = curSpecCfg()
+					local bd = ensureBackdropTable(c)
+					return not (bd and bd.enabled == false)
+				end
+
+				settingsList[#settingsList + 1] = {
+					name = "Backdrop",
+					kind = settingType.Collapsible,
+					id = "CheckboxGroup",
+					defaultCollapsed = true,
+				}
+
+				settingsList[#settingsList + 1] = {
+					parentId = "CheckboxGroup",
+					name = L["Show backdrop"] or "Show backdrop",
+					kind = settingType.Checkbox,
+					field = "backdropEnabled",
+					get = function()
+						local c = curSpecCfg()
+						local bd = ensureBackdropTable(c)
+						return bd and bd.enabled ~= false
+					end,
+					set = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						local bd = ensureBackdropTable(c)
+						bd.enabled = value and true or false
+						queueRefresh()
+						if addon.EditModeLib and addon.EditModeLib.internal then addon.EditModeLib.internal:RefreshSettings() end
+					end,
+					default = cfg and cfg.backdrop and cfg.backdrop.enabled ~= false,
+				}
+
+				settingsList[#settingsList + 1] = {
+					parentId = "CheckboxGroup",
+					name = L["Background texture"],
+					kind = settingType.DropdownColor,
+					field = "backdropBackground",
+					generator = function(_, root)
+						local list, order = backgroundDropdownData()
+						if not list or not order then return end
+						for _, key in ipairs(order) do
+							local label = list[key] or key
+							root:CreateRadio(label, function()
+								local c = curSpecCfg()
+								local bd = ensureBackdropTable(c)
+								return bd and bd.backgroundTexture == key
+							end, function()
+								local c = curSpecCfg()
+								if not c then return end
+								local bd = ensureBackdropTable(c)
+								bd.backgroundTexture = key
+								queueRefresh()
+							end)
+						end
+					end,
+					get = function()
+						local c = curSpecCfg()
+						local bd = ensureBackdropTable(c)
+						return bd and bd.backgroundTexture or (cfg and cfg.backdrop and cfg.backdrop.backgroundTexture) or "Interface\\DialogFrame\\UI-DialogBox-Background"
+					end,
+					set = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						local bd = ensureBackdropTable(c)
+						bd.backgroundTexture = value
+						queueRefresh()
+					end,
+					colorDefault = toUIColor(cfg and cfg.backdrop and cfg.backdrop.backgroundColor, { 0, 0, 0, 0.8 }),
+					colorGet = function()
+						local c = curSpecCfg()
+						local bd = ensureBackdropTable(c)
+						local col = bd and bd.backgroundColor or { 0, 0, 0, 0.8 }
+						local r, g, b, a = toColorComponents(col, { 0, 0, 0, 0.8 })
+						return { r = r, g = g, b = b, a = a }
+					end,
+					colorSet = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						local bd = ensureBackdropTable(c)
+						bd.backgroundColor = toColorArray(value, { 0, 0, 0, 0.8 })
+						queueRefresh()
+					end,
+					hasOpacity = true,
+					isEnabled = backdropEnabled,
+					default = (cfg and cfg.backdrop and cfg.backdrop.backgroundTexture) or "Interface\\DialogFrame\\UI-DialogBox-Background",
+				}
+
+				settingsList[#settingsList + 1] = {
+					parentId = "CheckboxGroup",
+					name = L["Border texture"],
+					kind = settingType.DropdownColor,
+					field = "backdropBorder",
+					generator = function(_, root)
+						local list, order = borderDropdownData()
+						if not list or not order then return end
+						for _, key in ipairs(order) do
+							local label = list[key] or key
+							root:CreateRadio(label, function()
+								local c = curSpecCfg()
+								local bd = ensureBackdropTable(c)
+								return bd and bd.borderTexture == key
+							end, function()
+								local c = curSpecCfg()
+								if not c then return end
+								local bd = ensureBackdropTable(c)
+								bd.borderTexture = key
+								queueRefresh()
+							end)
+						end
+					end,
+					get = function()
+						local c = curSpecCfg()
+						local bd = ensureBackdropTable(c)
+						return bd and bd.borderTexture or (cfg and cfg.backdrop and cfg.backdrop.borderTexture) or "Interface\\Tooltips\\UI-Tooltip-Border"
+					end,
+					set = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						local bd = ensureBackdropTable(c)
+						bd.borderTexture = value
+						queueRefresh()
+					end,
+					colorDefault = toUIColor(cfg and cfg.backdrop and cfg.backdrop.borderColor, { 0, 0, 0, 0 }),
+					colorGet = function()
+						local c = curSpecCfg()
+						local bd = ensureBackdropTable(c)
+						local col = bd and bd.borderColor or { 0, 0, 0, 0 }
+						local r, g, b, a = toColorComponents(col, { 0, 0, 0, 0 })
+						return { r = r, g = g, b = b, a = a }
+					end,
+					colorSet = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						local bd = ensureBackdropTable(c)
+						bd.borderColor = toColorArray(value, { 0, 0, 0, 0 })
+						queueRefresh()
+					end,
+					hasOpacity = true,
+					isEnabled = backdropEnabled,
+					default = (cfg and cfg.backdrop and cfg.backdrop.borderTexture) or "Interface\\Tooltips\\UI-Tooltip-Border",
+				}
+
+				settingsList[#settingsList + 1] = {
+					parentId = "CheckboxGroup",
+					name = L["Border size"] or "Border size",
+					kind = settingType.Slider,
+					allowInput = true,
+					field = "backdropEdgeSize",
+					minValue = 0,
+					maxValue = 64,
+					valueStep = 1,
+					get = function()
+						local c = curSpecCfg()
+						local bd = ensureBackdropTable(c)
+						return bd and bd.edgeSize or 3
+					end,
+					set = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						local bd = ensureBackdropTable(c)
+						bd.edgeSize = value or 0
+						queueRefresh()
+					end,
+					default = (cfg and cfg.backdrop and cfg.backdrop.edgeSize) or 3,
+					isEnabled = backdropEnabled,
+				}
+
+				settingsList[#settingsList + 1] = {
+					parentId = "CheckboxGroup",
+					name = L["Border offset"] or "Border offset",
+					kind = settingType.Slider,
+					field = "backdropOutset",
+					minValue = 0,
+					maxValue = 64,
+					valueStep = 1,
+					get = function()
+						local c = curSpecCfg()
+						local bd = ensureBackdropTable(c)
+						return bd and bd.outset or 0
+					end,
+					set = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						local bd = ensureBackdropTable(c)
+						bd.outset = value or 0
+						queueRefresh()
+					end,
+					default = (cfg and cfg.backdrop and cfg.backdrop.outset) or 0,
+					isEnabled = backdropEnabled,
+				}
+
+				settingsList[#settingsList + 1] = {
+					parentId = "CheckboxGroup",
+					name = L["Background inset"] or "Background inset",
+					kind = settingType.Slider,
+					field = "backdropBackgroundInset",
+					minValue = 0,
+					maxValue = 128,
+					valueStep = 1,
+					get = function()
+						local c = curSpecCfg()
+						local bd = ensureBackdropTable(c)
+						return bd and bd.backgroundInset or 0
+					end,
+					set = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						local bd = ensureBackdropTable(c)
+						bd.backgroundInset = max(0, value or 0)
+						queueRefresh()
+					end,
+					default = (cfg and cfg.backdrop and cfg.backdrop.backgroundInset) or 0,
+					isEnabled = backdropEnabled,
+				}
 			end
 		end
 
-		EditMode:RegisterFrame("resourceBar_" .. idSuffix, {
+		local frameId = "resourceBar_" .. idSuffix
+		local titleLabel = (barType == "HEALTH") and HEALTH or (_G["POWER_TYPE_" .. barType] or _G[barType] or barType)
+
+		EditMode:RegisterFrame(frameId, {
 			frame = frame,
-			title = L["Resource Bars"],
+			title = titleLabel,
 			layoutDefaults = {
 				point = anchor and anchor.point or "CENTER",
 				relativePoint = anchor and anchor.relativePoint or "CENTER",
@@ -383,11 +1213,15 @@ local function registerEditModeBars()
 				local bcfg = specCfg[barType]
 				bcfg.anchor = bcfg.anchor or {}
 				if data.point then
-					bcfg.anchor.point = data.point
-					bcfg.anchor.relativePoint = data.relativePoint or data.point
-					bcfg.anchor.x = data.x or 0
-					bcfg.anchor.y = data.y or 0
-					bcfg.anchor.relativeFrame = "UIParent"
+					local relFrame = bcfg.anchor.relativeFrame or "UIParent"
+					-- Nur UIParent-Anker von Edit Mode übernehmen; externe Anker behalten ihre Werte
+					if relFrame == "UIParent" then
+						bcfg.anchor.point = data.point
+						bcfg.anchor.relativePoint = data.relativePoint or data.point
+						bcfg.anchor.x = data.x or 0
+						bcfg.anchor.y = data.y or 0
+					end
+					bcfg.anchor.relativeFrame = relFrame
 				end
 				bcfg.width = data.width or bcfg.width
 				bcfg.height = data.height or bcfg.height
@@ -399,9 +1233,14 @@ local function registerEditModeBars()
 				if ResourceBars.ReanchorAll then ResourceBars.ReanchorAll() end
 				if ResourceBars.Refresh then ResourceBars.Refresh() end
 			end,
+			isEnabled = function()
+				local c = curSpecCfg()
+				return c and c.enabled == true
+			end,
 			settings = settingsList,
-			showOutsideEditMode = true,
+			showOutsideEditMode = false,
 		})
+		if addon.EditModeLib and addon.EditModeLib.SetFrameResetVisible then addon.EditModeLib:SetFrameResetVisible(frame, false) end
 		registered = registered + 1
 	end
 

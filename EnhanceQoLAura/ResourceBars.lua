@@ -474,6 +474,7 @@ getStatusbarDropdownLists = function(includeDefault)
 	if includeDefault then return cloneMap(textureListCache.fullList), cloneArray(textureListCache.fullOrder) end
 	return cloneMap(textureListCache.noDefaultList), cloneArray(textureListCache.noDefaultOrder)
 end
+addon.Aura.functions.getStatusbarDropdownLists = getStatusbarDropdownLists
 
 -- Detect Atlas: /run local t=PlayerFrame_GetManaBar():GetStatusBarTexture(); print("tex:", t:GetTexture(), "atlas:", t:GetAtlas()); local a,b,c,d,e,f,g,h=t:GetTexCoord(); print("tc:",a,b,c,d,e,f,g,h)
 -- Healthbar: /run local t=PlayerFrame_GetHealthBar():GetStatusBarTexture(); print("tex:", t:GetTexture(), "atlas:", t:GetAtlas()); local a,b,c,d,e,f,g,h=t:GetTexCoord(); print("tc:",a,b,c,d,e,f,g,h)
@@ -866,6 +867,64 @@ local function configureBarBehavior(bar, cfg, pType)
 	end
 
 	if bar._rbBackdropState and bar._rbBackdropState.insets then applyStatusBarInsets(bar, bar._rbBackdropState.insets, true) end
+end
+
+local function behaviorOptionsForType(pType)
+	local opts = {
+		{ value = "reverseFill", text = L["Reverse fill"] or "Reverse fill" },
+	}
+	if pType ~= "RUNES" then
+		opts[#opts + 1] = { value = "verticalFill", text = L["Vertical orientation"] or "Vertical orientation" }
+		opts[#opts + 1] = { value = "smoothFill", text = L["Smooth fill"] or "Smooth fill" }
+	end
+	return opts
+end
+
+local function behaviorSelectionFromConfig(cfg, pType)
+	local selection = {}
+	cfg = cfg or {}
+	if cfg.reverseFill == true then selection.reverseFill = true end
+	if pType ~= "RUNES" then
+		if cfg.verticalFill == true then selection.verticalFill = true end
+		if cfg.smoothFill == true then selection.smoothFill = true end
+	end
+	return selection
+end
+
+local function applyBehaviorSelection(cfg, selection, pType, specIndex)
+	if not cfg then return false end
+	selection = selection or {}
+	local beforeVertical = cfg.verticalFill == true
+
+	cfg.reverseFill = selection.reverseFill == true
+	if pType ~= "RUNES" then
+		cfg.verticalFill = selection.verticalFill == true
+		cfg.smoothFill = selection.smoothFill == true
+	else
+		cfg.verticalFill = nil
+		cfg.smoothFill = nil
+	end
+
+	local afterVertical = cfg.verticalFill == true
+	local dimensionsChanged = beforeVertical ~= afterVertical
+
+	if dimensionsChanged then
+		local defaultW = (pType == "HEALTH") and DEFAULT_HEALTH_WIDTH or DEFAULT_POWER_WIDTH
+		local defaultH = (pType == "HEALTH") and DEFAULT_HEALTH_HEIGHT or DEFAULT_POWER_HEIGHT
+		local curW = cfg.width or defaultW
+		local curH = cfg.height or defaultH
+		cfg.width, cfg.height = curH, curW
+		local activeSpec = specIndex or addon.variables.unitSpec
+		if activeSpec and activeSpec == addon.variables.unitSpec then
+			if pType == "HEALTH" then
+				ResourceBars.SetHealthBarSize(cfg.width or defaultW, cfg.height or defaultH)
+			else
+				ResourceBars.SetPowerBarSize(cfg.width or defaultW, cfg.height or defaultH, pType)
+			end
+		end
+	end
+
+	return dimensionsChanged
 end
 
 local function Snap(bar, off)
@@ -2731,27 +2790,8 @@ function createHealthBar()
 	applyTextPosition(healthBar, settings, 3, 0)
 	configureBarBehavior(healthBar, settings, "HEALTH")
 
-	healthBar:SetMovable(true)
-	healthBar:EnableMouse(true)
-	healthBar:RegisterForDrag("LeftButton")
-	healthBar:SetScript("OnDragStart", function(self)
-		if IsShiftKeyDown() then self:StartMoving() end
-	end)
-	healthBar:SetScript("OnDragStop", function(self)
-		self:StopMovingOrSizing()
-		local point, rel, relPoint, xOfs, yOfs = self:GetPoint()
-		local info = getAnchor("HEALTH", addon.variables.unitSpec)
-		local relName = rel and rel.GetName and rel:GetName() or "UIParent"
-		point = point or "TOPLEFT"
-		info.point = point
-		info.relativeFrame = relName
-		info.relativePoint = relPoint or point
-		info.x = Snap(self, xOfs or 0)
-		info.y = Snap(self, yOfs or 0)
-		info.autoSpacing = nil
-		self:ClearAllPoints()
-		self:SetPoint(info.point, rel or UIParent, info.relativePoint or info.point, info.x or 0, info.y or 0)
-	end)
+	healthBar:SetMovable(false)
+	healthBar:EnableMouse(false)
 
 	local absorbBar = CreateFrame("StatusBar", "EQOLAbsorbBar", healthBar)
 	absorbBar:SetAllPoints(healthBar)
@@ -3711,30 +3751,9 @@ local function createPowerBar(type, anchor)
 	end
 	configureBarBehavior(bar, settings, type)
 
-	-- Dragging only when not anchored to another EQOL bar
-	bar:SetMovable(allowMove)
-	bar:EnableMouse(allowMove)
-	if isNew then bar:RegisterForDrag("LeftButton") end
-	bar:SetScript("OnDragStart", function(self)
-		local ai = getAnchor(type, addon.variables.unitSpec)
-		local canMove = (not ai) or ((ai.relativeFrame or "UIParent") == "UIParent")
-		if IsShiftKeyDown() and canMove then self:StartMoving() end
-	end)
-	bar:SetScript("OnDragStop", function(self)
-		self:StopMovingOrSizing()
-		local point, rel, relPoint, xOfs, yOfs = self:GetPoint()
-		local info = getAnchor(type, addon.variables.unitSpec)
-		point = point or "TOPLEFT"
-		local relName = rel and rel.GetName and rel:GetName() or "UIParent"
-		info.point = point
-		info.relativeFrame = relName
-		info.relativePoint = relPoint or point
-		info.x = Snap(self, xOfs or 0)
-		info.y = Snap(self, yOfs or 0)
-		info.autoSpacing = false
-		self:ClearAllPoints()
-		self:SetPoint(info.point, rel or UIParent, info.relativePoint or info.point, info.x or 0, info.y or 0)
-	end)
+	-- Dragging disabled outside Edit Mode; positioning handled via Edit Mode
+	bar:SetMovable(false)
+	bar:EnableMouse(false)
 	bar:Show()
 	if type == "RUNES" then ResourceBars.ForceRuneRecolor() end
 	updatePowerBar(type)
@@ -4798,6 +4817,9 @@ ResourceBars.DEFAULT_POWER_HEIGHT = DEFAULT_POWER_HEIGHT or DEFAULT_HEALTH_HEIGH
 ResourceBars.MIN_RESOURCE_BAR_WIDTH = MIN_RESOURCE_BAR_WIDTH
 ResourceBars.getBarSettings = getBarSettings
 ResourceBars.getAnchor = getAnchor
+ResourceBars.BehaviorOptionsForType = behaviorOptionsForType
+ResourceBars.BehaviorSelectionFromConfig = behaviorSelectionFromConfig
+ResourceBars.ApplyBehaviorSelection = applyBehaviorSelection
 ResourceBars.ExportProfile = exportResourceProfile
 ResourceBars.ImportProfile = importResourceProfile
 ResourceBars.ExportErrorMessage = exportErrorMessage
