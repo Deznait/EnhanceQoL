@@ -929,7 +929,7 @@ local function applyBehaviorSelection(cfg, selection, pType, specIndex)
 end
 
 ensureEditModeRegistration = function()
-	if ResourceBars and ResourceBars.RegisterEditModeFrames and not ResourceBars._editModeRegistered then ResourceBars.RegisterEditModeFrames() end
+	if ResourceBars and ResourceBars.RegisterEditModeFrames then ResourceBars.RegisterEditModeFrames() end
 end
 
 local function Snap(bar, off)
@@ -2798,6 +2798,7 @@ function createHealthBar()
 
 	healthBar:SetMovable(false)
 	healthBar:EnableMouse(false)
+	if ensureEditModeRegistration then ensureEditModeRegistration() end
 
 	local absorbBar = CreateFrame("StatusBar", "EQOLAbsorbBar", healthBar)
 	absorbBar:SetAllPoints(healthBar)
@@ -3776,6 +3777,7 @@ local function createPowerBar(type, anchor)
 	end)
 
 	if ResourceBars and ResourceBars.SyncRelativeFrameWidths then ResourceBars.SyncRelativeFrameWidths() end
+	if ensureEditModeRegistration then ensureEditModeRegistration() end
 end
 
 local eventsToRegister = {

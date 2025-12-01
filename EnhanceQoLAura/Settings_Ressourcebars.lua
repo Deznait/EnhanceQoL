@@ -99,13 +99,17 @@ end
 local function registerEditModeBars()
 	if not EditMode or not EditMode.RegisterFrame then return end
 	local registered = 0
+	local registeredFrames = ResourceBars._editModeRegisteredFrames or {}
+	ResourceBars._editModeRegisteredFrames = registeredFrames
 
 	local function registerBar(idSuffix, frameName, barType, widthDefault, heightDefault)
 		local frame = _G[frameName]
 		if not frame then return end
+		local frameId = "resourceBar_" .. idSuffix
+		if registeredFrames[frameId] then return end
+		registeredFrames[frameId] = true
 		local cfg = ResourceBars and ResourceBars.getBarSettings and ResourceBars.getBarSettings(barType) or ResourceBars and ResourceBars.GetBarSettings and ResourceBars.GetBarSettings(barType)
 		local anchor = ResourceBars and ResourceBars.getAnchor and ResourceBars.getAnchor(barType, addon.variables.unitSpec)
-		local frameId = "resourceBar_" .. idSuffix
 		local titleLabel = (barType == "HEALTH") and (HEALTH or "Health") or (_G["POWER_TYPE_" .. barType] or _G[barType] or barType)
 
 		-- Ensure backdrop defaults for current spec view
@@ -1335,6 +1339,7 @@ local function registerEditModeBars()
 			showOutsideEditMode = true,
 		})
 		if addon.EditModeLib and addon.EditModeLib.SetFrameResetVisible then addon.EditModeLib:SetFrameResetVisible(frame, false) end
+		registeredFrames[frameId] = true
 		registered = registered + 1
 	end
 
