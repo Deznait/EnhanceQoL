@@ -45,6 +45,10 @@ local EnumPowerType = Enum and Enum.PowerType
 local PowerBarColor = PowerBarColor
 local UnitName, UnitClass, UnitLevel, UnitClassification = UnitName, UnitClass, UnitLevel, UnitClassification
 local UnitGetTotalAbsorbs = UnitGetTotalAbsorbs or function() return 0 end
+local RegisterStateDriver = _G.RegisterStateDriver
+local UnregisterStateDriver = _G.UnregisterStateDriver
+local RegisterStateDriver = _G.RegisterStateDriver
+local UnregisterStateDriver = _G.UnregisterStateDriver
 local RAID_CLASS_COLORS = RAID_CLASS_COLORS
 local CUSTOM_CLASS_COLORS = CUSTOM_CLASS_COLORS
 local AuraUtil = AuraUtil
@@ -216,6 +220,7 @@ local auraList = {}
 local blizzardPlayerHooked = false
 local blizzardTargetHooked = false
 local castOnUpdateHandlers = {}
+local originalFrameRules = {}
 
 local function defaultsFor(unit) return defaults[unit] or defaults.player or {} end
 
@@ -468,6 +473,68 @@ local function findTreeNode(path)
 		return nil
 	end
 	return search(addon.treeGroupData, 1)
+end
+
+local function getFrameInfo(frameName)
+	if not addon.variables or not addon.variables.unitFrameNames then return nil end
+	for _, info in ipairs(addon.variables.unitFrameNames) do
+		if info.name == frameName then return info end
+	end
+	return nil
+end
+
+local function applyVisibilityDriver(unit, enabled)
+	local st = states[unit]
+	if not st or not st.frame or not RegisterStateDriver then return end
+	local cond
+	if not enabled then
+		cond = "hide"
+	elseif unit == TARGET_UNIT then
+		cond = "[@target,exists] show; hide"
+	elseif unit == TARGET_TARGET_UNIT then
+		cond = "[@targettarget,exists] show; hide"
+	end
+	if not cond then
+		if UnregisterStateDriver then UnregisterStateDriver(st.frame, "visibility") end
+		return
+	end
+	if InCombatLockdown() then
+		addon.variables.requireReload = true
+		if addon.functions and addon.functions.checkReloadFrame then addon.functions.checkReloadFrame() end
+		return
+	end
+	if UnregisterStateDriver then UnregisterStateDriver(st.frame, "visibility") end
+	st.frame:SetAttribute("state-visibility", nil)
+	RegisterStateDriver(st.frame, "visibility", cond)
+end
+
+local function applyFrameRuleOverride(frameName, enabled)
+	if not frameName then return end
+	local info = getFrameInfo(frameName)
+	if not info then
+		if frameName == TARGET_TARGET_FRAME_NAME then
+			info = { name = TARGET_TARGET_FRAME_NAME, var = "unitframeSettingTargetTargetFrame", unitToken = TARGET_TARGET_UNIT }
+		else
+			return
+		end
+	end
+	local NormalizeUnitFrameVisibilityConfig = addon.functions and addon.functions.NormalizeUnitFrameVisibilityConfig
+	local UpdateUnitFrameMouseover = addon.functions and addon.functions.UpdateUnitFrameMouseover
+	if not NormalizeUnitFrameVisibilityConfig or not UpdateUnitFrameMouseover then return end
+	addon.db = addon.db or {}
+	local key = info.var
+	if enabled then
+		if originalFrameRules[key] == nil then originalFrameRules[key] = addon.db[key] end
+		NormalizeUnitFrameVisibilityConfig(key, { ALWAYS_HIDDEN = true })
+	else
+		if originalFrameRules[key] ~= nil then
+			addon.db[key] = originalFrameRules[key]
+			originalFrameRules[key] = nil
+		else
+			NormalizeUnitFrameVisibilityConfig(key, nil)
+		end
+	end
+	UpdateUnitFrameMouseover(info.name, info)
 end
 
 local function addTreeNode(path, node, parentPath)
@@ -1389,12 +1456,27 @@ local function applyConfig(unit)
 	local cfg = ensureDB(unit)
 	local st = states[unit]
 	if not cfg.enabled then
-		if st and st.frame then st.frame:Hide() end
+		if st and st.frame then
+			if InCombatLockdown() then
+				if st.barGroup then st.barGroup:Hide() end
+				if st.status then st.status:Hide() end
+			else
+				st.frame:Hide()
+			end
+		end
+		applyVisibilityDriver(unit, false)
+		if unit == PLAYER_UNIT then applyFrameRuleOverride("PlayerFrame", false) end
+		if unit == TARGET_UNIT then applyFrameRuleOverride("TargetFrame", false) end
+		if unit == TARGET_TARGET_UNIT then applyFrameRuleOverride(TARGET_TARGET_FRAME_NAME, false) end
 		if unit == "target" then resetTargetAuras() end
 		return
 	end
 	ensureFrames(unit)
 	st = states[unit]
+	applyVisibilityDriver(unit, cfg.enabled)
+	if unit == PLAYER_UNIT then applyFrameRuleOverride("PlayerFrame", true) end
+	if unit == TARGET_UNIT then applyFrameRuleOverride("TargetFrame", true) end
+	if unit == TARGET_TARGET_UNIT then applyFrameRuleOverride(TARGET_TARGET_FRAME_NAME, true) end
 	applyBars(cfg, unit)
 	if not InCombatLockdown() then layoutFrame(cfg, unit) end
 	updateStatus(cfg, unit)
@@ -1493,7 +1575,7 @@ local function onEvent(self, event, unit, arg1)
 		applyConfig("player")
 		applyConfig("target")
 		updateTargetTargetFrame(totCfg)
-		hideBlizzardPlayerFrame()
+		-- hideBlizzardPlayerFrame()
 	elseif event == "PLAYER_DEAD" then
 		if states.player and states.player.health then states.player.health:SetValue(0) end
 		updateHealth(playerCfg, "player")
@@ -1644,8 +1726,8 @@ function UF.Enable()
 	if ensureDB("target").enabled then applyConfig("target") end
 	local totCfg = ensureDB(TARGET_TARGET_UNIT)
 	if totCfg.enabled then updateTargetTargetFrame(totCfg) end
-	hideBlizzardPlayerFrame()
-	hideBlizzardTargetFrame()
+	-- hideBlizzardPlayerFrame()
+	-- hideBlizzardTargetFrame()
 end
 
 function UF.Disable()
@@ -1823,48 +1905,62 @@ local function addOptions(container, skipClear, unit)
 		sPad:SetRelativeWidth(0.5)
 		auraRow:AddChild(sPad)
 
-			local sMax = addon.functions.createSliderAce(L["UFFrameLevel"] or "Max auras", cfg.auraIcons.max or 16, 4, 40, 1, function(_, _, val)
-				cfg.auraIcons.max = val or 16
-				refresh()
-			end)
-			sMax:SetFullWidth(true)
-			auraRow:AddChild(sMax)
+		local sMax = addon.functions.createSliderAce(L["UFFrameLevel"] or "Max auras", cfg.auraIcons.max or 16, 4, 40, 1, function(_, _, val)
+			cfg.auraIcons.max = val or 16
+			refresh()
+		end)
+		sMax:SetFullWidth(true)
+		auraRow:AddChild(sMax)
 
-			local cbCD = addon.functions.createCheckboxAce(L["Show cooldown text"] or "Show cooldown text", cfg.auraIcons.showCooldown ~= false, function(_, _, v)
-				cfg.auraIcons.showCooldown = v and true or false
-				refresh()
-			end)
-			cbCD:SetFullWidth(true)
-			auraRow:AddChild(cbCD)
+		local cbCD = addon.functions.createCheckboxAce(L["Show cooldown text"] or "Show cooldown text", cfg.auraIcons.showCooldown ~= false, function(_, _, v)
+			cfg.auraIcons.showCooldown = v and true or false
+			refresh()
+		end)
+		cbCD:SetFullWidth(true)
+		auraRow:AddChild(cbCD)
 
-			local anchorOptionsAura = { TOP = L["Top"] or "Top", BOTTOM = L["Bottom"] or "Bottom" }
-			local anchorOrderAura = { "TOP", "BOTTOM" }
-			local ddAuraAnchor = addon.functions.createDropdownAce(L["Aura anchor"] or "Aura anchor", anchorOptionsAura, anchorOrderAura, function(_, _, key)
-				cfg.auraIcons.anchor = key
-				refresh()
-			end)
-			ddAuraAnchor:SetValue(cfg.auraIcons.anchor or def.auraIcons.anchor or "BOTTOM")
-			ddAuraAnchor:SetRelativeWidth(0.5)
-			auraRow:AddChild(ddAuraAnchor)
+		local anchorOptionsAura = { TOP = L["Top"] or "Top", BOTTOM = L["Bottom"] or "Bottom" }
+		local anchorOrderAura = { "TOP", "BOTTOM" }
+		local ddAuraAnchor = addon.functions.createDropdownAce(L["Aura anchor"] or "Aura anchor", anchorOptionsAura, anchorOrderAura, function(_, _, key)
+			cfg.auraIcons.anchor = key
+			refresh()
+		end)
+		ddAuraAnchor:SetValue(cfg.auraIcons.anchor or def.auraIcons.anchor or "BOTTOM")
+		ddAuraAnchor:SetRelativeWidth(0.5)
+		auraRow:AddChild(ddAuraAnchor)
 
-			local auraOffsetX = addon.functions.createSliderAce(L["Aura Offset X"] or "Aura Offset X", (cfg.auraIcons.offset and cfg.auraIcons.offset.x) or (def.auraIcons.offset and def.auraIcons.offset.x) or 0, -200, 200, 1, function(_, _, val)
+		local auraOffsetX = addon.functions.createSliderAce(
+			L["Aura Offset X"] or "Aura Offset X",
+			(cfg.auraIcons.offset and cfg.auraIcons.offset.x) or (def.auraIcons.offset and def.auraIcons.offset.x) or 0,
+			-200,
+			200,
+			1,
+			function(_, _, val)
 				cfg.auraIcons.offset = cfg.auraIcons.offset or {}
 				cfg.auraIcons.offset.x = val or 0
 				refresh()
-			end)
-			auraOffsetX:SetRelativeWidth(0.25)
-			auraRow:AddChild(auraOffsetX)
+			end
+		)
+		auraOffsetX:SetRelativeWidth(0.25)
+		auraRow:AddChild(auraOffsetX)
 
-			local auraOffsetY = addon.functions.createSliderAce(L["Aura Offset Y"] or "Aura Offset Y", (cfg.auraIcons.offset and cfg.auraIcons.offset.y) or (def.auraIcons.offset and def.auraIcons.offset.y) or (cfg.auraIcons.anchor == "TOP" and 5 or -5), -200, 200, 1, function(_, _, val)
+		local auraOffsetY = addon.functions.createSliderAce(
+			L["Aura Offset Y"] or "Aura Offset Y",
+			(cfg.auraIcons.offset and cfg.auraIcons.offset.y) or (def.auraIcons.offset and def.auraIcons.offset.y) or (cfg.auraIcons.anchor == "TOP" and 5 or -5),
+			-200,
+			200,
+			1,
+			function(_, _, val)
 				cfg.auraIcons.offset = cfg.auraIcons.offset or {}
 				cfg.auraIcons.offset.y = val or 0
 				refresh()
-			end)
-			auraOffsetY:SetRelativeWidth(0.25)
-			auraRow:AddChild(auraOffsetY)
+			end
+		)
+		auraOffsetY:SetRelativeWidth(0.25)
+		auraRow:AddChild(auraOffsetY)
 
-			local castDef = def.cast or {}
-			cfg.cast = cfg.cast or {}
+		local castDef = def.cast or {}
+		cfg.cast = cfg.cast or {}
 		local castGroup = addon.functions.createContainer("InlineGroup", "Flow")
 		castGroup:SetTitle(L["CastBar"] or "Cast Bar")
 		castGroup:SetFullWidth(true)
@@ -1987,37 +2083,37 @@ local function addOptions(container, skipClear, unit)
 				refresh()
 			end
 		)
-			nameY:SetRelativeWidth(0.25)
-			nameRow:AddChild(nameY)
+		nameY:SetRelativeWidth(0.25)
+		nameRow:AddChild(nameY)
 
-			local fontRowCast = addon.functions.createContainer("SimpleGroup", "Flow")
-			fontRowCast:SetFullWidth(true)
-			castGroup:AddChild(fontRowCast)
-			local fontListCast = {}
-			local fontOrderCast = {}
-			for name, path in pairs(LSM and LSM:HashTable("font") or {}) do
-				fontListCast[path] = name
-				table.insert(fontOrderCast, path)
-			end
-			table.sort(fontOrderCast, function(a, b) return tostring(fontListCast[a]) < tostring(fontListCast[b]) end)
-			local fddCast = addon.functions.createDropdownAce(L["Font"] or "Font", fontListCast, fontOrderCast, function(_, _, key)
-				cfg.cast.font = key
-				refresh()
-			end)
-			fddCast:SetValue(cfg.cast.font or "")
-			fddCast:SetRelativeWidth(0.5)
-			fontRowCast:AddChild(fddCast)
+		local fontRowCast = addon.functions.createContainer("SimpleGroup", "Flow")
+		fontRowCast:SetFullWidth(true)
+		castGroup:AddChild(fontRowCast)
+		local fontListCast = {}
+		local fontOrderCast = {}
+		for name, path in pairs(LSM and LSM:HashTable("font") or {}) do
+			fontListCast[path] = name
+			table.insert(fontOrderCast, path)
+		end
+		table.sort(fontOrderCast, function(a, b) return tostring(fontListCast[a]) < tostring(fontListCast[b]) end)
+		local fddCast = addon.functions.createDropdownAce(L["Font"] or "Font", fontListCast, fontOrderCast, function(_, _, key)
+			cfg.cast.font = key
+			refresh()
+		end)
+		fddCast:SetValue(cfg.cast.font or "")
+		fddCast:SetRelativeWidth(0.5)
+		fontRowCast:AddChild(fddCast)
 
-			local fsCast = addon.functions.createSliderAce(L["FontSize"] or "Font size", cfg.cast.fontSize or castDef.fontSize or 12, 8, 30, 1, function(_, _, val)
-				cfg.cast.fontSize = val or 12
-				refresh()
-			end)
-			fsCast:SetRelativeWidth(0.5)
-			fontRowCast:AddChild(fsCast)
+		local fsCast = addon.functions.createSliderAce(L["FontSize"] or "Font size", cfg.cast.fontSize or castDef.fontSize or 12, 8, 30, 1, function(_, _, val)
+			cfg.cast.fontSize = val or 12
+			refresh()
+		end)
+		fsCast:SetRelativeWidth(0.5)
+		fontRowCast:AddChild(fsCast)
 
-			local durRow = addon.functions.createContainer("SimpleGroup", "Flow")
-			durRow:SetFullWidth(true)
-			castGroup:AddChild(durRow)
+		local durRow = addon.functions.createContainer("SimpleGroup", "Flow")
+		durRow:SetFullWidth(true)
+		castGroup:AddChild(durRow)
 		local cbDur = addon.functions.createCheckboxAce(L["Show cast duration"] or "Show cast duration", cfg.cast.showDuration ~= false, function(_, _, v)
 			cfg.cast.showDuration = v and true or false
 			refresh()
@@ -2575,7 +2671,7 @@ if not addon.Aura.UFInitialized then
 	if tc.enabled then
 		ensureEventHandling()
 		applyConfig("target")
-		hideBlizzardTargetFrame()
+		-- hideBlizzardTargetFrame()
 	end
 	local ttc = ensureDB(TARGET_TARGET_UNIT)
 	if ttc.enabled then
