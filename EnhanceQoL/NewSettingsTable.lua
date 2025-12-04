@@ -11,6 +11,11 @@ addon.variables.NewVersionTableEQOL = {
 	["EQOL_modifyXPRepBarScale"] = true,
 	["EQOL_autoCancelDruidFlightForm"] = true,
 
+	["EQOL_UFPlus"] = true,
+
+	["EQOL_ItemsInventory"] = true,
+	["EQOL_confirmHighCostItem"] = true,
+
 	["EQOL_Tooltip"] = true,
 	["EQOL_TooltipHousingAutoPreview"] = true,
 

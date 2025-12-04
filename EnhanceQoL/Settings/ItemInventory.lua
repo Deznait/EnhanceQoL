@@ -1624,7 +1624,7 @@ end
 ---- END REGION
 
 ---- REGION SETTINGS
-local cInventory = addon.functions.SettingsCreateCategory(nil, L["ItemsInventory"])
+local cInventory = addon.functions.SettingsCreateCategory(nil, L["ItemsInventory"], nil, "ItemsInventory")
 addon.SettingsLayout.inventoryCategory = cInventory
 addon.functions.SettingsCreateHeadline(cInventory, BAGSLOT)
 
