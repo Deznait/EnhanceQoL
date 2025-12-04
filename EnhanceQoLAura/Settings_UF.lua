@@ -1154,7 +1154,7 @@ local function buildUnitSettings(unit)
 			refresh()
 		end, auraDef.padding or 2, "auras", true)
 
-		list[#list + 1] = slider(L["UFFrameLevel"] or "Max auras", 4, 40, 1, function() return getValue(unit, { "auraIcons", "max" }, auraDef.max or 16) end, function(val)
+		list[#list + 1] = slider(L["UFMaxAuras"] or "Max auras", 4, 40, 1, function() return getValue(unit, { "auraIcons", "max" }, auraDef.max or 16) end, function(val)
 			setValue(unit, { "auraIcons", "max" }, val or auraDef.max or 16)
 			refresh()
 		end, auraDef.max or 16, "auras", true)
@@ -1163,6 +1163,13 @@ local function buildUnitSettings(unit)
 			setValue(unit, { "auraIcons", "showCooldown" }, val and true or false)
 			refresh()
 		end, auraDef.showCooldown ~= false, "auras")
+
+		list[#list + 1] = checkbox(L["UFHidePermanentAuras"] or "Hide permanent auras", function()
+			return getValue(unit, { "auraIcons", "hidePermanent" }, auraDef.hidePermanent == true)
+		end, function(val)
+			setValue(unit, { "auraIcons", "hidePermanent" }, val and true or false)
+			refresh()
+		end, auraDef.hidePermanent == true, "auras")
 
 		local anchorOpts = {
 			{ value = "TOP", label = L["Top"] or "Top" },
