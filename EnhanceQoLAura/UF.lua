@@ -1197,9 +1197,7 @@ local function updateCombatIndicator(cfg)
 		st.combatIcon:Hide()
 		return
 	end
-	st.combatIcon:SetTexture(ccfg.texture or "Interface\\CharacterFrame\\UI-StateIcon")
-	local coords = ccfg.texCoords or { 0.5, 1, 0, 0.5 }
-	if coords and #coords >= 4 then st.combatIcon:SetTexCoord(coords[1], coords[2], coords[3], coords[4]) end
+	st.combatIcon:SetTexture("Interface\\Addons\\EnhanceQoLAura\\Icons\\CombatIndicator.tga")
 	st.combatIcon:SetSize(ccfg.size or 18, ccfg.size or 18)
 	st.combatIcon:ClearAllPoints()
 	st.combatIcon:SetPoint("TOP", st.status, "TOP", (ccfg.offset and ccfg.offset.x) or -8, (ccfg.offset and ccfg.offset.y) or 0)
@@ -1358,7 +1356,7 @@ local function ensureFrames(unit)
 	st.powerTextRight = st.powerTextLayer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 	st.nameText = st.statusTextLayer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 	st.levelText = st.statusTextLayer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-	if unit == PLAYER_UNIT then st.combatIcon = st.combatIcon or st.status:CreateTexture(nil, "OVERLAY") end
+	if unit == PLAYER_UNIT then st.combatIcon = st.statusTextLayer:CreateTexture("EQOLUFPlayerCombatIcon", "OVERLAY") end
 
 	if unit == "target" then
 		st.auraContainer = CreateFrame("Frame", nil, st.frame)
@@ -1693,9 +1691,7 @@ local function onEvent(self, event, unit, arg1)
 			st.status:Hide()
 			stopCast(unitToken)
 		end
-		if totCfg.enabled then
-			updateTargetTargetFrame(totCfg)
-		end
+		if totCfg.enabled then updateTargetTargetFrame(totCfg) end
 	elseif event == "UNIT_AURA" and unit == "target" then
 		local eventInfo = arg1
 		if not UnitExists("target") then
@@ -1803,7 +1799,7 @@ local function ensureEventHandling()
 		if eventFrame then eventFrame:SetScript("OnEvent", nil) end
 		eventFrame = nil
 		return
-	 end
+	end
 	if eventFrame then return end
 	eventFrame = CreateFrame("Frame")
 	for _, evt in ipairs(unitEvents) do
