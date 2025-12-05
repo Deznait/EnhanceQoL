@@ -994,7 +994,8 @@ local function applyBackdrop(frame, cfg)
 		if bd.borderTexture and bd.borderTexture ~= "" and (bd.edgeSize or 0) > 0 then
 			local borderTexture = bd.borderTexture or "Interface\\Tooltips\\UI-Tooltip-Border"
 			local edgeSize = bd.edgeSize or 3
-			if state.borderTexture ~= borderTexture or state.borderEdgeSize ~= edgeSize then
+			local borderChanged = false
+			if state.borderTexture ~= borderTexture or state.borderEdgeSize ~= edgeSize or (borderFrame.GetBackdrop and not borderFrame:GetBackdrop()) then
 				borderFrame:SetBackdrop({
 					bgFile = nil,
 					edgeFile = borderTexture,
@@ -1004,10 +1005,11 @@ local function applyBackdrop(frame, cfg)
 				})
 				state.borderTexture = borderTexture
 				state.borderEdgeSize = edgeSize
+				borderChanged = true
 			end
 			local boc = bd.borderColor or { 0, 0, 0, 0 }
 			local cr, cg, cb, ca = boc[1] or 0, boc[2] or 0, boc[3] or 0, boc[4] or 1
-			if state.borderR ~= cr or state.borderG ~= cg or state.borderB ~= cb or state.borderA ~= ca then
+			if borderChanged or state.borderR ~= cr or state.borderG ~= cg or state.borderB ~= cb or state.borderA ~= ca then
 				if borderFrame.SetBackdropBorderColor then borderFrame:SetBackdropBorderColor(cr, cg, cb, ca) end
 				state.borderR, state.borderG, state.borderB, state.borderA = cr, cg, cb, ca
 			end
@@ -2136,58 +2138,56 @@ function updatePowerBar(type, runeSlot)
 		bar._baseColor[1], bar._baseColor[2], bar._baseColor[3], bar._baseColor[4] = custom[1] or 1, custom[2] or 1, custom[3] or 1, custom[4] or 1
 	end
 
-		local useHolyThreeColor = (type == "HOLY_POWER") and cfg.useHolyThreeColor == true
-		local holyThreeThreshold = 3
-		local reachedThree = useHolyThreeColor and curPower >= holyThreeThreshold
-		if not addon.variables.isMidnight or (issecretvalue and not issecretvalue(curPower) and not issecretvalue(maxPower)) then
-			local reachedCap = curPower >= max(maxPower, 1)
+	local useHolyThreeColor = (type == "HOLY_POWER") and cfg.useHolyThreeColor == true
+	local holyThreeThreshold = 3
+	local reachedThree = useHolyThreeColor and curPower >= holyThreeThreshold
+	if not addon.variables.isMidnight or (issecretvalue and not issecretvalue(curPower) and not issecretvalue(maxPower)) then
+		local reachedCap = curPower >= max(maxPower, 1)
+		local useMaxColor = cfg.useMaxColor == true
+		local targetR, targetG, targetB, targetA = bar._baseColor[1], bar._baseColor[2], bar._baseColor[3], bar._baseColor[4]
+		local flag
+		if useMaxColor and reachedCap then
+			local maxCol = cfg.maxColor or WHITE
+			targetR, targetG, targetB, targetA = maxCol[1] or targetR, maxCol[2] or targetG, maxCol[3] or targetB, maxCol[4] or (bar._baseColor[4] or 1)
+			flag = "max"
+		elseif reachedThree then
+			targetR, targetG, targetB, targetA = getHolyThreeColor(cfg)
+			flag = "holy3"
+		end
+		local lc = bar._lastColor or {}
+		if lc[1] ~= targetR or lc[2] ~= targetG or lc[3] ~= targetB or lc[4] ~= targetA then
+			lc[1], lc[2], lc[3], lc[4] = targetR, targetG, targetB, targetA
+			bar._lastColor = lc
+			bar:SetStatusBarColor(lc[1], lc[2], lc[3], lc[4])
+		end
+		bar._usingMaxColor = flag == "max"
+		bar._usingHolyThreeColor = flag == "holy3"
+	else
+		local lc = bar._lastColor or {}
+		local base = bar._baseColor
+		if base then
+			local br, bgc, bb, ba = base[1] or 1, base[2] or 1, base[3] or 1, base[4] or 1
+			local targetR, targetG, targetB, targetA = br, bgc, bb, ba
 			local useMaxColor = cfg.useMaxColor == true
-			local targetR, targetG, targetB, targetA = bar._baseColor[1], bar._baseColor[2], bar._baseColor[3], bar._baseColor[4]
-			local flag
+			local reachedCap = curPower >= max(maxPower, 1)
 			if useMaxColor and reachedCap then
 				local maxCol = cfg.maxColor or WHITE
-				targetR, targetG, targetB, targetA = maxCol[1] or targetR, maxCol[2] or targetG, maxCol[3] or targetB, maxCol[4] or (bar._baseColor[4] or 1)
-				flag = "max"
+				targetR, targetG, targetB, targetA = maxCol[1] or br, maxCol[2] or bgc, maxCol[3] or bb, maxCol[4] or ba
 			elseif reachedThree then
 				targetR, targetG, targetB, targetA = getHolyThreeColor(cfg)
-				flag = "holy3"
 			end
-			local lc = bar._lastColor or {}
 			if lc[1] ~= targetR or lc[2] ~= targetG or lc[3] ~= targetB or lc[4] ~= targetA then
-				lc[1], lc[2], lc[3], lc[4] = targetR, targetG, targetB, targetA
 				bar._lastColor = lc
-				bar:SetStatusBarColor(lc[1], lc[2], lc[3], lc[4])
+				if cfg.useBarColor and not cfg.useMaxColor and not reachedThree then bar:GetStatusBarTexture():SetVertexColor(1, 1, 1, 1) end
+				bar:SetStatusBarColor(targetR, targetG, targetB, targetA)
 			end
-			bar._usingMaxColor = flag == "max"
-			bar._usingHolyThreeColor = flag == "holy3"
-		else
-			local lc = bar._lastColor or {}
-			local base = bar._baseColor
-			if base then
-				local br, bgc, bb, ba = base[1] or 1, base[2] or 1, base[3] or 1, base[4] or 1
-				local targetR, targetG, targetB, targetA = br, bgc, bb, ba
-				local useMaxColor = cfg.useMaxColor == true
-				local reachedCap = curPower >= max(maxPower, 1)
-				if useMaxColor and reachedCap then
-					local maxCol = cfg.maxColor or WHITE
-					targetR, targetG, targetB, targetA = maxCol[1] or br, maxCol[2] or bgc, maxCol[3] or bb, maxCol[4] or ba
-				elseif reachedThree then
-					targetR, targetG, targetB, targetA = getHolyThreeColor(cfg)
-				end
-				if lc[1] ~= targetR or lc[2] ~= targetG or lc[3] ~= targetB or lc[4] ~= targetA then
-					bar._lastColor = lc
-					if cfg.useBarColor and not cfg.useMaxColor and not reachedThree then
-						bar:GetStatusBarTexture():SetVertexColor(1, 1, 1, 1)
-					end
-					bar:SetStatusBarColor(targetR, targetG, targetB, targetA)
-				end
-			end
-			bar._usingMaxColor = (cfg.useMaxColor == true) and (curPower >= max(maxPower, 1))
-			bar._usingHolyThreeColor = reachedThree and not bar._usingMaxColor
 		end
-
-		configureSpecialTexture(bar, type, cfg)
+		bar._usingMaxColor = (cfg.useMaxColor == true) and (curPower >= max(maxPower, 1))
+		bar._usingHolyThreeColor = reachedThree and not bar._usingMaxColor
 	end
+
+	configureSpecialTexture(bar, type, cfg)
+end
 
 function forceColorUpdate(pType)
 	if pType == "HEALTH" then
