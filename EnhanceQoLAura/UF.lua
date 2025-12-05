@@ -1327,19 +1327,25 @@ local function updateStatus(cfg, unit)
 	if not st or not st.status then return end
 	local scfg = cfg.status or {}
 	local def = defaults[unit] or defaults.player or {}
-	st.status:SetHeight((cfg.status and cfg.status.enabled) and (cfg.statusHeight or def.statusHeight) or 0.001)
-	st.status:SetShown(scfg.enabled ~= false)
+	local defStatus = def.status or {}
+	local ciCfg = scfg.combatIndicator or defStatus.combatIndicator or {}
+	local showName = scfg.enabled ~= false
+	local showLevel = scfg.levelEnabled ~= false
+	local showStatus = showName or showLevel or (unit == PLAYER_UNIT and ciCfg.enabled ~= false)
+	local statusHeight = showStatus and (cfg.statusHeight or def.statusHeight) or 0.001
+	st.status:SetHeight(statusHeight)
+	st.status:SetShown(showStatus)
 	if st.nameText then
 		applyFont(st.nameText, scfg.font, scfg.fontSize or 14, scfg.fontOutline)
 		st.nameText:ClearAllPoints()
 		st.nameText:SetPoint(scfg.nameAnchor or "LEFT", st.status, scfg.nameAnchor or "LEFT", (scfg.nameOffset and scfg.nameOffset.x) or 0, (scfg.nameOffset and scfg.nameOffset.y) or 0)
-		st.nameText:SetShown(scfg.enabled ~= false)
+		st.nameText:SetShown(showName)
 	end
 	if st.levelText then
 		applyFont(st.levelText, scfg.font, scfg.fontSize or 14, scfg.fontOutline)
 		st.levelText:ClearAllPoints()
 		st.levelText:SetPoint(scfg.levelAnchor or "RIGHT", st.status, scfg.levelAnchor or "RIGHT", (scfg.levelOffset and scfg.levelOffset.x) or 0, (scfg.levelOffset and scfg.levelOffset.y) or 0)
-		st.levelText:SetShown(scfg.enabled ~= false and scfg.levelEnabled ~= false)
+		st.levelText:SetShown(showStatus and showLevel)
 	end
 end
 
@@ -1363,19 +1369,25 @@ local function updateCombatIndicator(cfg)
 	end
 end
 
-local function layoutFrame(cfg, unit)
-	local st = states[unit]
-	if not st or not st.frame then return end
-	local def = defaults[unit] or defaults.player or {}
-	local pcfg = cfg.power or {}
-	local powerEnabled = pcfg.enabled ~= false
-	local width = max(MIN_WIDTH, cfg.width or def.width)
-	local statusHeight = (cfg.status and cfg.status.enabled == false) and 0 or (cfg.statusHeight or def.statusHeight)
-	local healthHeight = cfg.healthHeight or def.healthHeight
-	local powerHeight = powerEnabled and (cfg.powerHeight or def.powerHeight) or 0
-	local barGap = powerEnabled and (cfg.barGap or def.barGap or 0) or 0
-	local borderInset = 0
-	if cfg.border and cfg.border.enabled then borderInset = (cfg.border.edgeSize or 1) end
+	local function layoutFrame(cfg, unit)
+		local st = states[unit]
+		if not st or not st.frame then return end
+		local def = defaults[unit] or defaults.player or {}
+		local scfg = cfg.status or {}
+		local defStatus = def.status or {}
+		local ciCfg = scfg.combatIndicator or defStatus.combatIndicator or {}
+		local showName = scfg.enabled ~= false
+		local showLevel = scfg.levelEnabled ~= false
+		local showStatus = showName or showLevel or (unit == PLAYER_UNIT and ciCfg.enabled ~= false)
+		local pcfg = cfg.power or {}
+		local powerEnabled = pcfg.enabled ~= false
+		local width = max(MIN_WIDTH, cfg.width or def.width)
+		local statusHeight = showStatus and (cfg.statusHeight or def.statusHeight) or 0
+		local healthHeight = cfg.healthHeight or def.healthHeight
+		local powerHeight = powerEnabled and (cfg.powerHeight or def.powerHeight) or 0
+		local barGap = powerEnabled and (cfg.barGap or def.barGap or 0) or 0
+		local borderInset = 0
+		if cfg.border and cfg.border.enabled then borderInset = (cfg.border.edgeSize or 1) end
 	st.frame:SetWidth(width + borderInset * 2)
 	if cfg.strata then
 		st.frame:SetFrameStrata(cfg.strata)
