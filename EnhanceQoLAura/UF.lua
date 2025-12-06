@@ -17,6 +17,10 @@ local sampleAbsorb = addon.variables.ufSampleAbsorb
 addon.variables.ufSampleCast = addon.variables.ufSampleCast or {}
 local sampleCast = addon.variables.ufSampleCast
 
+local bossHiddenContainer
+local bossFramesHidden
+
+
 local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_Aura")
 local LSM = LibStub("LibSharedMedia-3.0")
 local AceGUI = addon.AceGUI or LibStub("AceGUI-3.0")
@@ -743,6 +747,29 @@ local function applyFrameRuleOverride(frameName, enabled)
 		end
 	end
 	UpdateUnitFrameMouseover(info.name, info)
+end
+
+local function bossFramesEnabled()
+	if not addon.db or not addon.db.ufFrames then return false end
+	for i = 1, 5 do
+		local cfg = addon.db.ufFrames["boss" .. i]
+		if cfg and cfg.enabled then return true end
+	end
+	return false
+end
+
+local function hideBossFrames()
+	if bossFramesHidden then return end
+	local container = _G.BossTargetFrameContainer
+	if not container then return end
+	bossHiddenContainer = bossHiddenContainer or CreateFrame("Frame")
+	-- Boss frames misbehave in Edit Mode when :Hide() is used, so reparent them.
+	container:SetParent(bossHiddenContainer)
+	bossFramesHidden = true
+end
+
+local function applyBossFrameHiding()
+	if bossFramesEnabled() then hideBossFrames() end
 end
 
 local function addTreeNode(path, node, parentPath)
@@ -2280,6 +2307,7 @@ function UF.Enable()
 	local cfg = ensureDB("player")
 	cfg.enabled = true
 	ensureEventHandling()
+	applyBossFrameHiding()
 	applyConfig("player")
 	if ensureDB("target").enabled then applyConfig("target") end
 	local totCfg = ensureDB(TARGET_TARGET_UNIT)
@@ -2302,6 +2330,7 @@ function UF.Disable()
 end
 
 function UF.Refresh()
+	applyBossFrameHiding()
 	ensureEventHandling()
 	if not anyUFEnabled() then return end
 	applyConfig("player")
@@ -2367,6 +2396,7 @@ if not addon.Aura.UFInitialized then
 		ensureEventHandling()
 		updateFocusFrame(fcfg, true)
 	end
+	applyBossFrameHiding()
 end
 
 UF.targetAuras = targetAuras

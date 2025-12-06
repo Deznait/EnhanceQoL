@@ -790,7 +790,7 @@ local function buildUnitSettings(unit)
 		isEnabled = isPowerEnabled,
 	})
 
-	if unit == "target" or unit == "focus" then
+	if unit == "target" or unit == "focus" or unit:match("^boss%d+$") then
 		local castDef = def.cast or {}
 		list[#list + 1] = { name = L["CastBar"] or "Cast Bar", kind = settingType.Collapsible, id = "cast", defaultCollapsed = true }
 		local function isCastEnabled() return getValue(unit, { "cast", "enabled" }, castDef.enabled ~= false) ~= false end
@@ -1266,7 +1266,7 @@ local function buildUnitSettings(unit)
 		true
 	)
 
-	if unit == "target" or unit == "focus" then
+	if unit == "target" then
 		list[#list + 1] = { name = L["Auras"] or "Auras", kind = settingType.Collapsible, id = "auras", defaultCollapsed = true }
 		local auraDef = def.auraIcons or { size = 24, padding = 2, max = 16, showCooldown = true }
 		local function debuffAnchorValue() return getValue(unit, { "auraIcons", "debuffAnchor" }, getValue(unit, { "auraIcons", "anchor" }, auraDef.debuffAnchor or auraDef.anchor or "BOTTOM")) end
@@ -1445,6 +1445,10 @@ if not UF.EditModeRegistered then
 		pet = { frameName = "EQOLUFPetFrame", frameId = "EQOL_UF_Pet", title = L["UFPetFrame"] or PET },
 		focus = { frameName = "EQOLUFFocusFrame", frameId = "EQOL_UF_Focus", title = L["UFFocusFrame"] or FOCUS },
 	}
+	for i = 1, 5 do
+		local frameName = "EQOLUFBoss" .. i .. "Frame"
+		frames["boss" .. i] = { frameName = frameName, frameId = "EQOL_UF_Boss" .. i, title = (L["UFBossFrame"] or "Boss Frame") .. " " .. i }
+	end
 	for unit, info in pairs(frames) do
 		registerUnitFrame(unit, info)
 	end
@@ -1487,4 +1491,25 @@ if addon.functions and addon.functions.SettingsCreateCategory then
 	addToggle("targettarget", L["UFToTEnable"] or "Enable target-of-target frame", "ufEnableToT")
 	addToggle("pet", L["UFPetEnable"] or "Enable pet frame", "ufEnablePet")
 	addToggle("focus", L["UFFocusEnable"] or "Enable focus frame", "ufEnableFocus")
+	addon.functions.SettingsCreateCheckbox(cUF, {
+		var = "ufEnableBoss",
+		text = L["UFBossEnable"] or "Enable boss frames",
+		default = false,
+		get = function()
+			for i = 1, 5 do
+				local cfg = ensureConfig("boss" .. i)
+				if cfg.enabled then return true end
+			end
+			return false
+		end,
+		func = function(val)
+			for i = 1, 5 do
+				local u = "boss" .. i
+				local cfg = ensureConfig(u)
+				cfg.enabled = val and true or false
+			end
+			if UF.Refresh then UF.Refresh() end
+			if UF.StopEventsIfInactive then UF.StopEventsIfInactive() end
+		end,
+	})
 end
