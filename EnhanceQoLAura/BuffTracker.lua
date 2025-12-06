@@ -1465,8 +1465,10 @@ local function FlushPendingAuras()
 			for _, aura in ipairs(snapshot) do
 				if aura and aura.auraInstanceID and pendingAuraInstances[aura.auraInstanceID] then
 					if aura.spellId then
-						local base = altToBase[aura.spellId] or aura.spellId
-						changed[base] = aura.spellId
+						if issecretvalue and not issecretvalue(aura.spellId) or not issecretvalue then
+							local base = altToBase[aura.spellId] or aura.spellId
+							changed[base] = aura.spellId
+						end
 					end
 					pendingAuraInstances[aura.auraInstanceID] = nil
 				end

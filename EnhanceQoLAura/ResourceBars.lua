@@ -110,6 +110,8 @@ local COSMETIC_BAR_KEYS = {
 	"useClassColor",
 	"useMaxColor",
 	"maxColor",
+	"useHolyThreeColor",
+	"holyThreeColor",
 	"reverseFill",
 	"verticalFill",
 	"smoothFill",
@@ -161,6 +163,11 @@ local function getPlayerClassColor()
 	local color = (CUSTOM_CLASS_COLORS and CUSTOM_CLASS_COLORS[class]) or (RAID_CLASS_COLORS and RAID_CLASS_COLORS[class])
 	if color then return color.r or color[1] or 0, color.g or color[2] or 0.7, color.b or color[3] or 0, color.a or 1 end
 	return 0, 0.7, 0, 1
+end
+
+local function getHolyThreeColor(cfg)
+	local col = cfg and cfg.holyThreeColor or { 1, 0.8, 0.2, 1 }
+	return col[1] or 1, col[2] or 0.8, col[3] or 0.2, col[4] or 1
 end
 
 local function setBarDesaturated(bar, flag)
@@ -863,6 +870,22 @@ local function ensureInnerFrame(frame)
 	return inner
 end
 
+local function ensureTextOverlayFrame(bar)
+	if not bar then return nil end
+	local overlay = bar._rbTextOverlay
+	if not overlay then
+		overlay = CreateFrame("Frame", nil, bar)
+		overlay:SetAllPoints(bar)
+		overlay:EnableMouse(false)
+		bar._rbTextOverlay = overlay
+	end
+	local baseLevel = bar:GetFrameLevel() or 1
+	local borderLevel = bar._rbBorder and bar._rbBorder:GetFrameLevel() or baseLevel
+	overlay:SetFrameStrata(bar:GetFrameStrata())
+	overlay:SetFrameLevel(max(borderLevel + 1, baseLevel + 1))
+	return overlay
+end
+
 local function applyStatusBarInsets(frame, inset, force)
 	if not frame then return end
 	inset = inset or ZERO_INSETS
@@ -987,7 +1010,8 @@ local function applyBackdrop(frame, cfg)
 		if bd.borderTexture and bd.borderTexture ~= "" and (bd.edgeSize or 0) > 0 then
 			local borderTexture = bd.borderTexture or "Interface\\Tooltips\\UI-Tooltip-Border"
 			local edgeSize = bd.edgeSize or 3
-			if state.borderTexture ~= borderTexture or state.borderEdgeSize ~= edgeSize then
+			local borderChanged = false
+			if state.borderTexture ~= borderTexture or state.borderEdgeSize ~= edgeSize or (borderFrame.GetBackdrop and not borderFrame:GetBackdrop()) then
 				borderFrame:SetBackdrop({
 					bgFile = nil,
 					edgeFile = borderTexture,
@@ -997,10 +1021,11 @@ local function applyBackdrop(frame, cfg)
 				})
 				state.borderTexture = borderTexture
 				state.borderEdgeSize = edgeSize
+				borderChanged = true
 			end
 			local boc = bd.borderColor or { 0, 0, 0, 0 }
 			local cr, cg, cb, ca = boc[1] or 0, boc[2] or 0, boc[3] or 0, boc[4] or 1
-			if state.borderR ~= cr or state.borderG ~= cg or state.borderB ~= cb or state.borderA ~= ca then
+			if borderChanged or state.borderR ~= cr or state.borderG ~= cg or state.borderB ~= cb or state.borderA ~= ca then
 				if borderFrame.SetBackdropBorderColor then borderFrame:SetBackdropBorderColor(cr, cg, cb, ca) end
 				state.borderR, state.borderG, state.borderB, state.borderA = cr, cg, cb, ca
 			end
@@ -1028,6 +1053,9 @@ local function applyTextPosition(bar, cfg, baseX, baseY)
 	local offset = ensureTextOffsetTable(cfg)
 	local ox = (baseX or 0) + (offset.x or 0)
 	local oy = (baseY or 0) + (offset.y or 0)
+	local textParent = ensureTextOverlayFrame(bar) or bar
+	if bar.text:GetParent() ~= textParent then bar.text:SetParent(textParent) end
+	bar.text:SetDrawLayer("OVERLAY")
 	bar.text:ClearAllPoints()
 	bar.text:SetPoint("CENTER", bar, "CENTER", ox, oy)
 end
@@ -2129,45 +2157,52 @@ function updatePowerBar(type, runeSlot)
 		bar._baseColor[1], bar._baseColor[2], bar._baseColor[3], bar._baseColor[4] = custom[1] or 1, custom[2] or 1, custom[3] or 1, custom[4] or 1
 	end
 
+	local useHolyThreeColor = (type == "HOLY_POWER") and cfg.useHolyThreeColor == true
+	local holyThreeThreshold = 3
+	local reachedThree = useHolyThreeColor and curPower >= holyThreeThreshold
 	if not addon.variables.isMidnight or (issecretvalue and not issecretvalue(curPower) and not issecretvalue(maxPower)) then
 		local reachedCap = curPower >= max(maxPower, 1)
 		local useMaxColor = cfg.useMaxColor == true
+		local targetR, targetG, targetB, targetA = bar._baseColor[1], bar._baseColor[2], bar._baseColor[3], bar._baseColor[4]
+		local flag
 		if useMaxColor and reachedCap then
 			local maxCol = cfg.maxColor or WHITE
-			local mr, mg, mb, ma = maxCol[1] or 1, maxCol[2] or 1, maxCol[3] or 1, maxCol[4] or (bar._baseColor[4] or 1)
-			local lc = bar._lastColor or {}
-			if bar._usingMaxColor ~= true or lc[1] ~= mr or lc[2] ~= mg or lc[3] ~= mb or lc[4] ~= ma then
-				lc[1], lc[2], lc[3], lc[4] = mr, mg, mb, ma
-				bar._lastColor = lc
-				bar:SetStatusBarColor(lc[1], lc[2], lc[3], lc[4])
-				bar._usingMaxColor = true
-			end
-		else
-			local base = bar._baseColor
-			if base then
-				local lc = bar._lastColor or {}
-				local br, bgc, bb, ba = base[1] or 1, base[2] or 1, base[3] or 1, base[4] or 1
-				if bar._usingMaxColor == true or lc[1] ~= br or lc[2] ~= bgc or lc[3] ~= bb or lc[4] ~= ba then
-					lc[1], lc[2], lc[3], lc[4] = br, bgc, bb, ba
-					bar._lastColor = lc
-					bar:SetStatusBarColor(lc[1], lc[2], lc[3], lc[4])
-				end
-			end
-			bar._usingMaxColor = false
+			targetR, targetG, targetB, targetA = maxCol[1] or targetR, maxCol[2] or targetG, maxCol[3] or targetB, maxCol[4] or (bar._baseColor[4] or 1)
+			flag = "max"
+		elseif reachedThree then
+			targetR, targetG, targetB, targetA = getHolyThreeColor(cfg)
+			flag = "holy3"
 		end
+		local lc = bar._lastColor or {}
+		if lc[1] ~= targetR or lc[2] ~= targetG or lc[3] ~= targetB or lc[4] ~= targetA then
+			lc[1], lc[2], lc[3], lc[4] = targetR, targetG, targetB, targetA
+			bar._lastColor = lc
+			bar:SetStatusBarColor(lc[1], lc[2], lc[3], lc[4])
+		end
+		bar._usingMaxColor = flag == "max"
+		bar._usingHolyThreeColor = flag == "holy3"
 	else
 		local lc = bar._lastColor or {}
 		local base = bar._baseColor
 		if base then
 			local br, bgc, bb, ba = base[1] or 1, base[2] or 1, base[3] or 1, base[4] or 1
-			if lc[1] ~= br or lc[2] ~= bgc or lc[3] ~= bb or lc[4] ~= ba then
-				if cfg.useBarColor and not cfg.useMaxColor then
-					bar._lastColor = lc
-					bar:GetStatusBarTexture():SetVertexColor(1, 1, 1, 1)
-					bar:SetStatusBarColor(br, bgc, bb, ba)
-				end
+			local targetR, targetG, targetB, targetA = br, bgc, bb, ba
+			local useMaxColor = cfg.useMaxColor == true
+			local reachedCap = curPower >= max(maxPower, 1)
+			if useMaxColor and reachedCap then
+				local maxCol = cfg.maxColor or WHITE
+				targetR, targetG, targetB, targetA = maxCol[1] or br, maxCol[2] or bgc, maxCol[3] or bb, maxCol[4] or ba
+			elseif reachedThree then
+				targetR, targetG, targetB, targetA = getHolyThreeColor(cfg)
+			end
+			if lc[1] ~= targetR or lc[2] ~= targetG or lc[3] ~= targetB or lc[4] ~= targetA then
+				bar._lastColor = lc
+				if cfg.useBarColor and not cfg.useMaxColor and not reachedThree then bar:GetStatusBarTexture():SetVertexColor(1, 1, 1, 1) end
+				bar:SetStatusBarColor(targetR, targetG, targetB, targetA)
 			end
 		end
+		bar._usingMaxColor = (cfg.useMaxColor == true) and (curPower >= max(maxPower, 1))
+		bar._usingHolyThreeColor = reachedThree and not bar._usingMaxColor
 	end
 
 	configureSpecialTexture(bar, type, cfg)

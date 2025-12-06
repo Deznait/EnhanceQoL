@@ -1,4 +1,4 @@
-local MODULE_MAJOR, MINOR = "LibEQOLSettingsMode-1.0", 1
+local MODULE_MAJOR, MINOR = "LibEQOLSettingsMode-1.0", 5010001
 local LibStub = _G.LibStub
 assert(LibStub, MODULE_MAJOR .. " requires LibStub")
 
@@ -6,13 +6,23 @@ local lib = LibStub:NewLibrary(MODULE_MAJOR, MINOR)
 if not lib then
 	return
 end
+lib.MINOR = MINOR
 
 local Settings = _G.Settings
 local SettingsPanel = _G.SettingsPanel
+local SettingsInbound = _G.SettingsInbound
 local SettingsCategoryListButtonMixin = _G.SettingsCategoryListButtonMixin
 local SettingsCheckboxControlMixin = _G.SettingsCheckboxControlMixin
 local SettingsDropdownControlMixin = _G.SettingsDropdownControlMixin
 local SettingsSliderControlMixin = _G.SettingsSliderControlMixin
+local CreateSettingsExpandableSectionInitializer = _G.CreateSettingsExpandableSectionInitializer
+local TextureKitConstants = _G.TextureKitConstants
+local HIGHLIGHT_FONT_COLOR = _G.HIGHLIGHT_FONT_COLOR
+local DISABLED_FONT_COLOR = _G.DISABLED_FONT_COLOR
+
+local function isSearchActive()
+	return SettingsPanel and SettingsPanel.SearchBox and SettingsPanel.SearchBox:HasText()
+end
 
 local State = {
 	rootCategory = nil,
@@ -47,7 +57,9 @@ local function prefixNotifyTag(tag, setting)
 
 	-- Prefer the setting's prefix, then the global prefix
 	local settingVar = setting and setting.GetVariable and setting:GetVariable()
-	local tagPrefix = (settingVar and State.settingPrefixes[settingVar]) or State.settingPrefixes[tag] or (State.prefixSet and State.prefix)
+	local tagPrefix = (settingVar and State.settingPrefixes[settingVar])
+		or State.settingPrefixes[tag]
+		or (State.prefixSet and State.prefix)
 	if tagPrefix and not tag:find(tagPrefix, 1, true) then
 		return tagPrefix .. tag
 	end
@@ -75,7 +87,9 @@ local function maybeAttachNotify(setting, data)
 	if not (data and data.notify) then
 		return
 	end
-	local notifyTag = (data.notify == true) and ((setting and setting.GetVariable and setting:GetVariable()) or (setting and setting.variable)) or data.notify
+	local notifyTag = (data.notify == true)
+			and ((setting and setting.GetVariable and setting:GetVariable()) or (setting and setting.variable))
+		or data.notify
 	attachNotify(setting, notifyTag)
 end
 
@@ -141,11 +155,11 @@ local function hookNewTag()
 	end
 	State._hooked = true
 
-hooksecurefunc(SettingsCategoryListButtonMixin, "Init", function(self, initializer)
-	local category = initializer.data.category
-	if category and shouldShowNewTag(category) and self.NewFeature then
-		self.NewFeature:SetShown(true)
-	end
+	hooksecurefunc(SettingsCategoryListButtonMixin, "Init", function(self, initializer)
+		local category = initializer.data.category
+		if category and shouldShowNewTag(category) and self.NewFeature then
+			self.NewFeature:SetShown(true)
+		end
 	end)
 
 	local function tagControl(self)
@@ -173,7 +187,6 @@ function lib:SetDefaultRootName(name)
 		State.rootName = name
 	end
 end
-
 
 local function prefixTag(tag)
 	if type(tag) ~= "string" then
@@ -209,6 +222,85 @@ end
 local function applyParentInitializer(element, parentInitializer, parentCheck)
 	if element and parentInitializer then
 		element:SetParentInitializer(parentInitializer, parentCheck)
+	end
+end
+
+local function applyModifyPredicate(initializer, data)
+	if not (initializer and data and data.isEnabled) then
+		return
+	end
+	if data.parentCheck then
+		return
+	end
+	if not initializer.AddModifyPredicate then
+		return
+	end
+
+	local predicate
+	if type(data.isEnabled) == "function" then
+		predicate = data.isEnabled
+	else
+		local enabled = data.isEnabled ~= false
+		predicate = function()
+			return enabled
+		end
+	end
+
+	initializer:AddModifyPredicate(function()
+		local ok, result = pcall(predicate)
+		if not ok then
+			return true
+		end
+		return result ~= false
+	end)
+end
+
+local function refreshSettingsLayout()
+	if SettingsInbound and SettingsInbound.RepairDisplay then
+		SettingsInbound.RepairDisplay()
+	elseif SettingsPanel and SettingsPanel.RepairDisplay then
+		SettingsPanel:RepairDisplay()
+	end
+end
+
+local function normalizeSectionPredicate(section)
+	if section == nil then
+		return nil
+	end
+
+	if type(section) == "function" then
+		return section
+	end
+
+	if type(section) == "table" then
+		if type(section.IsExpanded) == "function" then
+			return function()
+				return section:IsExpanded() ~= false
+			end
+		end
+
+		local data = section.data or (section.GetData and section:GetData())
+		if data and data.expanded ~= nil then
+			return function()
+				return data.expanded ~= false
+			end
+		end
+	end
+end
+
+local function applyExpandablePredicate(initializer, data)
+	if not (initializer and data) then
+		return
+	end
+
+	local predicate = normalizeSectionPredicate(data.parentSection or data.section or data.expandWith)
+	if predicate and initializer.AddShownPredicate then
+		initializer:AddShownPredicate(function()
+			if isSearchActive() then
+				return true
+			end
+			return predicate()
+		end)
 	end
 end
 
@@ -249,7 +341,11 @@ local function registerSetting(cat, key, varType, name, default, getter, setter,
 	local variable = data and data.variable
 
 	if not (State.prefixSet or prefix or variable) then
-		error(("LibEQOLSettingsMode: SetVariablePrefix(...) must be called before registering settings (missing before key '%s'). Alternatively pass data.prefix or data.variable."):format(tostring(key)))
+		error(
+			("LibEQOLSettingsMode: SetVariablePrefix(...) must be called before registering settings (missing before key '%s'). Alternatively pass data.prefix or data.variable."):format(
+				tostring(key)
+			)
+		)
 	end
 
 	if not variable then
@@ -274,13 +370,17 @@ function lib:CreateCheckbox(cat, data)
 		Settings.VarType.Boolean,
 		data.name or data.text or data.key,
 		data.default ~= nil and data.default or false,
-		data.get or function() return data.default end,
+		data.get or function()
+			return data.default
+		end,
 		data.set,
 		data
 	)
 	local element = Settings.CreateCheckbox(cat, setting, data.desc)
 	applyParentInitializer(element, data.parent, data.parentCheck)
+	applyModifyPredicate(element, data)
 	addSearchTags(element, data.searchtags, data.name or data.text)
+	applyExpandablePredicate(element, data)
 	State.elements[data.key] = element
 	maybeAttachNotify(setting, data)
 	return element, setting
@@ -304,7 +404,9 @@ function lib:CreateSlider(cat, data)
 	end
 	local element = Settings.CreateSlider(cat, setting, options, data.desc)
 	applyParentInitializer(element, data.parent, data.parentCheck)
+	applyModifyPredicate(element, data)
 	addSearchTags(element, data.searchtags, data.name or data.text)
+	applyExpandablePredicate(element, data)
 	State.elements[data.key] = element
 	maybeAttachNotify(setting, data)
 	return element, setting
@@ -351,7 +453,9 @@ function lib:CreateDropdown(cat, data)
 	end
 	local dropdown = Settings.CreateDropdown(cat, setting, optionsFunc, data.desc)
 	applyParentInitializer(dropdown, data.parent, data.parentCheck)
+	applyModifyPredicate(dropdown, data)
 	addSearchTags(dropdown, data.searchtags, data.name or data.text)
+	applyExpandablePredicate(dropdown, data)
 	State.elements[data.key] = dropdown
 	maybeAttachNotify(setting, data)
 	return dropdown, setting
@@ -369,7 +473,7 @@ function lib:CreateSoundDropdown(cat, data)
 		data.set,
 		data
 	)
-	local initializer = Settings.CreateElementInitializer("LibEQOL_SoundDropdownTemplate", {
+	local initializer = Settings.CreateElementInitializer("LibEQOL@project-abbreviated-hash@_SoundDropdownTemplate", {
 		setting = setting,
 		options = data.values or data.options,
 		optionfunc = data.optionfunc,
@@ -389,6 +493,8 @@ function lib:CreateSoundDropdown(cat, data)
 	initializer:SetSetting(setting)
 	addSearchTags(initializer, data.searchtags, data.name or data.text)
 	applyParentInitializer(initializer, data.parent, data.parentCheck)
+	applyModifyPredicate(initializer, data)
+	applyExpandablePredicate(initializer, data)
 	Settings.RegisterInitializer(cat, initializer)
 	State.elements[data.key] = initializer
 	maybeAttachNotify(setting, data)
@@ -397,7 +503,7 @@ end
 
 function lib:CreateColorOverrides(cat, data)
 	assert(cat and data and data.entries, "category and entries required")
-	local initializer = Settings.CreateElementInitializer("LibEQOL_ColorOverridesPanelNoHead", {
+	local initializer = Settings.CreateElementInitializer("LibEQOL@project-abbreviated-hash@_ColorOverridesPanelNoHead", {
 		categoryID = cat:GetID(),
 		entries = data.entries,
 		getColor = data.getColor,
@@ -408,6 +514,8 @@ function lib:CreateColorOverrides(cat, data)
 	-- addSearchTags(initializer, data.searchtags, data.name or data.text)
 	Settings.RegisterInitializer(cat, initializer)
 	applyParentInitializer(initializer, data.parent, data.parentCheck)
+	applyModifyPredicate(initializer, data)
+	applyExpandablePredicate(initializer, data)
 	State.elements[data.key or (data.name or "ColorOverrides")] = initializer
 	maybeAttachNotify(initializer.GetSetting and initializer:GetSetting(), data)
 	return initializer
@@ -421,11 +529,13 @@ function lib:CreateMultiDropdown(cat, data)
 		Settings.VarType.String,
 		data.name or data.text or data.key,
 		"",
-		function() return "" end,
+		function()
+			return ""
+		end,
 		function() end,
 		data
 	)
-	local initializer = Settings.CreateElementInitializer("LibEQOL_MultiDropdownTemplate", {
+	local initializer = Settings.CreateElementInitializer("LibEQOL@project-abbreviated-hash@_MultiDropdownTemplate", {
 		label = data.name or data.text or data.key,
 		options = data.values,
 		optionfunc = data.optionfunc,
@@ -438,40 +548,159 @@ function lib:CreateMultiDropdown(cat, data)
 	initializer:SetSetting(setting)
 	addSearchTags(initializer, data.searchtags, data.name or data.text)
 	applyParentInitializer(initializer, data.parent, data.parentCheck)
+	applyModifyPredicate(initializer, data)
+	applyExpandablePredicate(initializer, data)
 	Settings.RegisterInitializer(cat, initializer)
 	State.elements[data.key] = initializer
 	maybeAttachNotify(setting, data)
 	return initializer, setting
 end
 
-function lib:CreateHeader(cat, text)
-	local init = Settings.CreateElementInitializer("SettingsListSectionHeaderTemplate", { name = text })
-	addSearchTags(init, text, text)
+function lib.CreateExpandableSection(_, cat, data)
+	assert(cat and data and (data.name or data.text), "category and data.name required")
+
+	local nameGetter = data.name or data.text or data.key or "Section"
+	if type(nameGetter) == "string" then
+		local cachedName = nameGetter
+		nameGetter = function()
+			return cachedName
+		end
+	end
+
+	local resolvedName = nameGetter() or "Section"
+	local initializer
+	if type(CreateSettingsExpandableSectionInitializer) == "function" then
+		initializer = CreateSettingsExpandableSectionInitializer(resolvedName)
+	else
+		initializer = Settings.CreateElementInitializer("SettingsExpandableSectionTemplate", { name = resolvedName })
+	end
+
+	initializer.data.nameGetter = nameGetter
+	initializer.data.expanded = data.expanded ~= false
+	initializer.data.colorizeTitle = data.colorizeTitle == true
+	initializer.data.titleColor = data.titleColor
+
+	function initializer:GetExtent()
+		return data.extent or 25
+	end
+
+	function initializer:IsExpanded()
+		return isSearchActive() or (self.data and self.data.expanded ~= false)
+	end
+
+	local origInitFrame = initializer.InitFrame
+	function initializer:InitFrame(frame)
+		self.data.name = self.data.nameGetter()
+		origInitFrame(self, frame)
+
+		local function applyVisuals(expanded)
+			if frame.Button and frame.Button.Right then
+				frame.Button.Right:SetAtlas(
+					expanded and "Options_ListExpand_Right_Expanded" or "Options_ListExpand_Right",
+					TextureKitConstants.UseAtlasSize
+				)
+			end
+
+			if frame.Button and frame.Button.Text then
+				local color
+				if initializer.data.colorizeTitle then
+					color = expanded and HIGHLIGHT_FONT_COLOR or DISABLED_FONT_COLOR
+				else
+					color = initializer.data.titleColor or HIGHLIGHT_FONT_COLOR
+				end
+				frame.Button.Text:SetTextColor(color:GetRGB())
+			end
+		end
+
+			frame.OnExpandedChanged = function(frameSelf, expanded)
+				applyVisuals(frameSelf:GetElementData():IsExpanded())
+				refreshSettingsLayout()
+			end
+
+			frame.CalculateHeight = function(frameSelf)
+				local elementData = frameSelf:GetElementData()
+				return elementData:GetExtent()
+			end
+
+		applyVisuals(self:IsExpanded())
+	end
+
+	addSearchTags(initializer, data.searchtags, resolvedName)
+	Settings.RegisterInitializer(cat, initializer)
+	State.elements[data.key or resolvedName] = initializer
+
+	return initializer, function()
+		return initializer:IsExpanded()
+	end
+end
+
+local function normalizeNameData(text, extra)
+	local data = {}
+	if type(text) == "table" then
+		for k, v in pairs(text) do
+			data[k] = v
+		end
+	else
+		data.name = text
+	end
+
+	if type(extra) == "table" then
+		for k, v in pairs(extra) do
+			data[k] = v
+		end
+	end
+
+	data.name = data.name or data.text or text
+	return data
+end
+
+function lib:CreateHeader(cat, text, extra)
+	local data = normalizeNameData(text, extra)
+	local name = data.name or data.text
+	local init = Settings.CreateElementInitializer("SettingsListSectionHeaderTemplate", { name = name })
+	addSearchTags(init, data.searchtags or name, name)
+	applyParentInitializer(init, data.parent, data.parentCheck)
+	applyModifyPredicate(init, data)
+	applyExpandablePredicate(init, data)
 	Settings.RegisterInitializer(cat, init)
 	return init
 end
 
-function lib:CreateText(cat, text)
-	local init = Settings.CreateElementInitializer("LibEQOL_SettingsListSectionHintTemplate", { name = text })
-	addSearchTags(init, text, text)
+function lib:CreateText(cat, text, extra)
+	local data = normalizeNameData(text, extra)
+	local name = data.name or data.text
+	local init = Settings.CreateElementInitializer(
+		"LibEQOL@project-abbreviated-hash@_SettingsListSectionHintTemplate",
+		{ name = name }
+	)
+	addSearchTags(init, data.searchtags or name, name)
+	applyParentInitializer(init, data.parent, data.parentCheck)
+	applyModifyPredicate(init, data)
+	applyExpandablePredicate(init, data)
 	Settings.RegisterInitializer(cat, init)
 	return init
 end
 
 function lib:CreateButton(cat, data)
 	assert(cat and data and data.text, "category and data.text required")
-	local btn = CreateSettingsButtonInitializer("", data.text, data.click or data.func, data.desc, data.searchtags or false)
+	local btn =
+		CreateSettingsButtonInitializer("", data.text, data.click or data.func, data.desc, data.searchtags or false)
 	SettingsPanel:GetLayout(cat):AddInitializer(btn)
 	applyParentInitializer(btn, data.parent, data.parentCheck)
+	applyModifyPredicate(btn, data)
+	applyExpandablePredicate(btn, data)
 	State.elements[data.key or data.text] = btn
 	return btn
 end
 
 function lib:CreateKeybind(cat, data)
 	assert(cat and data and data.bindingIndex, "category and data.bindingIndex required")
-	local initializer = Settings.CreateElementInitializer("KeyBindingFrameBindingTemplate", { bindingIndex = data.bindingIndex })
+	local initializer =
+		Settings.CreateElementInitializer("KeyBindingFrameBindingTemplate", { bindingIndex = data.bindingIndex })
 	addSearchTags(initializer, data.searchtags, data.name or data.text)
 	applyParentInitializer(initializer, data.parent, data.parentCheck)
+	applyModifyPredicate(initializer, data)
+	applyExpandablePredicate(initializer, data)
 	Settings.RegisterInitializer(cat, initializer)
 	State.elements[data.key or ("Binding_" .. tostring(data.bindingIndex))] = initializer
 	return initializer
@@ -488,7 +717,12 @@ end
 function lib:SetVariablePrefix(prefix)
 	if type(prefix) == "string" and prefix ~= "" then
 		if State.prefixSet and prefix ~= State.prefix then
-			error(("LibEQOLSettingsMode: prefix already set to '%s'; refusing to change to '%s'. Use data.prefix per control if you need multiple namespaces."):format(tostring(State.prefix), tostring(prefix)))
+			error(
+				("LibEQOLSettingsMode: prefix already set to '%s'; refusing to change to '%s'. Use data.prefix per control if you need multiple namespaces."):format(
+					tostring(State.prefix),
+					tostring(prefix)
+				)
+			)
 		end
 		State.prefix = prefix
 		State.prefixSet = true

@@ -17,6 +17,7 @@ local CACHE_TTL = 30 -- seconds
 local function now() return GetTime() end
 
 local function GetUnitTokenFromTooltip(tt)
+	if addon.variables.isMidnight then return "mouseover" end
 	local owner = tt and tt:GetOwner()
 	if owner then
 		if owner.unit then return owner.unit end
@@ -36,14 +37,7 @@ local EnsureUnitData -- forward declaration
 local fInspect = CreateFrame("Frame")
 
 -- Decide whether we need INSPECT_READY at all (opt-in)
-local function ShouldUseInspectFeature()
-	-- TODO on midnight beta - bug we are not able to add lines to tooltip in secure states
-	if not addon.variables.isMidnight then
-		return (addon.db and (addon.db["TooltipUnitShowSpec"] or addon.db["TooltipUnitShowItemLevel"])) or false
-	else
-		return false
-	end
-end
+local function ShouldUseInspectFeature() return (addon.db and (addon.db["TooltipUnitShowSpec"] or addon.db["TooltipUnitShowItemLevel"])) or false end
 
 local function IsConfiguredModifierDown()
 	local mod = addon.db and addon.db["TooltipMythicScoreModifier"] or "SHIFT"
@@ -132,8 +126,6 @@ local function RefreshTooltipForGUID(guid)
 end
 
 fInspect:SetScript("OnEvent", function(_, ev, arg1, arg2)
-	-- TODO bug in midnight beta we can'T change tooltip
-	if addon.variables.isMidnight then return end
 	if ev == "INSPECT_READY" then
 		local guid = arg1
 		if not guid or guid ~= pendingGUID then return end
@@ -185,8 +177,6 @@ end)
 
 EnsureUnitData = function(unit)
 	if not unit or not UnitIsPlayer(unit) then return end
-	-- TODO midnight tooltip bug - we can't do anything for now
-	if addon.variables.isMidnight then return end
 	-- Only fetch if at least one feature is enabled (opt-in)
 	if not (addon.db["TooltipUnitShowSpec"] or addon.db["TooltipUnitShowItemLevel"]) then return end
 	local guid = UnitGUID(unit)
@@ -237,8 +227,6 @@ local function fmtNum(n)
 end
 
 local function checkCurrency(tooltip, id)
-	-- TODO bug in midnight beta
-	if addon.variables.isMidnight then return end
 	if tooltip:IsForbidden() or tooltip:IsProtected() then return end
 	if not id then return end
 
@@ -301,8 +289,7 @@ end
 
 local function checkSpell(tooltip, id, name, isSpell)
 	local first = true
-	-- TODO bug in midnight beta with tooltip adding
-	if addon.db["TooltipShowSpellID"] and not addon.variables.isMidnight then
+	if addon.db["TooltipShowSpellID"] then
 		if id then
 			if first then
 				tooltip:AddLine(" ")
@@ -312,8 +299,7 @@ local function checkSpell(tooltip, id, name, isSpell)
 		end
 	end
 
-	-- TODO bug in midnight beta with tooltip adding
-	if addon.db["TooltipShowSpellIcon"] and not addon.variables.isMidnight and isSpell then
+	if addon.db["TooltipShowSpellIcon"] and isSpell then
 		local spellInfo = C_Spell.GetSpellInfo(id)
 		if spellInfo and spellInfo.iconID then
 			if first then
@@ -345,8 +331,7 @@ end
 
 local function checkAdditionalTooltip(tooltip)
 	local unit = ResolveTooltipUnit(tooltip)
-	-- TODO midnight beta bug - skipping
-	if addon.db["TooltipShowNPCID"] and not addon.variables.isMidnight and unit and UnitExists(unit) and not UnitPlayerControlled(unit) then
+	if addon.db["TooltipShowNPCID"] and unit and UnitExists(unit) and not UnitPlayerControlled(unit) then
 		local uGuid = UnitGUID(unit)
 		local id = GetNPCIDFromGUID(uGuid)
 		if id then
@@ -629,18 +614,14 @@ local function checkItem(tooltip, id, name, guid)
 		end
 	end
 
-	-- TODO Bug in midnight beta with tooltip handling
-	if addon.db["TooltipShowItemID"] and not addon.variables.isMidnight then
-		if id then
-			if first then
-				tooltip:AddLine(" ")
-				first = false
-			end
-			tooltip:AddDoubleLine(name, id)
+	if id then
+		if first then
+			tooltip:AddLine(" ")
+			first = false
 		end
+		tooltip:AddDoubleLine(name, id)
 	end
-	-- TODO Bug in midnight beta with tooltip handling
-	if addon.db["TooltipShowTempEnchant"] and not addon.variables.isMidnight and guid then
+	if addon.db["TooltipShowTempEnchant"] and guid then
 		local mhHas, mhExp, _, mhID, ohHas, ohExp, _, ohID, rhHas, rhExp = GetWeaponEnchantInfo()
 		if mhHas and guid == Item:CreateFromEquipmentSlot(16):GetItemGUID() then
 			if mhID then
@@ -660,8 +641,7 @@ local function checkItem(tooltip, id, name, guid)
 			end
 		end
 	end
-	-- TODO Bug in midnight beta with tooltip handling
-	if addon.db["TooltipShowItemCount"] and not addon.variables.isMidnight then
+	if addon.db["TooltipShowItemCount"] then
 		if id then
 			local bagCount = C_Item.GetItemCount(id)
 			local bankCount = C_Item.GetItemCount(id, true) - bagCount
@@ -705,8 +685,7 @@ end
 
 local function checkAura(tooltip, id, name)
 	local first = true
-	-- TODO midnight beta bug - skipping
-	if addon.db["TooltipShowSpellID"] and not addon.variables.isMidnight then
+	if addon.db["TooltipShowSpellID"] then
 		if id then
 			if first then
 				tooltip:AddLine(" ")
@@ -716,8 +695,7 @@ local function checkAura(tooltip, id, name)
 		end
 	end
 
-	-- TODO midnight beta bug - skipping
-	if addon.db["TooltipShowSpellIcon"] and not addon.variables.isMidnight then
+	if addon.db["TooltipShowSpellIcon"] then
 		local spellInfo = C_Spell.GetSpellInfo(id)
 		if spellInfo and spellInfo.iconID then
 			if first then
@@ -735,8 +713,6 @@ local function checkAura(tooltip, id, name)
 end
 
 local function checkAdditionalUnit(tt)
-	-- TODO bug in midnight beta - can't change tooltip
-	if addon.variables.isMidnight then return end
 	if not (addon.db["TooltipUnitShowSpec"] or addon.db["TooltipUnitShowItemLevel"]) then return end
 
 	local unit = GetUnitTokenFromTooltip(tt)

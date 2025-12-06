@@ -555,6 +555,8 @@ addon.MythicPlus.variables.portalCompendium = {
 			-- Oribos (Shadowlands)
 			[344587] = { text = "Orib", isClassTP = "MAGE", locID = 1670, x = 0.5229, y = 0.7460, zoneID = 1670 },
 			[344597] = { text = "Orib", isMagePortal = true, locID = 1670, x = 0.5229, y = 0.7460, zoneID = 1670 },
+
+			[325624] = { text = "Maw", isItem = true, itemID = 180817, icon = 442739, locID = 1543, x = 0.4727, y = 0.4361, zoneID = 1543 },
 		},
 	},
 	[90] = {
@@ -677,6 +679,9 @@ addon.MythicPlus.variables.portalCompendium = {
 			[176246] = { text = "STORM", isMagePortal = true, faction = FACTION_ALLIANCE, locID = 622, x = 0.4715, y = 0.4759, zoneID = 622 },
 			[176242] = { text = "WARS", isClassTP = "MAGE", faction = FACTION_HORDE, locID = 624, x = 0.5217, y = 0.4921, zoneID = 624 },
 			[176244] = { text = "WARS", isMagePortal = true, faction = FACTION_HORDE, locID = 624, x = 0.5217, y = 0.4921, zoneID = 624 },
+
+			[175608] = { text = "KARABOR", icon = 133316, isItem = true, itemID = 118663, faction = FACTION_ALLIANCE, locID = 539, x = 0.3398, y = 0.2646, zoneID = 539 },
+			[175604] = { text = "BLADESPIRE", icon = 133283, isItem = true, itemID = 118662, faction = FACTION_HORDE, locID = 525, x = 0.2778, y = 0.4268, zoneID = 525 },
 		},
 	},
 	[60] = {

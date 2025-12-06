@@ -184,7 +184,9 @@ local function radioDropdown(name, options, getter, setter, default, parentId)
 		parentId = parentId,
 		default = default,
 		generator = function(_, root)
-			for _, opt in ipairs(options) do
+			local opts = type(options) == "function" and options() or options
+			if type(opts) ~= "table" then return end
+			for _, opt in ipairs(opts) do
 				root:CreateRadio(opt.label, function() return getter() == opt.value end, function() setter(opt.value) end)
 			end
 		end,
@@ -248,9 +250,12 @@ local function calcLayout(unit, frame)
 	local cfg = ensureConfig(unit)
 	local def = defaultsFor(unit)
 	local anchor = cfg.anchor or def.anchor or {}
+	local powerEnabled = getValue(unit, { "power", "enabled" }, (def.power and def.power.enabled) ~= false)
 	local statusHeight = (cfg.status and cfg.status.enabled ~= false) and (cfg.statusHeight or def.statusHeight or 18) or 0
 	local width = cfg.width or def.width or frame:GetWidth() or 200
-	local height = statusHeight + (cfg.healthHeight or def.healthHeight or 24) + (cfg.powerHeight or def.powerHeight or 16) + (cfg.barGap or def.barGap or 0)
+	local barGap = powerEnabled and (cfg.barGap or def.barGap or 0) or 0
+	local powerHeight = powerEnabled and (cfg.powerHeight or def.powerHeight or 16) or 0
+	local height = statusHeight + (cfg.healthHeight or def.healthHeight or 24) + powerHeight + barGap
 	return {
 		point = anchor.point or "CENTER",
 		relativePoint = anchor.relativePoint or anchor.point or "CENTER",
@@ -493,63 +498,11 @@ local function buildUnitSettings(unit)
 		refresh()
 	end, healthDef.useShortNumbers ~= false, "health")
 
-	local textureOpts = textureOptions()
+	local textureOpts = textureOptions
 	list[#list + 1] = radioDropdown(L["Bar Texture"] or "Bar Texture", textureOpts, function() return getValue(unit, { "health", "texture" }, healthDef.texture or "DEFAULT") end, function(val)
 		setValue(unit, { "health", "texture" }, val)
 		refresh()
 	end, healthDef.texture or "DEFAULT", "health")
-
-	list[#list + 1] = { name = L["AbsorbBar"] or "Absorb Bar", kind = settingType.Collapsible, id = "absorb", defaultCollapsed = true }
-	local absorbColorDef = healthDef.absorbColor or { 0.85, 0.95, 1, 0.7 }
-
-	list[#list + 1] = checkboxColor({
-		name = L["Use custom absorb color"] or "Use custom absorb color",
-		parentId = "absorb",
-		defaultChecked = healthDef.absorbUseCustomColor == true,
-		isChecked = function() return getValue(unit, { "health", "absorbUseCustomColor" }, healthDef.absorbUseCustomColor == true) == true end,
-		onChecked = function(val)
-			debounced(unit .. "_absorbCustomColorToggle", function()
-				setValue(unit, { "health", "absorbUseCustomColor" }, val and true or false)
-				if val and not getValue(unit, { "health", "absorbColor" }) then setValue(unit, { "health", "absorbColor" }, absorbColorDef) end
-				refresh()
-				refreshSettingsUI()
-			end)
-		end,
-		getColor = function() return toRGBA(getValue(unit, { "health", "absorbColor" }, absorbColorDef), absorbColorDef) end,
-		onColor = function(color)
-			setColor(unit, { "health", "absorbColor" }, color.r, color.g, color.b, color.a)
-			setValue(unit, { "health", "absorbUseCustomColor" }, true)
-			refresh()
-		end,
-		colorDefault = {
-			r = absorbColorDef[1] or 0.85,
-			g = absorbColorDef[2] or 0.95,
-			b = absorbColorDef[3] or 1,
-			a = absorbColorDef[4] or 0.7,
-		},
-	})
-
-	list[#list + 1] = checkbox(L["Use absorb glow"] or "Use absorb glow", function() return getValue(unit, { "health", "useAbsorbGlow" }, healthDef.useAbsorbGlow ~= false) ~= false end, function(val)
-		setValue(unit, { "health", "useAbsorbGlow" }, val and true or false)
-		refresh()
-	end, healthDef.useAbsorbGlow ~= false, "absorb")
-
-	list[#list + 1] = checkbox(L["Show sample absorb"] or "Show sample absorb", function() return sampleAbsorb[unit] == true end, function(val)
-		sampleAbsorb[unit] = val and true or false
-		refresh()
-	end, false, "absorb")
-
-	list[#list + 1] = radioDropdown(
-		L["Absorb texture"] or "Absorb texture",
-		textureOpts,
-		function() return getValue(unit, { "health", "absorbTexture" }, healthDef.absorbTexture or healthDef.texture or "SOLID") end,
-		function(val)
-			setValue(unit, { "health", "absorbTexture" }, val)
-			refresh()
-		end,
-		healthDef.absorbTexture or healthDef.texture or "SOLID",
-		"absorb"
-	)
 
 	list[#list + 1] = checkboxColor({
 		name = L["UFBarBackdrop"] or "Show bar backdrop",
@@ -575,15 +528,78 @@ local function buildUnitSettings(unit)
 		colorDefault = { r = 0, g = 0, b = 0, a = 0.6 },
 	})
 
+	if unit ~= "pet" then
+		list[#list + 1] = { name = L["AbsorbBar"] or "Absorb Bar", kind = settingType.Collapsible, id = "absorb", defaultCollapsed = true }
+		local absorbColorDef = healthDef.absorbColor or { 0.85, 0.95, 1, 0.7 }
+
+		list[#list + 1] = checkboxColor({
+			name = L["Use custom absorb color"] or "Use custom absorb color",
+			parentId = "absorb",
+			defaultChecked = healthDef.absorbUseCustomColor == true,
+			isChecked = function() return getValue(unit, { "health", "absorbUseCustomColor" }, healthDef.absorbUseCustomColor == true) == true end,
+			onChecked = function(val)
+				debounced(unit .. "_absorbCustomColorToggle", function()
+					setValue(unit, { "health", "absorbUseCustomColor" }, val and true or false)
+					if val and not getValue(unit, { "health", "absorbColor" }) then setValue(unit, { "health", "absorbColor" }, absorbColorDef) end
+					refresh()
+					refreshSettingsUI()
+				end)
+			end,
+			getColor = function() return toRGBA(getValue(unit, { "health", "absorbColor" }, absorbColorDef), absorbColorDef) end,
+			onColor = function(color)
+				setColor(unit, { "health", "absorbColor" }, color.r, color.g, color.b, color.a)
+				setValue(unit, { "health", "absorbUseCustomColor" }, true)
+				refresh()
+			end,
+			colorDefault = {
+				r = absorbColorDef[1] or 0.85,
+				g = absorbColorDef[2] or 0.95,
+				b = absorbColorDef[3] or 1,
+				a = absorbColorDef[4] or 0.7,
+			},
+		})
+
+		list[#list + 1] = checkbox(L["Use absorb glow"] or "Use absorb glow", function() return getValue(unit, { "health", "useAbsorbGlow" }, healthDef.useAbsorbGlow ~= false) ~= false end, function(val)
+			setValue(unit, { "health", "useAbsorbGlow" }, val and true or false)
+			refresh()
+		end, healthDef.useAbsorbGlow ~= false, "absorb")
+
+		list[#list + 1] = checkbox(L["Show sample absorb"] or "Show sample absorb", function() return sampleAbsorb[unit] == true end, function(val)
+			sampleAbsorb[unit] = val and true or false
+			refresh()
+		end, false, "absorb")
+
+		list[#list + 1] = radioDropdown(
+			L["Absorb texture"] or "Absorb texture",
+			textureOpts,
+			function() return getValue(unit, { "health", "absorbTexture" }, healthDef.absorbTexture or healthDef.texture or "SOLID") end,
+			function(val)
+				setValue(unit, { "health", "absorbTexture" }, val)
+				refresh()
+			end,
+			healthDef.absorbTexture or healthDef.texture or "SOLID",
+			"absorb"
+		)
+	end
+
 	list[#list + 1] = { name = L["PowerBar"] or "Power Bar", kind = settingType.Collapsible, id = "power", defaultCollapsed = true }
 	local powerDef = def.power or {}
+	local function isPowerEnabled() return getValue(unit, { "power", "enabled" }, powerDef.enabled ~= false) ~= false end
 
-	list[#list + 1] = slider(L["UFPowerHeight"] or "Power height", 6, 60, 1, function() return getValue(unit, { "powerHeight" }, def.powerHeight or 16) end, function(val)
+	list[#list + 1] = checkbox(L["Show power bar"] or "Show power bar", isPowerEnabled, function(val)
+		setValue(unit, { "power", "enabled" }, val and true or false)
+		refreshSelf()
+		refreshSettingsUI()
+	end, powerDef.enabled ~= false, "power")
+
+	local powerHeightSetting = slider(L["UFPowerHeight"] or "Power height", 6, 60, 1, function() return getValue(unit, { "powerHeight" }, def.powerHeight or 16) end, function(val)
 		debounced(unit .. "_powerHeight", function()
 			setValue(unit, { "powerHeight" }, val or def.powerHeight or 16)
 			refresh()
 		end)
 	end, def.powerHeight or 16, "power", true)
+	powerHeightSetting.isEnabled = isPowerEnabled
+	list[#list + 1] = powerHeightSetting
 
 	list[#list + 1] = checkboxColor({
 		name = L["UFPowerColor"] or "Custom power color",
@@ -612,33 +628,42 @@ local function buildUnitSettings(unit)
 			b = (powerDef.color and powerDef.color[3]) or 1,
 			a = (powerDef.color and powerDef.color[4]) or 1,
 		},
+		isEnabled = isPowerEnabled,
 	})
 
-	list[#list + 1] = radioDropdown(L["TextLeft"] or "Left text", textOptions, function() return getValue(unit, { "power", "textLeft" }, powerDef.textLeft or "PERCENT") end, function(val)
+	local powerTextLeft = radioDropdown(L["TextLeft"] or "Left text", textOptions, function() return getValue(unit, { "power", "textLeft" }, powerDef.textLeft or "PERCENT") end, function(val)
 		setValue(unit, { "power", "textLeft" }, val)
 		refreshSelf()
 	end, powerDef.textLeft or "PERCENT", "power")
+	powerTextLeft.isEnabled = isPowerEnabled
+	list[#list + 1] = powerTextLeft
 
-	list[#list + 1] = radioDropdown(L["TextRight"] or "Right text", textOptions, function() return getValue(unit, { "power", "textRight" }, powerDef.textRight or "CURMAX") end, function(val)
+	local powerTextRight = radioDropdown(L["TextRight"] or "Right text", textOptions, function() return getValue(unit, { "power", "textRight" }, powerDef.textRight or "CURMAX") end, function(val)
 		setValue(unit, { "power", "textRight" }, val)
 		refreshSelf()
 	end, powerDef.textRight or "CURMAX", "power")
+	powerTextRight.isEnabled = isPowerEnabled
+	list[#list + 1] = powerTextRight
 
-	list[#list + 1] = slider(L["FontSize"] or "Font size", 8, 30, 1, function() return getValue(unit, { "power", "fontSize" }, powerDef.fontSize or 14) end, function(val)
+	local powerFontSize = slider(L["FontSize"] or "Font size", 8, 30, 1, function() return getValue(unit, { "power", "fontSize" }, powerDef.fontSize or 14) end, function(val)
 		debounced(unit .. "_powerFontSize", function()
 			setValue(unit, { "power", "fontSize" }, val or powerDef.fontSize or 14)
 			refreshSelf()
 		end)
 	end, powerDef.fontSize or 14, "power", true)
+	powerFontSize.isEnabled = isPowerEnabled
+	list[#list + 1] = powerFontSize
 
 	if #fontOpts > 0 then
-		list[#list + 1] = radioDropdown(L["Font"] or "Font", fontOpts, function() return getValue(unit, { "power", "font" }, powerDef.font or defaultFontPath()) end, function(val)
+		local powerFont = radioDropdown(L["Font"] or "Font", fontOpts, function() return getValue(unit, { "power", "font" }, powerDef.font or defaultFontPath()) end, function(val)
 			setValue(unit, { "power", "font" }, val)
 			refreshSelf()
 		end, powerDef.font or defaultFontPath(), "power")
+		powerFont.isEnabled = isPowerEnabled
+		list[#list + 1] = powerFont
 	end
 
-	list[#list + 1] = radioDropdown(
+	local powerFontOutline = radioDropdown(
 		L["Font outline"] or "Font outline",
 		outlineOptions,
 		function() return getValue(unit, { "power", "fontOutline" }, powerDef.fontOutline or "OUTLINE") end,
@@ -649,8 +674,10 @@ local function buildUnitSettings(unit)
 		powerDef.fontOutline or "OUTLINE",
 		"power"
 	)
+	powerFontOutline.isEnabled = isPowerEnabled
+	list[#list + 1] = powerFontOutline
 
-	list[#list + 1] = slider(
+	local powerLeftX = slider(
 		L["TextLeftOffsetX"] or "Left text X offset",
 		-200,
 		200,
@@ -666,8 +693,10 @@ local function buildUnitSettings(unit)
 		"power",
 		true
 	)
+	powerLeftX.isEnabled = isPowerEnabled
+	list[#list + 1] = powerLeftX
 
-	list[#list + 1] = slider(
+	local powerLeftY = slider(
 		L["TextLeftOffsetY"] or "Left text Y offset",
 		-200,
 		200,
@@ -683,8 +712,10 @@ local function buildUnitSettings(unit)
 		"power",
 		true
 	)
+	powerLeftY.isEnabled = isPowerEnabled
+	list[#list + 1] = powerLeftY
 
-	list[#list + 1] = slider(
+	local powerRightX = slider(
 		L["TextRightOffsetX"] or "Right text X offset",
 		-200,
 		200,
@@ -700,8 +731,10 @@ local function buildUnitSettings(unit)
 		"power",
 		true
 	)
+	powerRightX.isEnabled = isPowerEnabled
+	list[#list + 1] = powerRightX
 
-	list[#list + 1] = slider(
+	local powerRightY = slider(
 		L["TextRightOffsetY"] or "Right text Y offset",
 		-200,
 		200,
@@ -717,16 +750,20 @@ local function buildUnitSettings(unit)
 		"power",
 		true
 	)
+	powerRightY.isEnabled = isPowerEnabled
+	list[#list + 1] = powerRightY
 
 	list[#list + 1] = checkbox(L["Use short numbers"] or "Use short numbers", function() return getValue(unit, { "power", "useShortNumbers" }, powerDef.useShortNumbers ~= false) end, function(val)
 		setValue(unit, { "power", "useShortNumbers" }, val and true or false)
 		refresh()
-	end, powerDef.useShortNumbers ~= false, "power")
+	end, powerDef.useShortNumbers ~= false, "power", isPowerEnabled)
 
-	list[#list + 1] = radioDropdown(L["Bar Texture"] or "Bar Texture", textureOpts, function() return getValue(unit, { "power", "texture" }, powerDef.texture or "DEFAULT") end, function(val)
+	local powerTexture = radioDropdown(L["Bar Texture"] or "Bar Texture", textureOpts, function() return getValue(unit, { "power", "texture" }, powerDef.texture or "DEFAULT") end, function(val)
 		setValue(unit, { "power", "texture" }, val)
 		refresh()
 	end, powerDef.texture or "DEFAULT", "power")
+	powerTexture.isEnabled = isPowerEnabled
+	list[#list + 1] = powerTexture
 
 	list[#list + 1] = checkboxColor({
 		name = L["UFBarBackdrop"] or "Show bar backdrop",
@@ -750,62 +787,82 @@ local function buildUnitSettings(unit)
 			end)
 		end,
 		colorDefault = { r = 0, g = 0, b = 0, a = 0.6 },
+		isEnabled = isPowerEnabled,
 	})
 
-	if unit == "target" then
+	if unit == "target" or unit == "focus" or unit:match("^boss%d+$") then
 		local castDef = def.cast or {}
 		list[#list + 1] = { name = L["CastBar"] or "Cast Bar", kind = settingType.Collapsible, id = "cast", defaultCollapsed = true }
+		local function isCastEnabled() return getValue(unit, { "cast", "enabled" }, castDef.enabled ~= false) ~= false end
+		local function isCastIconEnabled() return isCastEnabled() and getValue(unit, { "cast", "showIcon" }, castDef.showIcon ~= false) ~= false end
+		local function isCastNameEnabled() return isCastEnabled() and getValue(unit, { "cast", "showName" }, castDef.showName ~= false) ~= false end
+		local function isCastDurationEnabled() return isCastEnabled() and getValue(unit, { "cast", "showDuration" }, castDef.showDuration ~= false) ~= false end
 
 		list[#list + 1] = checkbox(L["Show cast bar"] or "Show cast bar", function() return getValue(unit, { "cast", "enabled" }, castDef.enabled ~= false) ~= false end, function(val)
 			setValue(unit, { "cast", "enabled" }, val and true or false)
 			refresh()
+			refreshSettingsUI()
 		end, castDef.enabled ~= false, "cast")
 
-		list[#list + 1] = slider(L["UFWidth"] or "Frame width", 50, 800, 1, function() return getValue(unit, { "cast", "width" }, castDef.width or def.width or 220) end, function(val)
+		local castWidth = slider(L["UFWidth"] or "Frame width", 50, 800, 1, function() return getValue(unit, { "cast", "width" }, castDef.width or def.width or 220) end, function(val)
 			setValue(unit, { "cast", "width" }, math.max(50, val or 50))
 			refresh()
 		end, castDef.width or def.width or 220, "cast", true)
+		castWidth.isEnabled = isCastEnabled
+		list[#list + 1] = castWidth
 
-		list[#list + 1] = slider(L["Cast bar height"] or "Cast bar height", 6, 40, 1, function() return getValue(unit, { "cast", "height" }, castDef.height or 16) end, function(val)
+		local castHeight = slider(L["Cast bar height"] or "Cast bar height", 6, 40, 1, function() return getValue(unit, { "cast", "height" }, castDef.height or 16) end, function(val)
 			setValue(unit, { "cast", "height" }, val or castDef.height or 16)
 			refresh()
 		end, castDef.height or 16, "cast", true)
+		castHeight.isEnabled = isCastEnabled
+		list[#list + 1] = castHeight
 
 		local anchorOpts = {
 			{ value = "TOP", label = L["Top"] or "Top" },
 			{ value = "BOTTOM", label = L["Bottom"] or "Bottom" },
 		}
-		list[#list + 1] = radioDropdown(L["Anchor"] or "Anchor", anchorOpts, function() return getValue(unit, { "cast", "anchor" }, castDef.anchor or "BOTTOM") end, function(val)
+		local castAnchor = radioDropdown(L["Anchor"] or "Anchor", anchorOpts, function() return getValue(unit, { "cast", "anchor" }, castDef.anchor or "BOTTOM") end, function(val)
 			setValue(unit, { "cast", "anchor" }, val or "BOTTOM")
 			refresh()
 		end, castDef.anchor or "BOTTOM", "cast")
+		castAnchor.isEnabled = isCastEnabled
+		list[#list + 1] = castAnchor
 
-		list[#list + 1] = slider(L["Offset X"] or "Offset X", -200, 200, 1, function() return getValue(unit, { "cast", "offset", "x" }, (castDef.offset and castDef.offset.x) or 0) end, function(val)
+		local castOffsetX = slider(L["Offset X"] or "Offset X", -200, 200, 1, function() return getValue(unit, { "cast", "offset", "x" }, (castDef.offset and castDef.offset.x) or 0) end, function(val)
 			setValue(unit, { "cast", "offset", "x" }, val or 0)
 			refresh()
 		end, (castDef.offset and castDef.offset.x) or 0, "cast", true)
+		castOffsetX.isEnabled = isCastEnabled
+		list[#list + 1] = castOffsetX
 
-		list[#list + 1] = slider(L["Offset Y"] or "Offset Y", -200, 200, 1, function() return getValue(unit, { "cast", "offset", "y" }, (castDef.offset and castDef.offset.y) or 0) end, function(val)
+		local castOffsetY = slider(L["Offset Y"] or "Offset Y", -200, 200, 1, function() return getValue(unit, { "cast", "offset", "y" }, (castDef.offset and castDef.offset.y) or 0) end, function(val)
 			setValue(unit, { "cast", "offset", "y" }, val or 0)
 			refresh()
 		end, (castDef.offset and castDef.offset.y) or 0, "cast", true)
+		castOffsetY.isEnabled = isCastEnabled
+		list[#list + 1] = castOffsetY
 
 		list[#list + 1] = checkbox(L["Show spell icon"] or "Show spell icon", function() return getValue(unit, { "cast", "showIcon" }, castDef.showIcon ~= false) ~= false end, function(val)
 			setValue(unit, { "cast", "showIcon" }, val and true or false)
 			refresh()
-		end, castDef.showIcon ~= false, "cast")
+			refreshSettingsUI()
+		end, castDef.showIcon ~= false, "cast", isCastEnabled)
 
-		list[#list + 1] = slider(L["Icon size"] or "Icon size", 8, 64, 1, function() return getValue(unit, { "cast", "iconSize" }, castDef.iconSize or 22) end, function(val)
+		local castIconSize = slider(L["Icon size"] or "Icon size", 8, 64, 1, function() return getValue(unit, { "cast", "iconSize" }, castDef.iconSize or 22) end, function(val)
 			setValue(unit, { "cast", "iconSize" }, val or castDef.iconSize or 22)
 			refresh()
 		end, castDef.iconSize or 22, "cast", true)
+		castIconSize.isEnabled = isCastIconEnabled
+		list[#list + 1] = castIconSize
 
 		list[#list + 1] = checkbox(L["Show spell name"] or "Show spell name", function() return getValue(unit, { "cast", "showName" }, castDef.showName ~= false) ~= false end, function(val)
 			setValue(unit, { "cast", "showName" }, val and true or false)
 			refresh()
-		end, castDef.showName ~= false, "cast")
+			refreshSettingsUI()
+		end, castDef.showName ~= false, "cast", isCastEnabled)
 
-		list[#list + 1] = slider(
+		local castNameX = slider(
 			L["Name X Offset"] or "Name X Offset",
 			-200,
 			200,
@@ -819,8 +876,10 @@ local function buildUnitSettings(unit)
 			"cast",
 			true
 		)
+		castNameX.isEnabled = isCastNameEnabled
+		list[#list + 1] = castNameX
 
-		list[#list + 1] = slider(
+		local castNameY = slider(
 			L["Name Y Offset"] or "Name Y Offset",
 			-200,
 			200,
@@ -834,16 +893,22 @@ local function buildUnitSettings(unit)
 			"cast",
 			true
 		)
+		castNameY.isEnabled = isCastNameEnabled
+		list[#list + 1] = castNameY
 
-		list[#list + 1] = radioDropdown(L["Font"] or "Font", fontOptions(), function() return getValue(unit, { "cast", "font" }, castDef.font or "") end, function(val)
+		local castNameFont = radioDropdown(L["Font"] or "Font", fontOptions(), function() return getValue(unit, { "cast", "font" }, castDef.font or "") end, function(val)
 			setValue(unit, { "cast", "font" }, val)
 			refresh()
 		end, castDef.font or "", "cast")
+		castNameFont.isEnabled = isCastNameEnabled
+		list[#list + 1] = castNameFont
 
-		list[#list + 1] = slider(L["FontSize"] or "Font size", 8, 30, 1, function() return getValue(unit, { "cast", "fontSize" }, castDef.fontSize or 12) end, function(val)
+		local castNameFontSize = slider(L["FontSize"] or "Font size", 8, 30, 1, function() return getValue(unit, { "cast", "fontSize" }, castDef.fontSize or 12) end, function(val)
 			setValue(unit, { "cast", "fontSize" }, val or 12)
 			refresh()
 		end, castDef.fontSize or 12, "cast", true)
+		castNameFontSize.isEnabled = isCastNameEnabled
+		list[#list + 1] = castNameFontSize
 
 		list[#list + 1] = checkbox(
 			L["Show cast duration"] or "Show cast duration",
@@ -851,12 +916,14 @@ local function buildUnitSettings(unit)
 			function(val)
 				setValue(unit, { "cast", "showDuration" }, val and true or false)
 				refresh()
+				refreshSettingsUI()
 			end,
 			castDef.showDuration ~= false,
-			"cast"
+			"cast",
+			isCastEnabled
 		)
 
-		list[#list + 1] = slider(
+		local castDurX = slider(
 			L["Duration X Offset"] or "Duration X Offset",
 			-200,
 			200,
@@ -871,7 +938,10 @@ local function buildUnitSettings(unit)
 			true
 		)
 
-		list[#list + 1] = slider(
+		castDurX.isEnabled = isCastDurationEnabled
+		list[#list + 1] = castDurX
+
+		local castDurY = slider(
 			L["Duration Y Offset"] or "Duration Y Offset",
 			-200,
 			200,
@@ -885,29 +955,54 @@ local function buildUnitSettings(unit)
 			"cast",
 			true
 		)
+		castDurY.isEnabled = isCastDurationEnabled
+		list[#list + 1] = castDurY
 
 		list[#list + 1] = checkbox(L["Show sample cast"] or "Show sample cast", function() return sampleCast[unit] == true end, function(val)
 			sampleCast[unit] = val and true or false
 			refresh()
-		end, false, "cast")
+		end, false, "cast", isCastEnabled)
 
-		local textureOpts = textureOptions()
-		list[#list + 1] = radioDropdown(L["Cast texture"] or "Cast texture", textureOpts, function() return getValue(unit, { "cast", "texture" }, castDef.texture or "DEFAULT") end, function(val)
+		local castTexture = radioDropdown(L["Cast texture"] or "Cast texture", textureOpts, function() return getValue(unit, { "cast", "texture" }, castDef.texture or "DEFAULT") end, function(val)
 			setValue(unit, { "cast", "texture" }, val)
 			refresh()
 		end, castDef.texture or "DEFAULT", "cast")
+		castTexture.isEnabled = isCastEnabled
+		list[#list + 1] = castTexture
 
 		list[#list + 1] = checkboxColor({
-			name = L["Cast color"] or "Cast color",
+			name = L["UFBarBackdrop"] or "Show bar backdrop",
 			parentId = "cast",
-			defaultChecked = true,
-			isChecked = function() return true end,
-			onChecked = function() end,
+			defaultChecked = (castDef.backdrop and castDef.backdrop.enabled) ~= false,
+			isChecked = function() return getValue(unit, { "cast", "backdrop", "enabled" }, (castDef.backdrop and castDef.backdrop.enabled) ~= false) ~= false end,
+			onChecked = function(val)
+				setValue(unit, { "cast", "backdrop", "enabled" }, val and true or false)
+				refresh()
+				refreshSettingsUI()
+			end,
 			getColor = function()
-				local c = getValue(unit, { "cast", "color" }, castDef.color or { 0.9, 0.7, 0.2, 1 })
-				return toRGBA(c, castDef.color or { 0.9, 0.7, 0.2, 1 })
+				return toRGBA(getValue(unit, { "cast", "backdrop", "color" }, castDef.backdrop and castDef.backdrop.color), castDef.backdrop and castDef.backdrop.color or { 0, 0, 0, 0.6 })
 			end,
 			onColor = function(color)
+				setColor(unit, { "cast", "backdrop", "color" }, color.r, color.g, color.b, color.a)
+				refresh()
+			end,
+			colorDefault = { r = 0, g = 0, b = 0, a = 0.6 },
+			isEnabled = isCastEnabled,
+		})
+
+		list[#list + 1] = {
+			name = L["Cast color"] or "Cast color",
+			kind = settingType.Color,
+			parentId = "cast",
+			isEnabled = isCastEnabled,
+			get = function() return getValue(unit, { "cast", "color" }, castDef.color or { 0.9, 0.7, 0.2, 1 }) end,
+			set = function(_, color)
+				setColor(unit, { "cast", "color" }, color.r, color.g, color.b, color.a)
+				refresh()
+			end,
+			colorGet = function() return getValue(unit, { "cast", "color" }, castDef.color or { 0.9, 0.7, 0.2, 1 }) end,
+			colorSet = function(_, color)
 				setColor(unit, { "cast", "color" }, color.r, color.g, color.b, color.a)
 				refresh()
 			end,
@@ -917,19 +1012,21 @@ local function buildUnitSettings(unit)
 				b = (castDef.color and castDef.color[3]) or 0.2,
 				a = (castDef.color and castDef.color[4]) or 1,
 			},
-		})
+			hasOpacity = true,
+		}
 
-		list[#list + 1] = checkboxColor({
+		list[#list + 1] = {
 			name = L["Not interruptible color"] or "Not interruptible color",
+			kind = settingType.Color,
 			parentId = "cast",
-			defaultChecked = true,
-			isChecked = function() return true end,
-			onChecked = function() end,
-			getColor = function()
-				local c = getValue(unit, { "cast", "notInterruptibleColor" }, castDef.notInterruptibleColor or { 0.6, 0.6, 0.6, 1 })
-				return toRGBA(c, castDef.notInterruptibleColor or { 0.6, 0.6, 0.6, 1 })
+			isEnabled = isCastEnabled,
+			get = function() return getValue(unit, { "cast", "notInterruptibleColor" }, castDef.notInterruptibleColor or { 0.6, 0.6, 0.6, 1 }) end,
+			set = function(_, color)
+				setColor(unit, { "cast", "notInterruptibleColor" }, color.r, color.g, color.b, color.a)
+				refresh()
 			end,
-			onColor = function(color)
+			colorGet = function() return getValue(unit, { "cast", "notInterruptibleColor" }, castDef.notInterruptibleColor or { 0.6, 0.6, 0.6, 1 }) end,
+			colorSet = function(_, color)
 				setColor(unit, { "cast", "notInterruptibleColor" }, color.r, color.g, color.b, color.a)
 				refresh()
 			end,
@@ -939,7 +1036,8 @@ local function buildUnitSettings(unit)
 				b = (castDef.notInterruptibleColor and castDef.notInterruptibleColor[3]) or 0.6,
 				a = (castDef.notInterruptibleColor and castDef.notInterruptibleColor[4]) or 1,
 			},
-		})
+			hasOpacity = true,
+		}
 	end
 
 	list[#list + 1] = { name = L["UFStatusLine"] or "Status line", kind = settingType.Collapsible, id = "status", defaultCollapsed = true }
@@ -1171,12 +1269,8 @@ local function buildUnitSettings(unit)
 	if unit == "target" then
 		list[#list + 1] = { name = L["Auras"] or "Auras", kind = settingType.Collapsible, id = "auras", defaultCollapsed = true }
 		local auraDef = def.auraIcons or { size = 24, padding = 2, max = 16, showCooldown = true }
-		local function debuffAnchorValue()
-			return getValue(unit, { "auraIcons", "debuffAnchor" }, getValue(unit, { "auraIcons", "anchor" }, auraDef.debuffAnchor or auraDef.anchor or "BOTTOM"))
-		end
-		local function debuffOffsetYDefault()
-			return (debuffAnchorValue() == "TOP" and 5 or -5)
-		end
+		local function debuffAnchorValue() return getValue(unit, { "auraIcons", "debuffAnchor" }, getValue(unit, { "auraIcons", "anchor" }, auraDef.debuffAnchor or auraDef.anchor or "BOTTOM")) end
+		local function debuffOffsetYDefault() return (debuffAnchorValue() == "TOP" and 5 or -5) end
 
 		list[#list + 1] = slider(L["Aura size"] or "Aura size", 12, 48, 1, function() return getValue(unit, { "auraIcons", "size" }, auraDef.size or 24) end, function(val)
 			setValue(unit, { "auraIcons", "size" }, val or auraDef.size or 24)
@@ -1220,20 +1314,6 @@ local function buildUnitSettings(unit)
 			refresh()
 		end, auraDef.anchor or "BOTTOM", "auras")
 
-		list[#list + 1] = checkbox(L["UFSeparateDebuffAnchor"] or "Separate debuff anchor", function()
-			return getValue(unit, { "auraIcons", "separateDebuffAnchor" }, auraDef.separateDebuffAnchor == true)
-		end, function(val)
-			setValue(unit, { "auraIcons", "separateDebuffAnchor" }, val and true or false)
-			refresh()
-		end, auraDef.separateDebuffAnchor == true, "auras")
-
-		list[#list + 1] = radioDropdown(L["UFDebuffAnchor"] or "Debuff anchor", anchorOpts, function()
-			return debuffAnchorValue()
-		end, function(val)
-			setValue(unit, { "auraIcons", "debuffAnchor" }, val or nil)
-			refresh()
-		end, auraDef.debuffAnchor or auraDef.anchor or "BOTTOM", "auras")
-
 		list[#list + 1] = slider(
 			L["Aura Offset X"] or "Aura Offset X",
 			-200,
@@ -1264,6 +1344,27 @@ local function buildUnitSettings(unit)
 			true
 		)
 
+		list[#list + 1] = checkbox(
+			L["UFSeparateDebuffAnchor"] or "Separate debuff anchor",
+			function() return getValue(unit, { "auraIcons", "separateDebuffAnchor" }, auraDef.separateDebuffAnchor == true) end,
+			function(val)
+				setValue(unit, { "auraIcons", "separateDebuffAnchor" }, val and true or false)
+				refresh()
+				refreshSettingsUI()
+			end,
+			auraDef.separateDebuffAnchor == true,
+			"auras"
+		)
+
+		local function isSeparateDebuffEnabled() return getValue(unit, { "auraIcons", "separateDebuffAnchor" }, auraDef.separateDebuffAnchor == true) == true end
+
+		local debuffAnchorSetting = radioDropdown(L["UFDebuffAnchor"] or "Debuff anchor", anchorOpts, function() return debuffAnchorValue() end, function(val)
+			setValue(unit, { "auraIcons", "debuffAnchor" }, val or nil)
+			refresh()
+		end, auraDef.debuffAnchor or auraDef.anchor or "BOTTOM", "auras")
+		debuffAnchorSetting.isEnabled = isSeparateDebuffEnabled
+		list[#list + 1] = debuffAnchorSetting
+
 		list[#list + 1] = slider(
 			L["Debuff Offset X"] or "Debuff Offset X",
 			-200,
@@ -1278,20 +1379,14 @@ local function buildUnitSettings(unit)
 			"auras",
 			true
 		)
+		list[#list].isEnabled = isSeparateDebuffEnabled
 
 		list[#list + 1] = slider(
 			L["Debuff Offset Y"] or "Debuff Offset Y",
 			-200,
 			200,
 			1,
-			function()
-				return getValue(
-					unit,
-					{ "auraIcons", "debuffOffset", "y" },
-					(auraDef.debuffOffset and auraDef.debuffOffset.y)
-						or debuffOffsetYDefault()
-				)
-			end,
+			function() return getValue(unit, { "auraIcons", "debuffOffset", "y" }, (auraDef.debuffOffset and auraDef.debuffOffset.y) or debuffOffsetYDefault()) end,
 			function(val)
 				setValue(unit, { "auraIcons", "debuffOffset", "y" }, val or 0)
 				refresh()
@@ -1300,6 +1395,7 @@ local function buildUnitSettings(unit)
 			"auras",
 			true
 		)
+		list[#list].isEnabled = isSeparateDebuffEnabled
 	end
 
 	return list
@@ -1346,7 +1442,13 @@ if not UF.EditModeRegistered then
 		player = { frameName = "EQOLUFPlayerFrame", frameId = "EQOL_UF_Player", title = L["UFPlayerFrame"] or PLAYER },
 		target = { frameName = "EQOLUFTargetFrame", frameId = "EQOL_UF_Target", title = L["UFTargetFrame"] or TARGET },
 		targettarget = { frameName = "EQOLUFToTFrame", frameId = "EQOL_UF_ToT", title = L["UFToTFrame"] or "Target of Target" },
+		pet = { frameName = "EQOLUFPetFrame", frameId = "EQOL_UF_Pet", title = L["UFPetFrame"] or PET },
+		focus = { frameName = "EQOLUFFocusFrame", frameId = "EQOL_UF_Focus", title = L["UFFocusFrame"] or FOCUS },
 	}
+	for i = 1, 5 do
+		local frameName = "EQOLUFBoss" .. i .. "Frame"
+		frames["boss" .. i] = { frameName = frameName, frameId = "EQOL_UF_Boss" .. i, title = (L["UFBossFrame"] or "Boss Frame") .. " " .. i }
+	end
 	for unit, info in pairs(frames) do
 		registerUnitFrame(unit, info)
 	end
@@ -1359,7 +1461,6 @@ if addon.functions and addon.functions.SettingsCreateCategory then
 	addon.SettingsLayout.ufPlusCategory = cUF
 	addon.functions.SettingsCreateText(cUF, "|cff99e599" .. L["UFPlusHint"] .. "|r")
 	addon.functions.SettingsCreateText(cUF, "")
-
 	local function addToggle(unit, label, varName)
 		local def = defaultsFor(unit)
 		addon.functions.SettingsCreateCheckbox(cUF, {
@@ -1388,4 +1489,27 @@ if addon.functions and addon.functions.SettingsCreateCategory then
 	addToggle("player", L["UFPlayerEnable"] or "Enable custom player frame", "ufEnablePlayer")
 	addToggle("target", L["UFTargetEnable"] or "Enable custom target frame", "ufEnableTarget")
 	addToggle("targettarget", L["UFToTEnable"] or "Enable target-of-target frame", "ufEnableToT")
+	addToggle("pet", L["UFPetEnable"] or "Enable pet frame", "ufEnablePet")
+	addToggle("focus", L["UFFocusEnable"] or "Enable focus frame", "ufEnableFocus")
+	addon.functions.SettingsCreateCheckbox(cUF, {
+		var = "ufEnableBoss",
+		text = L["UFBossEnable"] or "Enable boss frames",
+		default = false,
+		get = function()
+			for i = 1, 5 do
+				local cfg = ensureConfig("boss" .. i)
+				if cfg.enabled then return true end
+			end
+			return false
+		end,
+		func = function(val)
+			for i = 1, 5 do
+				local u = "boss" .. i
+				local cfg = ensureConfig(u)
+				cfg.enabled = val and true or false
+			end
+			if UF.Refresh then UF.Refresh() end
+			if UF.StopEventsIfInactive then UF.StopEventsIfInactive() end
+		end,
+	})
 end

@@ -294,26 +294,11 @@ addon.functions.SettingsCreateCheckboxes(cTooltip, data)
 
 addon.functions.SettingsCreateHeadline(cTooltip, PLAYER)
 
-local function TooltipPlayerHasMythicDetails()
-	if addon.variables.isMidnight then return false end
-	return addon.db["TooltipShowMythicScore"] and true or false
-end
+local function TooltipPlayerHasMythicDetails() return addon.db["TooltipShowMythicScore"] and true or false end
 
-local function TooltipPlayerHasInspectDetails()
-	if addon.variables.isMidnight then return false end
-	return (addon.db["TooltipUnitShowSpec"] or addon.db["TooltipUnitShowItemLevel"]) and true or false
-end
+local function TooltipPlayerHasInspectDetails() return (addon.db["TooltipUnitShowSpec"] or addon.db["TooltipUnitShowItemLevel"]) and true or false end
 
 local function BuildTooltipPlayerDetailOptions()
-	if addon.variables.isMidnight then
-		addon.db["TooltipShowMythicScore"] = false
-		addon.db["TooltipUnitShowSpec"] = false
-		addon.db["TooltipUnitShowItemLevel"] = false
-		return {
-			{ value = "classColor", text = L["TooltipShowClassColor"] },
-		}
-	end
-
 	return {
 		{ value = "mythic", text = L["TooltipShowMythicScore"]:format(DUNGEON_SCORE) },
 		{ value = "spec", text = L["TooltipUnitShowSpec"] },
@@ -325,8 +310,8 @@ end
 local function IsTooltipPlayerDetailSelected(key)
 	if not key then return false end
 	if key == "mythic" then return addon.db["TooltipShowMythicScore"] and true or false end
-	if key == "spec" then return (not addon.variables.isMidnight) and (addon.db["TooltipUnitShowSpec"] and true or false) end
-	if key == "ilvl" then return (not addon.variables.isMidnight) and (addon.db["TooltipUnitShowItemLevel"] and true or false) end
+	if key == "spec" then return (addon.db["TooltipUnitShowSpec"] and true or false) end
+	if key == "ilvl" then return (addon.db["TooltipUnitShowItemLevel"] and true or false) end
 	if key == "classColor" then return addon.db["TooltipShowClassColor"] and true or false end
 	return false
 end
@@ -334,7 +319,6 @@ end
 local function SetTooltipPlayerDetailSelected(key, shouldSelect)
 	if not key then return end
 	local enabled = shouldSelect and true or false
-	if addon.variables.isMidnight and key ~= "classColor" then enabled = false end
 
 	if key == "mythic" then
 		addon.db["TooltipShowMythicScore"] = enabled
@@ -451,6 +435,22 @@ addon.functions.SettingsCreateMultiDropdown(cTooltip, {
 	parent = true,
 	element = playerDetailsInitializer,
 	parentCheck = TooltipPlayerHasMythicDetails,
+})
+
+addon.functions.SettingsCreateHeadline(cTooltip, L["TooltipUnitNPCGroup"])
+
+addon.functions.SettingsCreateCheckbox(cTooltip, {
+	var = "TooltipShowNPCID",
+	text = L["TooltipShowNPCID"],
+	func = function(value) addon.db["TooltipShowNPCID"] = value and true or false end,
+	default = false,
+})
+addon.functions.SettingsCreateCheckbox(cTooltip, {
+	var = "TooltipShowNPCWowheadLink",
+	text = L["TooltipShowNPCWowheadLink"],
+	func = function(value) addon.db["TooltipShowNPCWowheadLink"] = value and true or false end,
+	default = false,
+	desc = L["TooltipShowNPCWowheadLink_desc"],
 })
 
 addon.functions.SettingsCreateHeadline(cTooltip, GENERAL)

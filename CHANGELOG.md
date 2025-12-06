@@ -24,6 +24,7 @@ Changed everything which will be part of midnight to the Blizzard Option menu
 - Hide Action Button borders
 - Action Bars: Option to hide the Assisted Combat Rotation overlay/glow on buttons
 - Automatically open the preview for player housing items
+- _Cypher of Relocation_ and two Warlords teleports that were missing
 
 ### 🔄 Changed
 

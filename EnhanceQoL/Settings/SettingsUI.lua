@@ -5,7 +5,6 @@ local SettingsLib = LibStub("LibEQOLSettingsMode-1.0")
 
 -- Optional: Prefix für Settings-Variablen
 local prefix = "EQOL_"
-SettingsLib:SetVariablePrefix(prefix)
 
 -- Optional: New-Badge-Resolver (Kategorie-ID oder Variablenname)
 -- Ersetze addon.variables.NewVersionTableEQOL nach Bedarf
@@ -19,7 +18,7 @@ addon.functions = addon.functions or {}
 ---------------------------------------------------------
 function addon.functions.SettingsCreateCategory(parent, treeName, sort, newTagID)
 	if nil == parent then parent = addon.SettingsLayout.rootCategory end
-	local cat, layout = SettingsLib:CreateCategory(parent, treeName, sort, newTagID)
+	local cat, layout = SettingsLib:CreateCategory(parent, treeName, sort, newTagID, prefix)
 	addon.SettingsLayout.knownCategoryID = addon.SettingsLayout.knownCategoryID or {}
 	addon.SettingsLayout.knownCategoryID[cat:GetID()] = true
 	return cat, layout
@@ -41,6 +40,8 @@ function addon.functions.SettingsCreateCheckbox(cat, cbData)
 		searchtags = cbData.searchtags,
 		parent = cbData.element,
 		parentCheck = cbData.parentCheck,
+		parentSection = cbData.parentSection,
+		prefix = prefix,
 	})
 	addon.SettingsLayout.elements = addon.SettingsLayout.elements or {}
 	addon.SettingsLayout.elements[cbData.var] = { setting = setting, element = element }
@@ -61,7 +62,7 @@ function addon.functions.SettingsCreateCheckbox(cat, cbData)
 			elseif sType == "slider" then
 				addon.functions.SettingsCreateSlider(cat, v)
 			elseif sType == "hint" then
-				addon.functions.SettingsCreateText(cat, v.text)
+				addon.functions.SettingsCreateText(cat, v.text, v.parentSection)
 			elseif sType == "colorpicker" then
 				addon.functions.SettingsCreateColorPicker(cat, v)
 			elseif sType == "button" then
@@ -106,6 +107,8 @@ function addon.functions.SettingsCreateSlider(cat, cbData)
 		parent = cbData.element,
 		parentCheck = cbData.parentCheck,
 		searchtags = cbData.searchtags,
+		parentSection = cbData.parentSection,
+		prefix = prefix,
 	})
 	addon.SettingsLayout.elements = addon.SettingsLayout.elements or {}
 	addon.SettingsLayout.elements[cbData.var] = { setting = setting, element = element }
@@ -128,6 +131,8 @@ function addon.functions.SettingsCreateDropdown(cat, cbData)
 		searchtags = cbData.searchtags,
 		parent = cbData.element,
 		parentCheck = cbData.parentCheck,
+		parentSection = cbData.parentSection,
+		prefix = prefix,
 	})
 	addon.SettingsLayout.elements = addon.SettingsLayout.elements or {}
 	addon.SettingsLayout.elements[cbData.var] = { setting = setting, element = element }
@@ -175,6 +180,9 @@ function addon.functions.SettingsCreateMultiDropdown(cat, cbData)
 		parent = cbData.element,
 		parentCheck = cbData.parentCheck,
 		notify = cbData.notify,
+		parentSection = cbData.parentSection,
+		isEnabled = cbData.isEnabled,
+		prefix = prefix,
 	})
 
 	addon.SettingsLayout.elements = addon.SettingsLayout.elements or {}
@@ -207,6 +215,8 @@ function addon.functions.SettingsCreateSoundDropdown(cat, cbData)
 		parent = cbData.element,
 		parentCheck = cbData.parentCheck,
 		searchtags = cbData.searchtags,
+		parentSection = cbData.parentSection,
+		prefix = prefix,
 	})
 	addon.SettingsLayout.elements = addon.SettingsLayout.elements or {}
 	addon.SettingsLayout.elements[cbData.var] = { initializer = initializer, setting = setting }
@@ -235,6 +245,8 @@ function addon.functions.SettingsCreateColorOverrides(cat, cbData)
 		parentCheck = cbData.parentCheck,
 		searchtags = cbData.searchtags,
 		notify = cbData.notify,
+		parentSection = cbData.parentSection,
+		prefix = prefix,
 	})
 	addon.SettingsLayout.elements = addon.SettingsLayout.elements or {}
 	addon.SettingsLayout.elements[cbData.var or cbData.key or "ColorOverrides"] = { initializer = initializer }
@@ -244,9 +256,9 @@ end
 ---------------------------------------------------------
 -- Text / Header / Button / Notify
 ---------------------------------------------------------
-function addon.functions.SettingsCreateHeadline(cat, text) return SettingsLib:CreateHeader(cat, text) end
+function addon.functions.SettingsCreateHeadline(cat, text, extra) return SettingsLib:CreateHeader(cat, text, extra) end
 
-function addon.functions.SettingsCreateText(cat, text) return SettingsLib:CreateText(cat, text) end
+function addon.functions.SettingsCreateText(cat, text, extra) return SettingsLib:CreateText(cat, text, extra) end
 
 function addon.functions.SettingsCreateButton(cat, cbData)
 	local btn = SettingsLib:CreateButton(cat, {
@@ -256,6 +268,8 @@ function addon.functions.SettingsCreateButton(cat, cbData)
 		searchtags = cbData.searchtags,
 		parent = cbData.element,
 		parentCheck = cbData.parentCheck,
+		parentSection = cbData.parentSection,
+		prefix = prefix,
 	})
 	addon.SettingsLayout.elements = addon.SettingsLayout.elements or {}
 	addon.SettingsLayout.elements[cbData.var or cbData.text] = { element = btn }
@@ -287,6 +301,8 @@ function addon.functions.SettingsCreateColorPicker(cat, cbData)
 		parentCheck = cbData.parentCheck,
 		searchtags = cbData.searchtags,
 		notify = cbData.notify,
+		parentSection = cbData.parentSection,
+		prefix = prefix,
 	})
 
 	addon.SettingsLayout = addon.SettingsLayout or {}
@@ -295,10 +311,19 @@ function addon.functions.SettingsCreateColorPicker(cat, cbData)
 	return initializer
 end
 
--- local cat, layout = Settings.RegisterVerticalLayoutCategory(addonName)
--- cat:SetShouldSortAlphabetically(true)
-
--- Settings.RegisterAddOnCategory(cat)
+function addon.functions.SettingsCreateExpandableSection(cat, cbData)
+	local section = SettingsLib:CreateExpandableSection(cat, {
+		name = cbData.name,
+		expanded = true,
+		prefix = prefix,
+	})
+	if cbData.var then
+		addon.SettingsLayout = addon.SettingsLayout or {}
+		addon.SettingsLayout.elements = addon.SettingsLayout.elements or {}
+		addon.SettingsLayout.elements[cbData.var] = { initializer = section }
+	end
+	return section
+end
 
 local cat, layout = SettingsLib:CreateRootCategory(addonName, true)
 

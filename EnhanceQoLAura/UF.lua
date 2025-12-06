@@ -17,6 +17,20 @@ local sampleAbsorb = addon.variables.ufSampleAbsorb
 addon.variables.ufSampleCast = addon.variables.ufSampleCast or {}
 local sampleCast = addon.variables.ufSampleCast
 
+local hiddenParent = CreateFrame("Frame", nil, UIParent)
+hiddenParent:SetAllPoints()
+hiddenParent:Hide()
+
+local function DisableBossFrames()
+	hooksecurefunc(BossTargetFrameContainer, "SetParent", function(self, parent)
+		if InCombatLockdown() then return end
+		if parent ~= hiddenParent then self:SetParent(hiddenParent) end
+	end)
+	for i = 1, MAX_BOSS_FRAMES do
+		if _G["Boss" .. i .. "TargetFrame"] then _G["Boss" .. i .. "TargetFrame"]:SetAlpha(0) end
+	end
+end
+
 local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_Aura")
 local LSM = LibStub("LibSharedMedia-3.0")
 local AceGUI = addon.AceGUI or LibStub("AceGUI-3.0")
@@ -62,6 +76,8 @@ local floor = math.floor
 local max = math.max
 local abs = math.abs
 local wipe = wipe or (table and table.wipe)
+local SetFrameVisibilityOverride = addon.functions and addon.functions.SetFrameVisibilityOverride
+local HasFrameVisibilityOverride = addon.functions and addon.functions.HasFrameVisibilityOverride
 
 local shouldShowSampleCast
 local setSampleCast
@@ -70,6 +86,7 @@ local applyFont
 local PLAYER_UNIT = "player"
 local TARGET_UNIT = "target"
 local TARGET_TARGET_UNIT = "targettarget"
+local FOCUS_UNIT = "focus"
 local FRAME_NAME = "EQOLUFPlayerFrame"
 local HEALTH_NAME = "EQOLUFPlayerHealth"
 local POWER_NAME = "EQOLUFPlayerPower"
@@ -82,9 +99,20 @@ local TARGET_TARGET_FRAME_NAME = "EQOLUFToTFrame"
 local TARGET_TARGET_HEALTH_NAME = "EQOLUFToTHealth"
 local TARGET_TARGET_POWER_NAME = "EQOLUFToTPower"
 local TARGET_TARGET_STATUS_NAME = "EQOLUFToTStatus"
+local FOCUS_FRAME_NAME = "EQOLUFFocusFrame"
+local FOCUS_HEALTH_NAME = "EQOLUFFocusHealth"
+local FOCUS_POWER_NAME = "EQOLUFFocusPower"
+local FOCUS_STATUS_NAME = "EQOLUFFocusStatus"
+local PET_UNIT = "pet"
+local PET_FRAME_NAME = "EQOLUFPetFrame"
+local PET_HEALTH_NAME = "EQOLUFPetHealth"
+local PET_POWER_NAME = "EQOLUFPetPower"
+local PET_STATUS_NAME = "EQOLUFPetStatus"
 local BLIZZ_PLAYER_FRAME_NAME = "PlayerFrame"
 local BLIZZ_TARGET_FRAME_NAME = "TargetFrame"
 local BLIZZ_TARGET_TARGET_FRAME_NAME = "TargetFrameToT"
+local BLIZZ_FOCUS_FRAME_NAME = "FocusFrame"
+local BLIZZ_PET_FRAME_NAME = "PetFrame"
 local MIN_WIDTH = 50
 
 local function getFont(path)
@@ -115,6 +143,23 @@ local UNITS = {
 		powerName = TARGET_TARGET_POWER_NAME,
 		statusName = TARGET_TARGET_STATUS_NAME,
 		dropdown = function(self) ToggleDropDownMenu(1, nil, TargetFrameDropDown, self, 0, 0) end,
+	},
+	focus = {
+		unit = FOCUS_UNIT,
+		frameName = FOCUS_FRAME_NAME,
+		healthName = FOCUS_HEALTH_NAME,
+		powerName = FOCUS_POWER_NAME,
+		statusName = FOCUS_STATUS_NAME,
+		dropdown = function(self) ToggleDropDownMenu(1, nil, FocusFrameDropDown, self, 0, 0) end,
+	},
+	pet = {
+		unit = PET_UNIT,
+		frameName = PET_FRAME_NAME,
+		healthName = PET_HEALTH_NAME,
+		powerName = PET_POWER_NAME,
+		statusName = PET_STATUS_NAME,
+		dropdown = function(self) ToggleDropDownMenu(1, nil, PetFrameDropDown, self, 0, 0) end,
+		disableAbsorb = true,
 	},
 }
 
@@ -151,6 +196,7 @@ local defaults = {
 			texture = "DEFAULT",
 		},
 		power = {
+			enabled = true,
 			color = { 0.1, 0.45, 1, 1 },
 			backdrop = { enabled = true, color = { 0, 0, 0, 0.6 } },
 			useCustomColor = false,
@@ -203,6 +249,7 @@ local defaults = {
 			height = 16,
 			anchor = "BOTTOM", -- or "TOP"
 			offset = { x = 0, y = -4 },
+			backdrop = { enabled = true, color = { 0, 0, 0, 0.6 } },
 			showName = true,
 			nameOffset = { x = 6, y = 0 },
 			showDuration = true,
@@ -242,6 +289,7 @@ local blizzardPlayerHooked = false
 local blizzardTargetHooked = false
 local castOnUpdateHandlers = {}
 local originalFrameRules = {}
+local NIL_VISIBILITY_SENTINEL = {}
 local totTicker
 local editModeHooked
 
@@ -648,6 +696,10 @@ local function applyVisibilityDriver(unit, enabled)
 		cond = "[@target,exists] show; hide"
 	elseif unit == TARGET_TARGET_UNIT then
 		cond = "[@targettarget,exists] show; hide"
+	elseif unit == FOCUS_UNIT then
+		cond = "[@focus,exists] show; hide"
+	elseif unit == PET_UNIT then
+		cond = "[@pet,exists] show; hide"
 	end
 	if cond == st._visibilityCond then return end
 	if not cond then
@@ -677,13 +729,30 @@ local function applyFrameRuleOverride(frameName, enabled)
 	addon.db = addon.db or {}
 	local key = info.var
 	if enabled then
-		if originalFrameRules[key] == nil then originalFrameRules[key] = addon.db[key] end
-		NormalizeUnitFrameVisibilityConfig(key, { ALWAYS_HIDDEN = true })
-	else
-		if originalFrameRules[key] ~= nil then
-			addon.db[key] = originalFrameRules[key]
-			originalFrameRules[key] = nil
+		if originalFrameRules[key] == nil then
+			local cur = addon.db[key]
+			if cur == nil then
+				originalFrameRules[key] = NIL_VISIBILITY_SENTINEL
+			else
+				originalFrameRules[key] = cur
+			end
+		end
+		if SetFrameVisibilityOverride then
+			SetFrameVisibilityOverride(key, { ALWAYS_HIDDEN = true })
 		else
+			NormalizeUnitFrameVisibilityConfig(key, { ALWAYS_HIDDEN = true })
+		end
+	else
+		if SetFrameVisibilityOverride then SetFrameVisibilityOverride(key, nil) end
+		if originalFrameRules[key] ~= nil then
+			local prev = originalFrameRules[key]
+			if prev == NIL_VISIBILITY_SENTINEL then
+				addon.db[key] = nil
+			else
+				addon.db[key] = prev
+			end
+			originalFrameRules[key] = nil
+		elseif not HasFrameVisibilityOverride or not HasFrameVisibilityOverride(key) then
 			NormalizeUnitFrameVisibilityConfig(key, nil)
 		end
 	end
@@ -812,6 +881,26 @@ do
 	totDefaults.anchor = totDefaults.anchor and CopyTable(totDefaults.anchor) or { point = "CENTER", relativeTo = "UIParent", relativePoint = "CENTER", x = 0, y = -200 }
 	totDefaults.anchor.x = (totDefaults.anchor.x or 0) + 260
 	defaults.targettarget = totDefaults
+
+	local focusDefaults = CopyTable(targetDefaults)
+	focusDefaults.enabled = false
+	focusDefaults.anchor = focusDefaults.anchor and CopyTable(focusDefaults.anchor) or { point = "CENTER", relativeTo = "UIParent", relativePoint = "CENTER", x = 0, y = -200 }
+	focusDefaults.anchor.x = (focusDefaults.anchor.x or 0) - 260
+	defaults.focus = focusDefaults
+
+	local petDefaults = CopyTable(defaults.player)
+	petDefaults.enabled = false
+	petDefaults.anchor = petDefaults.anchor and CopyTable(petDefaults.anchor) or { point = "CENTER", relativeTo = "UIParent", relativePoint = "CENTER", x = 0, y = -200 }
+	petDefaults.anchor.x = (petDefaults.anchor.x or 0) - 260
+	petDefaults.width = 200
+	petDefaults.healthHeight = 20
+	petDefaults.powerHeight = 12
+	petDefaults.statusHeight = 16
+	petDefaults.health.absorbUseCustomColor = false
+	petDefaults.health.useAbsorbGlow = false
+	petDefaults.health.showSampleAbsorb = false
+	if petDefaults.status and petDefaults.status.combatIndicator then petDefaults.status.combatIndicator.enabled = false end
+	defaults.pet = petDefaults
 end
 
 local function setBackdrop(frame, borderCfg)
@@ -972,6 +1061,8 @@ local function applyCastLayout(cfg, unit)
 		st.castDuration:ClearAllPoints()
 		st.castDuration:SetPoint("RIGHT", st.castBar, "RIGHT", durOff.x or 0, durOff.y or 0)
 		st.castDuration:SetShown(ccfg.showDuration ~= false)
+		if st.castDuration.SetWordWrap then st.castDuration:SetWordWrap(false) end
+		if st.castDuration.SetJustifyH then st.castDuration:SetJustifyH("RIGHT") end
 	end
 	if st.castIcon then
 		local size = ccfg.iconSize or defc.iconSize or height
@@ -983,6 +1074,32 @@ local function applyCastLayout(cfg, unit)
 	local texKey = ccfg.texture or defc.texture or "DEFAULT"
 	st.castBar:SetStatusBarTexture(resolveCastTexture(texKey))
 	if st.castBar.SetStatusBarDesaturated then st.castBar:SetStatusBarDesaturated(false) end
+	do -- Cast backdrop
+		local bd = (ccfg and ccfg.backdrop) or (defc and defc.backdrop) or { enabled = true, color = { 0, 0, 0, 0.6 } }
+		if bd.enabled == false then
+			if st.castBar.SetBackdrop then st.castBar:SetBackdrop(nil) end
+		elseif st.castBar.SetBackdrop then
+			st.castBar:SetBackdrop({
+				bgFile = "Interface\\Buttons\\WHITE8x8",
+				edgeFile = nil,
+				tile = false,
+			})
+			local col = bd.color or { 0, 0, 0, 0.6 }
+			if st.castBar.SetBackdropColor then st.castBar:SetBackdropColor(col[1] or 0, col[2] or 0, col[3] or 0, col[4] or 0.6) end
+		end
+	end
+	-- Limit cast name width so long names don't overlap duration text
+	if st.castName then
+		local iconSize = (ccfg.iconSize or defc.iconSize or height) + 4
+		if ccfg.showIcon == false then iconSize = 0 end
+		local durationSpace = (ccfg.showDuration ~= false) and 60 or 0
+		local available = (width or 0) - iconSize - durationSpace - 6
+		if available < 0 then available = 0 end
+		st.castName:SetWidth(available)
+		if st.castName.SetWordWrap then st.castName:SetWordWrap(false) end
+		if st.castName.SetMaxLines then st.castName:SetMaxLines(1) end
+		if st.castName.SetJustifyH then st.castName:SetJustifyH("LEFT") end
+	end
 end
 
 local function configureCastStatic(unit, ccfg, defc)
@@ -1112,8 +1229,15 @@ local function setCastInfoFromUnit(unit)
 		end
 		return
 	end
+
 	if issecretvalue and ((startTimeMS and issecretvalue(startTimeMS)) or (endTimeMS and issecretvalue(endTimeMS))) then
-		stopCast(unit)
+		if type(startTimeMS) ~= "nil" and type(endTimeMS) ~= "nil" then
+			st.castBar:Show()
+			st.castBar:SetMinMaxValues(startTimeMS, endTimeMS)
+			st.castBar:SetScript("OnUpdate", function() st.castBar:SetValue(GetTime() * 1000) end)
+		else
+			stopCast(unit)
+		end
 		return
 	end
 	local duration = (endTimeMS or 0) - (startTimeMS or 0)
@@ -1143,6 +1267,8 @@ local function updateHealth(cfg, unit)
 	cfg = cfg or (states[unit] and states[unit].cfg) or ensureDB(unit)
 	local st = states[unit]
 	if not st or not st.health or not st.frame then return end
+	local info = UNITS[unit]
+	local allowAbsorb = not (info and info.disableAbsorb)
 	local cur = UnitHealth(unit)
 	local maxv = UnitHealthMax(unit)
 	if issecretvalue and issecretvalue(maxv) then
@@ -1177,7 +1303,7 @@ local function updateHealth(cfg, unit)
 		hr, hg, hb, ha = color[1] or 0, color[2] or 0.8, color[3] or 0, color[4] or 1
 	end
 	st.health:SetStatusBarColor(hr or 0, hg or 0.8, hb or 0, ha or 1)
-	if st.absorb then
+	if allowAbsorb and st.absorb then
 		local abs = UnitGetTotalAbsorbs and UnitGetTotalAbsorbs(unit) or 0
 		local maxForValue
 		if issecretvalue and issecretvalue(maxv) then
@@ -1211,6 +1337,15 @@ local function updatePower(cfg, unit)
 	if not st then return end
 	local bar = st.power
 	if not bar then return end
+	local pcfg = cfg.power or {}
+	if pcfg.enabled == false then
+		bar:Hide()
+		bar:SetValue(0)
+		if st.powerTextLeft then st.powerTextLeft:SetText("") end
+		if st.powerTextRight then st.powerTextRight:SetText("") end
+		return
+	end
+	bar:Show()
 	local powerEnum, powerToken = getMainPower(unit)
 	powerEnum = powerEnum or 0
 	local cur = UnitPower(unit, powerEnum)
@@ -1221,7 +1356,6 @@ local function updatePower(cfg, unit)
 		bar:SetMinMaxValues(0, maxv > 0 and maxv or 1)
 	end
 	bar:SetValue(cur or 0)
-	local pcfg = cfg.power or {}
 	local percentVal
 	if addon.variables and addon.variables.isMidnight and UnitPowerPercent then
 		percentVal = UnitPowerPercent(unit, powerEnum, true, true)
@@ -1311,19 +1445,25 @@ local function updateStatus(cfg, unit)
 	if not st or not st.status then return end
 	local scfg = cfg.status or {}
 	local def = defaults[unit] or defaults.player or {}
-	st.status:SetHeight((cfg.status and cfg.status.enabled) and (cfg.statusHeight or def.statusHeight) or 0.001)
-	st.status:SetShown(scfg.enabled ~= false)
+	local defStatus = def.status or {}
+	local ciCfg = scfg.combatIndicator or defStatus.combatIndicator or {}
+	local showName = scfg.enabled ~= false
+	local showLevel = scfg.levelEnabled ~= false
+	local showStatus = showName or showLevel or (unit == PLAYER_UNIT and ciCfg.enabled ~= false)
+	local statusHeight = showStatus and (cfg.statusHeight or def.statusHeight) or 0.001
+	st.status:SetHeight(statusHeight)
+	st.status:SetShown(showStatus)
 	if st.nameText then
 		applyFont(st.nameText, scfg.font, scfg.fontSize or 14, scfg.fontOutline)
 		st.nameText:ClearAllPoints()
 		st.nameText:SetPoint(scfg.nameAnchor or "LEFT", st.status, scfg.nameAnchor or "LEFT", (scfg.nameOffset and scfg.nameOffset.x) or 0, (scfg.nameOffset and scfg.nameOffset.y) or 0)
-		st.nameText:SetShown(scfg.enabled ~= false)
+		st.nameText:SetShown(showName)
 	end
 	if st.levelText then
 		applyFont(st.levelText, scfg.font, scfg.fontSize or 14, scfg.fontOutline)
 		st.levelText:ClearAllPoints()
 		st.levelText:SetPoint(scfg.levelAnchor or "RIGHT", st.status, scfg.levelAnchor or "RIGHT", (scfg.levelOffset and scfg.levelOffset.x) or 0, (scfg.levelOffset and scfg.levelOffset.y) or 0)
-		st.levelText:SetShown(scfg.enabled ~= false and scfg.levelEnabled ~= false)
+		st.levelText:SetShown(showStatus and showLevel)
 	end
 end
 
@@ -1351,11 +1491,19 @@ local function layoutFrame(cfg, unit)
 	local st = states[unit]
 	if not st or not st.frame then return end
 	local def = defaults[unit] or defaults.player or {}
+	local scfg = cfg.status or {}
+	local defStatus = def.status or {}
+	local ciCfg = scfg.combatIndicator or defStatus.combatIndicator or {}
+	local showName = scfg.enabled ~= false
+	local showLevel = scfg.levelEnabled ~= false
+	local showStatus = showName or showLevel or (unit == PLAYER_UNIT and ciCfg.enabled ~= false)
+	local pcfg = cfg.power or {}
+	local powerEnabled = pcfg.enabled ~= false
 	local width = max(MIN_WIDTH, cfg.width or def.width)
-	local statusHeight = (cfg.status and cfg.status.enabled == false) and 0 or (cfg.statusHeight or def.statusHeight)
+	local statusHeight = showStatus and (cfg.statusHeight or def.statusHeight) or 0
 	local healthHeight = cfg.healthHeight or def.healthHeight
-	local powerHeight = cfg.powerHeight or def.powerHeight
-	local barGap = cfg.barGap or def.barGap or 0
+	local powerHeight = powerEnabled and (cfg.powerHeight or def.powerHeight) or 0
+	local barGap = powerEnabled and (cfg.barGap or def.barGap or 0) or 0
 	local borderInset = 0
 	if cfg.border and cfg.border.enabled then borderInset = (cfg.border.edgeSize or 1) end
 	st.frame:SetWidth(width + borderInset * 2)
@@ -1374,6 +1522,7 @@ local function layoutFrame(cfg, unit)
 	st.status:SetHeight(statusHeight)
 	st.health:SetSize(width, healthHeight)
 	st.power:SetSize(width, powerHeight)
+	st.power:SetShown(powerEnabled)
 
 	st.status:ClearAllPoints()
 	if st.barGroup then st.barGroup:ClearAllPoints() end
@@ -1480,18 +1629,25 @@ local function ensureFrames(unit)
 	if st.health.SetStatusBarDesaturated then st.health:SetStatusBarDesaturated(false) end
 	st.power = _G[info.powerName] or CreateFrame("StatusBar", info.powerName, st.barGroup, "BackdropTemplate")
 	if st.power.SetStatusBarDesaturated then st.power:SetStatusBarDesaturated(false) end
-	st.absorb = CreateFrame("StatusBar", info.healthName .. "Absorb", st.health, "BackdropTemplate")
-	if st.absorb.SetStatusBarDesaturated then st.absorb:SetStatusBarDesaturated(false) end
-	st.overAbsorbGlow = st.overAbsorbGlow or st.health:CreateTexture(nil, "ARTWORK", "OverAbsorbGlowTemplate")
-	st.absorb.overAbsorbGlow = st.overAbsorbGlow
-	if not st.overAbsorbGlow then st.overAbsorbGlow = st.health:CreateTexture(nil, "ARTWORK") end
-	if st.overAbsorbGlow then
-		st.overAbsorbGlow:SetTexture(798066)
-		st.overAbsorbGlow:SetBlendMode("ADD")
-		st.overAbsorbGlow:SetAlpha(0.8)
-		st.overAbsorbGlow:Hide()
+	local allowAbsorb = not (info and info.disableAbsorb)
+	if allowAbsorb then
+		st.absorb = st.absorb or CreateFrame("StatusBar", info.healthName .. "Absorb", st.health, "BackdropTemplate")
+		if st.absorb.SetStatusBarDesaturated then st.absorb:SetStatusBarDesaturated(false) end
+		st.overAbsorbGlow = st.overAbsorbGlow or st.health:CreateTexture(nil, "ARTWORK", "OverAbsorbGlowTemplate")
+		if st.absorb then st.absorb.overAbsorbGlow = st.overAbsorbGlow end
+		if not st.overAbsorbGlow then st.overAbsorbGlow = st.health:CreateTexture(nil, "ARTWORK") end
+		if st.overAbsorbGlow then
+			st.overAbsorbGlow:SetTexture(798066)
+			st.overAbsorbGlow:SetBlendMode("ADD")
+			st.overAbsorbGlow:SetAlpha(0.8)
+			st.overAbsorbGlow:Hide()
+		end
+	else
+		if st.absorb then st.absorb:Hide() end
+		st.absorb = nil
+		if st.overAbsorbGlow then st.overAbsorbGlow:Hide() end
 	end
-	if unit == "target" and not st.castBar then
+	if (unit == TARGET_UNIT or unit == FOCUS_UNIT) and not st.castBar then
 		st.castBar = CreateFrame("StatusBar", info.healthName .. "Cast", st.frame, "BackdropTemplate")
 		st.castBar:SetStatusBarDesaturated(true)
 		st.castTextLayer = CreateFrame("Frame", nil, st.castBar)
@@ -1552,33 +1708,47 @@ end
 local function applyBars(cfg, unit)
 	local st = states[unit]
 	if not st or not st.health or not st.power then return end
+	local info = UNITS[unit]
+	local allowAbsorb = not (info and info.disableAbsorb)
 	local hc = cfg.health or {}
 	local pcfg = cfg.power or {}
+	local powerEnabled = pcfg.enabled ~= false
 	st.health:SetStatusBarTexture(resolveTexture(hc.texture))
 	if st.health.SetStatusBarDesaturated then st.health:SetStatusBarDesaturated(false) end
 	configureSpecialTexture(st.health, "HEALTH", hc.texture, hc)
 	applyBarBackdrop(st.health, hc)
-	st.power:SetStatusBarTexture(resolveTexture(pcfg.texture))
-	if st.power.SetStatusBarDesaturated then st.power:SetStatusBarDesaturated(pcfg.useCustomColor == true) end
-	if unit == PLAYER_UNIT then refreshMainPower(unit) end
-	local _, powerToken = getMainPower(unit)
-	configureSpecialTexture(st.power, powerToken, pcfg.texture, pcfg)
-	applyBarBackdrop(st.power, pcfg)
-	local absorbTextureKey = hc.absorbTexture or hc.texture
-	st.absorb:SetStatusBarTexture(resolveTexture(absorbTextureKey))
-	if st.absorb.SetStatusBarDesaturated then st.absorb:SetStatusBarDesaturated(false) end
-	configureSpecialTexture(st.absorb, "HEALTH", absorbTextureKey, hc)
-	st.absorb:SetAllPoints(st.health)
-	st.absorb:SetFrameLevel(st.health:GetFrameLevel() + 1)
-	st.absorb:SetMinMaxValues(0, 1)
-	st.absorb:SetValue(0)
-	if st.overAbsorbGlow then
-		st.overAbsorbGlow:ClearAllPoints()
-		st.overAbsorbGlow:SetPoint("TOPLEFT", st.health, "TOPRIGHT", -7, 0)
-		st.overAbsorbGlow:SetPoint("BOTTOMLEFT", st.health, "BOTTOMRIGHT", -7, 0)
+	if powerEnabled then
+		st.power:SetStatusBarTexture(resolveTexture(pcfg.texture))
+		if st.power.SetStatusBarDesaturated then st.power:SetStatusBarDesaturated(pcfg.useCustomColor == true) end
+		if unit == PLAYER_UNIT then refreshMainPower(unit) end
+		local _, powerToken = getMainPower(unit)
+		configureSpecialTexture(st.power, powerToken, pcfg.texture, pcfg)
+		applyBarBackdrop(st.power, pcfg)
+		st.power:Show()
+	else
+		st.power:Hide()
+		if st.powerTextLeft then st.powerTextLeft:SetText("") end
+		if st.powerTextRight then st.powerTextRight:SetText("") end
 	end
-	if st.overAbsorbGlow then st.overAbsorbGlow:Hide() end
-	if st.castBar and unit == TARGET_UNIT then
+	if allowAbsorb and st.absorb then
+		local absorbTextureKey = hc.absorbTexture or hc.texture
+		st.absorb:SetStatusBarTexture(resolveTexture(absorbTextureKey))
+		if st.absorb.SetStatusBarDesaturated then st.absorb:SetStatusBarDesaturated(false) end
+		configureSpecialTexture(st.absorb, "HEALTH", absorbTextureKey, hc)
+		st.absorb:SetAllPoints(st.health)
+		st.absorb:SetFrameLevel(st.health:GetFrameLevel() + 1)
+		st.absorb:SetMinMaxValues(0, 1)
+		st.absorb:SetValue(0)
+		if st.overAbsorbGlow then
+			st.overAbsorbGlow:ClearAllPoints()
+			st.overAbsorbGlow:SetPoint("TOPLEFT", st.health, "TOPRIGHT", -7, 0)
+			st.overAbsorbGlow:SetPoint("BOTTOMLEFT", st.health, "BOTTOMRIGHT", -7, 0)
+		end
+		if st.overAbsorbGlow then st.overAbsorbGlow:Hide() end
+	elseif st.overAbsorbGlow then
+		st.overAbsorbGlow:Hide()
+	end
+	if st.castBar and (unit == TARGET_UNIT or unit == FOCUS_UNIT) then
 		local defc = (defaultsFor(unit) and defaultsFor(unit).cast) or {}
 		local ccfg = cfg.cast or defc
 		st.castBar:SetStatusBarTexture(resolveCastTexture((ccfg.texture or defc.texture or "DEFAULT")))
@@ -1662,6 +1832,8 @@ local function applyConfig(unit)
 		if unit == PLAYER_UNIT then applyFrameRuleOverride(BLIZZ_PLAYER_FRAME_NAME, false) end
 		if unit == TARGET_UNIT then applyFrameRuleOverride(BLIZZ_TARGET_FRAME_NAME, false) end
 		if unit == TARGET_TARGET_UNIT then applyFrameRuleOverride(BLIZZ_TARGET_TARGET_FRAME_NAME, false) end
+		if unit == FOCUS_UNIT then applyFrameRuleOverride(BLIZZ_FOCUS_FRAME_NAME, false) end
+		if unit == PET_UNIT then applyFrameRuleOverride(BLIZZ_PET_FRAME_NAME, false) end
 		if unit == "target" then resetTargetAuras() end
 		return
 	end
@@ -1672,6 +1844,8 @@ local function applyConfig(unit)
 	if unit == PLAYER_UNIT then applyFrameRuleOverride(BLIZZ_PLAYER_FRAME_NAME, true) end
 	if unit == TARGET_UNIT then applyFrameRuleOverride(BLIZZ_TARGET_FRAME_NAME, true) end
 	if unit == TARGET_TARGET_UNIT then applyFrameRuleOverride(BLIZZ_TARGET_TARGET_FRAME_NAME, true) end
+	if unit == FOCUS_UNIT then applyFrameRuleOverride(BLIZZ_FOCUS_FRAME_NAME, true) end
+	if unit == PET_UNIT then applyFrameRuleOverride(BLIZZ_PET_FRAME_NAME, true) end
 	applyBars(cfg, unit)
 	if not InCombatLockdown() then layoutFrame(cfg, unit) end
 	updateStatus(cfg, unit)
@@ -1728,6 +1902,8 @@ local generalEvents = {
 	"PLAYER_LOGIN",
 	"PLAYER_REGEN_DISABLED",
 	"PLAYER_REGEN_ENABLED",
+	"UNIT_PET",
+	"PLAYER_FOCUS_CHANGED",
 }
 
 local eventFrame
@@ -1736,13 +1912,27 @@ local function anyUFEnabled()
 	local p = ensureDB("player").enabled
 	local t = ensureDB("target").enabled
 	local tt = ensureDB(TARGET_TARGET_UNIT).enabled
-	return p or t or tt
+	local pet = ensureDB(PET_UNIT).enabled
+	local focus = ensureDB(FOCUS_UNIT).enabled
+	return p or t or tt or pet or focus
+end
+
+local function isBossFrameSettingEnabled()
+	if not addon.db or not addon.db.ufFrames then return false end
+	if not MAX_BOSS_FRAMES then return false end
+	for i = 1, MAX_BOSS_FRAMES do
+		local cfg = addon.db.ufFrames["boss" .. i]
+		if cfg and cfg.enabled then return true end
+	end
+	return false
 end
 
 local allowedEventUnit = {
 	["target"] = true,
 	["player"] = true,
 	["targettarget"] = true,
+	["focus"] = true,
+	["pet"] = true,
 }
 
 local function stopToTTicker()
@@ -1756,12 +1946,18 @@ local function ensureToTTicker()
 		local st = states[TARGET_TARGET_UNIT]
 		local cfg = st and st.cfg
 		if not cfg or not cfg.enabled then return end
+		local pcfg = cfg.power or {}
+		local powerEnabled = pcfg.enabled ~= false
 		if not UnitExists(TARGET_TARGET_UNIT) or not st.frame or not st.frame:IsShown() then return end
-		local _, powerToken = UnitPowerType(TARGET_TARGET_UNIT)
-		if st.power and powerToken and powerToken ~= st._lastPowerToken then
-			if st.power.SetStatusBarDesaturated then st.power:SetStatusBarDesaturated((cfg.power or {}).useCustomColor == true) end
-			configureSpecialTexture(st.power, powerToken, (cfg.power or {}).texture, cfg.power)
-			st._lastPowerToken = powerToken
+		if powerEnabled then
+			local _, powerToken = UnitPowerType(TARGET_TARGET_UNIT)
+			if st.power and powerToken and powerToken ~= st._lastPowerToken then
+				if st.power.SetStatusBarDesaturated then st.power:SetStatusBarDesaturated((cfg.power or {}).useCustomColor == true) end
+				configureSpecialTexture(st.power, powerToken, (cfg.power or {}).texture, cfg.power)
+				st._lastPowerToken = powerToken
+			end
+		else
+			if st.power then st.power:Hide() end
 		end
 		updateHealth(cfg, TARGET_TARGET_UNIT)
 		updatePower(cfg, TARGET_TARGET_UNIT)
@@ -1784,17 +1980,22 @@ local function updateTargetTargetFrame(cfg, forceApply)
 		st = states[TARGET_TARGET_UNIT]
 	end
 	if st then st.cfg = st.cfg or cfg end
-	if UnitExists("target") and UnitExists(TARGET_TARGET_UNIT) and UnitHealth("target") > 0 then
+	local lHealth = UnitHealth("target")
+	if UnitExists("target") and UnitExists(TARGET_TARGET_UNIT) and (issecretvalue and issecretvalue(lHealth) or lHealth > 0) then
 		if st then
 			if st.barGroup then st.barGroup:Show() end
 			if st.status then st.status:Show() end
-			local _, powerToken = getMainPower(TARGET_TARGET_UNIT)
+			local pcfg = cfg.power or {}
+			local powerEnabled = pcfg.enabled ~= false
 			updateNameAndLevel(cfg, TARGET_TARGET_UNIT)
 			updateHealth(cfg, TARGET_TARGET_UNIT)
-			if st.power then
+			if st.power and powerEnabled then
+				local _, powerToken = getMainPower(TARGET_TARGET_UNIT)
 				if st.power.SetStatusBarDesaturated then st.power:SetStatusBarDesaturated((cfg.power or {}).useCustomColor == true) end
 				configureSpecialTexture(st.power, powerToken, (cfg.power or {}).texture, cfg.power)
 				st._lastPowerToken = powerToken
+			elseif st.power then
+				st.power:Hide()
 			end
 			updatePower(cfg, TARGET_TARGET_UNIT)
 		end
@@ -1807,16 +2008,63 @@ local function updateTargetTargetFrame(cfg, forceApply)
 	ensureToTTicker()
 end
 
+local function updateFocusFrame(cfg, forceApply)
+	cfg = cfg or ensureDB(FOCUS_UNIT)
+	local st = states[FOCUS_UNIT]
+	if not cfg.enabled then
+		if st then
+			if st.barGroup then st.barGroup:Hide() end
+			if st.status then st.status:Hide() end
+		end
+		return
+	end
+	if forceApply or not st or not st.frame then
+		applyConfig(FOCUS_UNIT)
+		st = states[FOCUS_UNIT]
+	end
+	if st then st.cfg = st.cfg or cfg end
+	if UnitExists(FOCUS_UNIT) then
+		if st then
+			if st.barGroup then st.barGroup:Show() end
+			if st.status then st.status:Show() end
+			local pcfg = cfg.power or {}
+			local powerEnabled = pcfg.enabled ~= false
+			updateNameAndLevel(cfg, FOCUS_UNIT)
+			updateHealth(cfg, FOCUS_UNIT)
+			if st.power and powerEnabled then
+				local _, powerToken = getMainPower(FOCUS_UNIT)
+				if st.power.SetStatusBarDesaturated then st.power:SetStatusBarDesaturated((cfg.power or {}).useCustomColor == true) end
+				configureSpecialTexture(st.power, powerToken, (cfg.power or {}).texture, cfg.power)
+				st._lastPowerToken = powerToken
+			elseif st.power then
+				st.power:Hide()
+			end
+			updatePower(cfg, FOCUS_UNIT)
+			if st.castBar then setCastInfoFromUnit(FOCUS_UNIT) end
+		end
+	else
+		if st then
+			if st.barGroup then st.barGroup:Hide() end
+			if st.status then st.status:Hide() end
+			if st.castBar then stopCast(FOCUS_UNIT) end
+		end
+	end
+end
+
 local function onEvent(self, event, unit, arg1)
 	if unitEventsMap[event] and unit and not allowedEventUnit[unit] then return end
 	local playerCfg = (states[PLAYER_UNIT] and states[PLAYER_UNIT].cfg) or ensureDB("player")
 	local targetCfg = (states[TARGET_UNIT] and states[TARGET_UNIT].cfg) or ensureDB("target")
 	local totCfg = (states[TARGET_TARGET_UNIT] and states[TARGET_TARGET_UNIT].cfg) or ensureDB(TARGET_TARGET_UNIT)
+	local petCfg = (states[PET_UNIT] and states[PET_UNIT].cfg) or ensureDB(PET_UNIT)
+	local focusCfg = (states[FOCUS_UNIT] and states[FOCUS_UNIT].cfg) or ensureDB(FOCUS_UNIT)
 	if event == "PLAYER_ENTERING_WORLD" then
 		refreshMainPower(PLAYER_UNIT)
 		applyConfig("player")
 		applyConfig("target")
 		updateTargetTargetFrame(totCfg, true)
+		if focusCfg.enabled then updateFocusFrame(focusCfg, true) end
+		if petCfg.enabled then applyConfig(PET_UNIT) end
 		updateCombatIndicator(playerCfg)
 	elseif event == "PLAYER_DEAD" then
 		if states.player and states.player.health then states.player.health:SetValue(0) end
@@ -1835,15 +2083,22 @@ local function onEvent(self, event, unit, arg1)
 			resetTargetAuras()
 			updateTargetAuraIcons()
 			if totCfg.enabled then updateTargetTargetFrame(totCfg) end
+			if focusCfg.enabled then updateFocusFrame(focusCfg) end
 			return
 		end
 		if UnitExists(unitToken) then
 			refreshMainPower(unitToken)
 			fullScanTargetAuras()
-			local _, powerToken = getMainPower(unitToken)
+			local pcfg = targetCfg.power or {}
+			local powerEnabled = pcfg.enabled ~= false
 			updateNameAndLevel(targetCfg, unitToken)
 			updateHealth(targetCfg, unitToken)
-			if st.power then configureSpecialTexture(st.power, powerToken, (targetCfg.power or {}).texture, targetCfg.power) end
+			if st.power and powerEnabled then
+				local _, powerToken = getMainPower(unitToken)
+				configureSpecialTexture(st.power, powerToken, (targetCfg.power or {}).texture, targetCfg.power)
+			elseif st.power then
+				st.power:Hide()
+			end
 			updatePower(targetCfg, unitToken)
 			st.barGroup:Show()
 			st.status:Show()
@@ -1856,6 +2111,7 @@ local function onEvent(self, event, unit, arg1)
 			stopCast(unitToken)
 		end
 		if totCfg.enabled then updateTargetTargetFrame(totCfg) end
+		if focusCfg.enabled then updateFocusFrame(focusCfg) end
 	elseif event == "UNIT_AURA" and unit == "target" then
 		local eventInfo = arg1
 		if not UnitExists("target") then
@@ -1929,40 +2185,93 @@ local function onEvent(self, event, unit, arg1)
 	elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_ABSORB_AMOUNT_CHANGED" then
 		if unit == PLAYER_UNIT then updateHealth(playerCfg, "player") end
 		if unit == "target" then updateHealth(targetCfg, "target") end
+		if unit == PET_UNIT then updateHealth(petCfg, PET_UNIT) end
 	elseif event == "UNIT_MAXPOWER" then
 		if unit == PLAYER_UNIT then updatePower(playerCfg, "player") end
 		if unit == "target" then updatePower(targetCfg, "target") end
+		if unit == PET_UNIT then updatePower(petCfg, PET_UNIT) end
+		if unit == FOCUS_UNIT then updatePower(focusCfg, FOCUS_UNIT) end
 	elseif event == "UNIT_DISPLAYPOWER" then
 		if unit == PLAYER_UNIT then
 			refreshMainPower(unit)
-			local _, powerToken = getMainPower(unit)
 			local st = states[unit]
-			if st and st.power then configureSpecialTexture(st.power, powerToken, (playerCfg.power or {}).texture, playerCfg.power) end
+			local pcfg = playerCfg.power or {}
+			if st and st.power and pcfg.enabled ~= false then
+				local _, powerToken = getMainPower(unit)
+				configureSpecialTexture(st.power, powerToken, (playerCfg.power or {}).texture, playerCfg.power)
+			elseif st and st.power then
+				st.power:Hide()
+			end
 			updatePower(playerCfg, "player")
 		elseif unit == "target" then
-			local _, powerToken = getMainPower(unit)
 			local st = states[unit]
-			if st and st.power then configureSpecialTexture(st.power, powerToken, (targetCfg.power or {}).texture, targetCfg.power) end
+			local pcfg = targetCfg.power or {}
+			if st and st.power and pcfg.enabled ~= false then
+				local _, powerToken = getMainPower(unit)
+				configureSpecialTexture(st.power, powerToken, (targetCfg.power or {}).texture, targetCfg.power)
+			elseif st and st.power then
+				st.power:Hide()
+			end
 			updatePower(targetCfg, "target")
+		elseif unit == FOCUS_UNIT then
+			local st = states[unit]
+			local pcfg = focusCfg.power or {}
+			if st and st.power and pcfg.enabled ~= false then
+				local _, powerToken = getMainPower(unit)
+				configureSpecialTexture(st.power, powerToken, (focusCfg.power or {}).texture, focusCfg.power)
+			elseif st and st.power then
+				st.power:Hide()
+			end
+			updatePower(focusCfg, FOCUS_UNIT)
+		elseif unit == PET_UNIT then
+			local st = states[unit]
+			local pcfg = petCfg.power or {}
+			if st and st.power and pcfg.enabled ~= false then
+				local _, powerToken = getMainPower(unit)
+				configureSpecialTexture(st.power, powerToken, (petCfg.power or {}).texture, petCfg.power)
+			elseif st and st.power then
+				st.power:Hide()
+			end
+			updatePower(petCfg, PET_UNIT)
 		end
 	elseif event == "UNIT_POWER_UPDATE" and not FREQUENT[arg1] then
 		if unit == PLAYER_UNIT then updatePower(playerCfg, "player") end
 		if unit == "target" then updatePower(targetCfg, "target") end
+		if unit == PET_UNIT then updatePower(petCfg, PET_UNIT) end
+		if unit == FOCUS_UNIT then updatePower(focusCfg, FOCUS_UNIT) end
 	elseif event == "UNIT_POWER_FREQUENT" and FREQUENT[arg1] then
 		if unit == PLAYER_UNIT then updatePower(playerCfg, "player") end
 		if unit == "target" then updatePower(targetCfg, "target") end
+		if unit == PET_UNIT then updatePower(petCfg, PET_UNIT) end
+		if unit == FOCUS_UNIT then updatePower(focusCfg, FOCUS_UNIT) end
 	elseif event == "UNIT_NAME_UPDATE" or event == "PLAYER_LEVEL_UP" then
 		if unit == PLAYER_UNIT or event == "PLAYER_LEVEL_UP" then updateNameAndLevel(playerCfg, "player") end
 		if unit == "target" then updateNameAndLevel(targetCfg, "target") end
+		if unit == FOCUS_UNIT then updateNameAndLevel(focusCfg, FOCUS_UNIT) end
+		if unit == PET_UNIT then updateNameAndLevel(petCfg, PET_UNIT) end
 	elseif event == "UNIT_TARGET" and unit == TARGET_UNIT then
 		if totCfg.enabled then updateTargetTargetFrame(totCfg) end
 	elseif event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_CHANNEL_START" or event == "UNIT_SPELLCAST_CHANNEL_UPDATE" then
 		if unit == TARGET_UNIT then setCastInfoFromUnit(TARGET_UNIT) end
+		if unit == FOCUS_UNIT then setCastInfoFromUnit(FOCUS_UNIT) end
 	elseif event == "UNIT_SPELLCAST_STOP" or event == "UNIT_SPELLCAST_CHANNEL_STOP" then
 		if unit == TARGET_UNIT then
 			stopCast(TARGET_UNIT)
 			if shouldShowSampleCast(unit) then setSampleCast(unit) end
 		end
+		if unit == FOCUS_UNIT then
+			stopCast(FOCUS_UNIT)
+			if shouldShowSampleCast(unit) then setSampleCast(unit) end
+		end
+	elseif event == "UNIT_PET" and unit == "player" then
+		if petCfg.enabled then
+			applyConfig(PET_UNIT)
+			updateNameAndLevel(petCfg, PET_UNIT)
+			updateHealth(petCfg, PET_UNIT)
+			updatePower(petCfg, PET_UNIT)
+		end
+	elseif event == "PLAYER_FOCUS_CHANGED" then
+		if focusCfg.enabled then updateFocusFrame(focusCfg, true) end
 	end
 end
 
@@ -1997,6 +2306,8 @@ function UF.Enable()
 	if ensureDB("target").enabled then applyConfig("target") end
 	local totCfg = ensureDB(TARGET_TARGET_UNIT)
 	if totCfg.enabled then updateTargetTargetFrame(totCfg, true) end
+	if ensureDB(FOCUS_UNIT).enabled then updateFocusFrame(ensureDB(FOCUS_UNIT), true) end
+	if ensureDB(PET_UNIT).enabled then applyConfig(PET_UNIT) end
 	-- hideBlizzardPlayerFrame()
 	-- hideBlizzardTargetFrame()
 end
@@ -2013,10 +2324,12 @@ function UF.Disable()
 end
 
 function UF.Refresh()
+	if isBossFrameSettingEnabled() then DisableBossFrames() end
 	ensureEventHandling()
 	if not anyUFEnabled() then return end
 	applyConfig("player")
 	applyConfig("target")
+	if ensureDB(FOCUS_UNIT).enabled then updateFocusFrame(ensureDB(FOCUS_UNIT), true) end
 	local targetCfg = ensureDB("target")
 	if targetCfg.enabled and UnitExists and UnitExists(TARGET_UNIT) and states[TARGET_UNIT] and states[TARGET_UNIT].frame then
 		states[TARGET_UNIT].barGroup:Show()
@@ -2024,6 +2337,7 @@ function UF.Refresh()
 	end
 	local totCfg = ensureDB(TARGET_TARGET_UNIT)
 	updateTargetTargetFrame(totCfg, true)
+	if ensureDB(PET_UNIT).enabled then applyConfig(PET_UNIT) end
 end
 
 function UF.RefreshUnit(unit)
@@ -2040,6 +2354,10 @@ function UF.RefreshUnit(unit)
 			states[TARGET_UNIT].barGroup:Show()
 			states[TARGET_UNIT].status:Show()
 		end
+	elseif unit == FOCUS_UNIT then
+		updateFocusFrame(ensureDB(FOCUS_UNIT), true)
+	elseif unit == PET_UNIT then
+		applyConfig(PET_UNIT)
 	else
 		applyConfig(PLAYER_UNIT)
 	end
@@ -2062,7 +2380,18 @@ if not addon.Aura.UFInitialized then
 		updateTargetTargetFrame(ttc, true)
 		ensureToTTicker()
 	end
+	local pcfg = ensureDB(PET_UNIT)
+	if pcfg.enabled then
+		ensureEventHandling()
+		applyConfig(PET_UNIT)
+	end
+	local fcfg = ensureDB(FOCUS_UNIT)
+	if fcfg.enabled then
+		ensureEventHandling()
+		updateFocusFrame(fcfg, true)
+	end
 end
+if isBossFrameSettingEnabled() then DisableBossFrames() end
 
 UF.targetAuras = targetAuras
 UF.defaults = defaults

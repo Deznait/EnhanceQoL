@@ -1301,6 +1301,40 @@ local function registerEditModeBars()
 				parentId = "colorsetting",
 			}
 
+			if barType == "HOLY_POWER" then
+				settingsList[#settingsList + 1] = {
+					name = L["Use 3 HP color"] or "Use custom color at 3 Holy Power",
+					kind = settingType.CheckboxColor,
+					field = "useHolyThreeColor",
+					default = false,
+					get = function()
+						local c = curSpecCfg()
+						return c and c.useHolyThreeColor == true
+					end,
+					set = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						c.useHolyThreeColor = value and true or false
+						queueRefresh()
+					end,
+					colorDefault = toUIColor(cfg and cfg.holyThreeColor, { 1, 0.8, 0.2, 1 }),
+					colorGet = function()
+						local c = curSpecCfg()
+						local col = (c and c.holyThreeColor) or (cfg and cfg.holyThreeColor) or { 1, 0.8, 0.2, 1 }
+						local r, g, b, a = toColorComponents(col, { 1, 0.8, 0.2, 1 })
+						return { r = r, g = g, b = b, a = a }
+					end,
+					colorSet = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						c.holyThreeColor = toColorArray(value, { 1, 0.8, 0.2, 1 })
+						queueRefresh()
+					end,
+					hasOpacity = true,
+					parentId = "colorsetting",
+				}
+			end
+
 			settingsList[#settingsList + 1] = {
 				name = L["Use max color"] or "Use max color",
 				kind = settingType.CheckboxColor,
