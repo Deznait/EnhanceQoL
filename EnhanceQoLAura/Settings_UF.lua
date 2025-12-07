@@ -1535,7 +1535,6 @@ local function registerUnitFrame(unit, info)
 				cfg.anchor.y = data.y or 0
 				cfg.anchor.relativeTo = cfg.anchor.relativeTo or "UIParent"
 			end
-			if data.width then cfg.width = data.width end
 			refresh()
 		end,
 		isEnabled = function() return ensureConfig(unit).enabled == true end,
