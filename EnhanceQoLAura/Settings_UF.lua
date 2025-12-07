@@ -149,6 +149,53 @@ local function refreshSettingsUI()
 	if lib and lib.internal and lib.internal.RefreshSettingValues then lib.internal:RefreshSettingValues() end
 end
 
+local copyDialogKey = "EQOL_UF_COPY_SETTINGS"
+local copyFrameLabels = {
+	player = L["UFPlayerFrame"] or PLAYER,
+	target = L["UFTargetFrame"] or TARGET,
+	targettarget = L["UFToTFrame"] or "Target of Target",
+	pet = L["UFPetFrame"] or PET,
+	focus = L["UFFocusFrame"] or FOCUS,
+	boss = L["UFBossFrame"] or BOSS or "Boss Frame",
+}
+
+local function availableCopySources(unit)
+	local opts = {}
+	for key, label in pairs(copyFrameLabels) do
+		if key ~= unit then opts[#opts + 1] = { value = key, label = label } end
+	end
+	table.sort(opts, function(a, b) return tostring(a.label) < tostring(b.label) end)
+	return opts
+end
+
+local function showCopySettingsPopup(fromUnit, toUnit)
+	if not (fromUnit and toUnit and UF.CopySettings) then return end
+	StaticPopupDialogs[copyDialogKey] = StaticPopupDialogs[copyDialogKey] or {
+		text = "%s",
+		button1 = L["Copy"] or ACCEPT,
+		button2 = CANCEL,
+		hideOnEscape = true,
+		timeout = 0,
+		whileDead = 1,
+		preferredIndex = 3,
+		OnAccept = function(self, data)
+			local payload = data or self.data
+			if payload and payload.from and payload.to and UF.CopySettings then
+				if UF.CopySettings(payload.from, payload.to, { keepAnchor = true, keepEnabled = true }) then
+					refresh(payload.to)
+					refreshSettingsUI()
+				end
+			end
+		end,
+	}
+	local dialog = StaticPopupDialogs[copyDialogKey]
+	if not dialog then return end
+	local fromLabel = copyFrameLabels[fromUnit] or fromUnit
+	local toLabel = copyFrameLabels[toUnit] or toUnit
+	dialog.text = string.format("%s\n\n%s -> %s", L["Copy settings"] or "Copy settings", fromLabel, toLabel)
+	StaticPopup_Show(copyDialogKey, nil, nil, { from = fromUnit, to = toUnit })
+end
+
 local function hideFrameReset(frame)
 	local lib = addon.EditModeLib
 	if frame and lib and lib.SetFrameSettingsResetVisible then lib:SetFrameSettingsResetVisible(frame, false) end
@@ -292,6 +339,24 @@ local function buildUnitSettings(unit)
 	end
 	local refresh = refreshSelf
 	local isPlayer = unit == "player"
+	local copyOptions = availableCopySources(unit)
+
+	list[#list + 1] = { name = SETTINGS or "Settings", kind = settingType.Collapsible, id = "utility", defaultCollapsed = true }
+
+	list[#list + 1] = {
+		name = L["Copy settings"] or "Copy settings",
+		kind = settingType.Dropdown,
+		parentId = "utility",
+		default = nil,
+		generator = function(_, root)
+			for _, opt in ipairs(copyOptions) do
+				root:CreateRadio(opt.label, function() return false end, function()
+					showCopySettingsPopup(opt.value, unit)
+				end)
+			end
+		end,
+		isEnabled = function() return #copyOptions > 0 end,
+	}
 
 	list[#list + 1] = { name = L["Frame"] or "Frame", kind = settingType.Collapsible, id = "frame", defaultCollapsed = false }
 

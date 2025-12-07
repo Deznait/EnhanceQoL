@@ -14,6 +14,14 @@ local ResourceBars = addon.Aura and addon.Aura.ResourceBars
 if not ResourceBars then return end
 
 local MIN_RESOURCE_BAR_WIDTH = (ResourceBars and ResourceBars.MIN_RESOURCE_BAR_WIDTH) or 50
+local SMF = addon.SharedMedia and addon.SharedMedia.functions
+local EQOL_RUNES_BORDER = (ResourceBars and ResourceBars.RUNE_BORDER_ID) or "EQOL_BORDER_RUNES"
+local EQOL_RUNES_BORDER_LABEL = (ResourceBars and ResourceBars.RUNE_BORDER_LABEL) or (SMF and SMF.GetCustomBorder and (SMF.GetCustomBorder(EQOL_RUNES_BORDER) or {}).label) or "EQOL: Runes"
+local function customBorderOptions()
+	if SMF and SMF.GetCustomBorderOptions then return SMF.GetCustomBorderOptions() end
+	if ResourceBars and ResourceBars.GetCustomBorderOptions then return ResourceBars.GetCustomBorderOptions() end
+	return nil
+end
 
 local specSettingVars = {}
 local function maybeAutoEnableBars(specIndex, specCfg)
@@ -341,6 +349,9 @@ local function registerEditModeBars()
 
 			local function borderDropdownData()
 				local map = { ["Interface\\Tooltips\\UI-Tooltip-Border"] = "Tooltip Border" }
+				for id, label in pairs(customBorderOptions() or {}) do
+					map[id] = label
+				end
 				if LibStub then
 					local media = LibStub("LibSharedMedia-3.0", true)
 					if media then
@@ -835,7 +846,7 @@ local function registerEditModeBars()
 							seen[path] = name
 							root:CreateRadio(name, function()
 								local c = curSpecCfg()
-								return (c and c.fontFace) == path
+								return currentPath == path
 							end, function()
 								local c = curSpecCfg()
 								if not c then return end
@@ -1475,6 +1486,10 @@ local function registerEditModeBars()
 								local c = curSpecCfg()
 								if not c then return end
 								local bd = ensureBackdropTable(c)
+								if customBorderOptions() and customBorderOptions()[key] then
+									local col = bd.borderColor
+									if not col or (col[4] or 0) <= 0 then bd.borderColor = { 1, 1, 1, 1 } end
+								end
 								bd.borderTexture = key
 								queueRefresh()
 							end)
@@ -1489,6 +1504,10 @@ local function registerEditModeBars()
 						local c = curSpecCfg()
 						if not c then return end
 						local bd = ensureBackdropTable(c)
+						if customBorderOptions() and customBorderOptions()[value] then
+							local col = bd.borderColor
+							if not col or (col[4] or 0) <= 0 then bd.borderColor = { 1, 1, 1, 1 } end
+						end
 						bd.borderTexture = value
 						queueRefresh()
 					end,

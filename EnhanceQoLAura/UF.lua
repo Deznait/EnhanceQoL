@@ -18,17 +18,13 @@ addon.variables.ufSampleCast = addon.variables.ufSampleCast or {}
 local sampleCast = addon.variables.ufSampleCast
 local maxBossFrames = MAX_BOSS_FRAMES or 5
 
-local hiddenParent = CreateFrame("Frame", nil, UIParent)
-hiddenParent:SetAllPoints()
-hiddenParent:Hide()
-
 local throttleHook
 local function DisableBossFrames()
 	BossTargetFrameContainer:SetAlpha(0)
 	BossTargetFrameContainer.Selection:SetAlpha(0)
-	hooksecurefunc(BossTargetFrameContainer, "OnShow", function(self, parent)
+	if not throttleHook then hooksecurefunc(BossTargetFrameContainer, "SetAlpha", function(self, parent)
 		if self:GetAlpha() ~= 0 then self:SetAlpha(0) end
-	end)
+	end) end
 end
 
 local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_Aura")
@@ -260,7 +256,7 @@ local defaults = {
 			width = 220,
 			height = 16,
 			anchor = "BOTTOM", -- or "TOP"
-			offset = { x = 0, y = -4 },
+			offset = { x = 0, y = -40 },
 			backdrop = { enabled = true, color = { 0, 0, 0, 0.6 } },
 			showName = true,
 			nameOffset = { x = 6, y = 0 },
@@ -358,6 +354,29 @@ local function ensureDB(unit)
 		end
 	end
 	return udb
+end
+
+local function copySettings(fromUnit, toUnit, opts)
+	opts = opts or {}
+	if not fromUnit or not toUnit or fromUnit == toUnit then return false end
+	local src = ensureDB(fromUnit)
+	local dest = ensureDB(toUnit)
+	if not src or not dest then return false end
+	local keepAnchor = opts.keepAnchor ~= false
+	local keepEnabled = opts.keepEnabled ~= false
+	local anchor = keepAnchor and dest.anchor and CopyTable(dest.anchor) or dest.anchor
+	local enabled = keepEnabled and dest.enabled
+	if wipe then wipe(dest) end
+	for k, v in pairs(src) do
+		if type(v) == "table" then
+			dest[k] = CopyTable(v)
+		else
+			dest[k] = v
+		end
+	end
+	if keepAnchor then dest.anchor = anchor end
+	if keepEnabled then dest.enabled = enabled end
+	return true
 end
 
 local function anchorBossContainer(cfg)
@@ -2793,3 +2812,4 @@ UF.StopEventsIfInactive = function() ensureEventHandling() end
 UF.UpdateBossFrames = updateBossFrames
 UF.HideBossFrames = hideBossFrames
 UF.FullScanTargetAuras = fullScanTargetAuras
+UF.CopySettings = copySettings

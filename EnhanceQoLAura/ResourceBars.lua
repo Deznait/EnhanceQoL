@@ -18,32 +18,13 @@ local BLIZZARD_TEX
 
 local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_Aura")
 
-local AceGUI = addon.AceGUI
 local UnitPower, UnitPowerMax, UnitHealth, UnitHealthMax, UnitGetTotalAbsorbs, GetTime = UnitPower, UnitPowerMax, UnitHealth, UnitHealthMax, UnitGetTotalAbsorbs, GetTime
 local CreateFrame = CreateFrame
-local PowerBarColor = PowerBarColor
-local UIParent = UIParent
-local GetShapeshiftForm, GetShapeshiftFormInfo = GetShapeshiftForm, GetShapeshiftFormInfo
-local UnitPowerType = UnitPowerType
-local GetSpecializationInfoForClassID = GetSpecializationInfoForClassID
-local GetNumSpecializationsForClassID = C_SpecializationInfo and C_SpecializationInfo.GetNumSpecializationsForClassID
-local GetRuneCooldown = GetRuneCooldown
-local IsShiftKeyDown = IsShiftKeyDown
 local After = C_Timer and C_Timer.After
-local EnumPowerType = Enum and Enum.PowerType
-local format = string.format
 local CopyTable = CopyTable
 local tostring = tostring
 local floor, max, min, ceil, abs = math.floor, math.max, math.min, math.ceil, math.abs
 local tinsert, tsort = table.insert, table.sort
-local tconcat = table.concat
-local RAID_CLASS_COLORS = RAID_CLASS_COLORS
-local CUSTOM_CLASS_COLORS = CUSTOM_CLASS_COLORS
-local RegisterStateDriver = RegisterStateDriver
-local UnregisterStateDriver = UnregisterStateDriver
-local InCombatLockdown = InCombatLockdown
-local IsMounted = IsMounted
-local UnitInVehicle = UnitInVehicle
 local applyVisibilityDriverToFrame
 local registerEditModeCallbacks
 
@@ -79,6 +60,7 @@ local DEFAULT_HEALTH_WIDTH
 local DEFAULT_HEALTH_HEIGHT
 local DEFAULT_POWER_WIDTH
 local DEFAULT_POWER_HEIGHT
+local RUNES_BORDER_ID = "EQOL_BORDER_RUNES"
 BLIZZARD_TEX = "Interface\\TargetingFrame\\UI-StatusBar"
 local SMOOTH_SPEED = 12
 local DEFAULT_SMOOTH_DEADZONE = 0.75
@@ -845,6 +827,48 @@ local function ensureBackdropFrames(frame)
 	return bg, border
 end
 
+-- Shared media helpers for custom (nine-slice) borders
+ResourceBars.CustomBorders = (addon.SharedMedia and addon.SharedMedia.customBorders) or ResourceBars.CustomBorders or {}
+
+local function getCustomBorder(id)
+	local sm = addon.SharedMedia
+	local smf = sm and sm.functions
+	if smf and smf.GetCustomBorder then return smf.GetCustomBorder(id) end
+	if sm and sm.customBorders then return sm.customBorders[id] end
+	return nil
+end
+
+local function getCustomBorderOptions()
+	local sm = addon.SharedMedia
+	local smf = sm and sm.functions
+	if smf and smf.GetCustomBorderOptions then return smf.GetCustomBorderOptions() end
+	if sm and sm.customBorders then
+		local map = {}
+		for borderId, info in pairs(sm.customBorders) do
+			map[borderId] = (info and info.label) or borderId
+		end
+		return map
+	end
+	return nil
+end
+
+function ResourceBars.GetCustomBorderOptions() return getCustomBorderOptions() end
+function ResourceBars.GetCustomBorder(id) return getCustomBorder(id) end
+
+local function hideCustomBorders(borderFrame)
+	local smf = addon.SharedMedia and addon.SharedMedia.functions
+	if smf and smf.HideCustomBorders then return smf.HideCustomBorders(borderFrame) end
+end
+
+local function applyCustomBorder(borderFrame, bd)
+	local smf = addon.SharedMedia and addon.SharedMedia.functions
+	if smf and smf.ApplyCustomBorder then return smf.ApplyCustomBorder(borderFrame, bd) end
+	return false
+end
+
+local runeDef = getCustomBorder(RUNES_BORDER_ID)
+ResourceBars.RUNE_BORDER_LABEL = (runeDef and runeDef.label) or "EQOL: Runes"
+
 -- Statusbar content inset controller
 local ZERO_INSETS = { left = 0, right = 0, top = 0, bottom = 0 }
 
@@ -965,6 +989,7 @@ local function applyBackdrop(frame, cfg)
 	if bd.enabled == false then
 		if bgFrame:IsShown() then bgFrame:Hide() end
 		if borderFrame:IsShown() then borderFrame:Hide() end
+		hideCustomBorders(borderFrame)
 		state.enabled = false
 		return
 	end
@@ -1004,6 +1029,26 @@ local function applyBackdrop(frame, cfg)
 		end
 		if bgFrame.SetBackdropBorderColor then bgFrame:SetBackdropBorderColor(0, 0, 0, 0) end
 		if not bgFrame:IsShown() then bgFrame:Show() end
+	end
+
+	hideCustomBorders(borderFrame)
+	local customApplied = false
+	if getCustomBorder(bd.borderTexture) then
+		if borderFrame.SetBackdrop then
+			if state.borderTexture or state.borderEdgeSize then
+				borderFrame:SetBackdrop(nil)
+				state.borderTexture = nil
+				state.borderEdgeSize = nil
+			end
+		end
+		state.borderR, state.borderG, state.borderB, state.borderA = nil, nil, nil, nil
+		if (bd.edgeSize or 0) > 0 then customApplied = applyCustomBorder(borderFrame, bd) end
+		if customApplied then
+			if not borderFrame:IsShown() then borderFrame:Show() end
+			return
+		end
+		if borderFrame:IsShown() then borderFrame:Hide() end
+		return
 	end
 
 	if borderFrame.SetBackdrop then
@@ -1712,6 +1757,8 @@ ResourceBars.separatorEligible = {
 	COMBO_POINTS = true,
 	RUNES = true,
 }
+ResourceBars.RUNE_BORDER_ID = RUNES_BORDER_ID
+ResourceBars.RUNE_BORDER_LABEL = ResourceBars.RUNE_BORDER_LABEL or ((getCustomBorder and getCustomBorder(RUNES_BORDER_ID) or {}).label) or "EQOL: Runes"
 
 function getBarSettings(pType)
 	local class = addon.variables.unitClass
