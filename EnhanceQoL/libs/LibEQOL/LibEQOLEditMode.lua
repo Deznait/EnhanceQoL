@@ -1,4 +1,4 @@
-local MODULE_MAJOR, BASE_MAJOR, MINOR = "LibEQOLEditMode-1.0", "LibEQOL-1.0", 6010001
+local MODULE_MAJOR, BASE_MAJOR, MINOR = "LibEQOLEditMode-1.0", "LibEQOL-1.0", 6001000
 local LibStub = _G.LibStub
 assert(LibStub, MODULE_MAJOR .. " requires LibStub")
 
@@ -491,6 +491,18 @@ local function isInCombat()
 	return InCombatLockdown and InCombatLockdown()
 end
 
+local function roundOffset(val)
+	local n = tonumber(val) or 0
+	if math.abs(n) < 0.001 then
+		return 0
+	end
+	if n >= 0 then
+		return math.floor(n + 0.5)
+	else
+		return math.ceil(n - 0.5)
+	end
+end
+
 -- Magnetism helpers ---------------------------------------------------------------
 local function isFrameAnchoredTo(frame, target, visited)
 	if not (frame and target and frame.GetNumPoints) then
@@ -523,8 +535,11 @@ local function ensureMagnetismAPI(frame, selection)
 
 	if not frame.GetScaledSelectionCenter then
 		function frame:GetScaledSelectionCenter()
-			local cx, cy = self.Selection and self.Selection:GetCenter()
-			if not (cx and cy) then
+			local cx, cy = 0, 0
+			if self.Selection and self.Selection.GetCenter then
+				cx, cy = self.Selection:GetCenter()
+			end
+			if not (cx and cy) and self.GetCenter then
 				cx, cy = self:GetCenter()
 			end
 			if not (cx and cy) then
@@ -614,14 +629,20 @@ local function ensureMagnetismAPI(frame, selection)
 			elseif point == "BOTTOMRIGHT" then
 				offset = forYOffset and self:GetBottomOffset() or self:GetRightOffset()
 			else
-				local selectionCenterX, selectionCenterY = self.Selection and self.Selection:GetCenter()
-				if not (selectionCenterX and selectionCenterY) then
+				local selectionCenterX, selectionCenterY = 0, 0
+				if self.Selection and self.Selection.GetCenter then
+					selectionCenterX, selectionCenterY = self.Selection:GetCenter()
+				end
+				if not (selectionCenterX and selectionCenterY) and self.GetCenter then
 					selectionCenterX, selectionCenterY = self:GetCenter()
 				end
 				if not (selectionCenterX and selectionCenterY) then
 					selectionCenterX, selectionCenterY = 0, 0
 				end
-				local centerX, centerY = self:GetCenter()
+				local centerX, centerY = 0, 0
+				if self.GetCenter then
+					centerX, centerY = self:GetCenter()
+				end
 				if not (centerX and centerY) then
 					centerX, centerY = 0, 0
 				end
@@ -2669,7 +2690,7 @@ function Dialog:ResetPosition()
 	local pos = lib:GetFrameDefaultPosition(parent) or { point = "CENTER", x = 0, y = 0 }
 	parent:ClearAllPoints()
 	parent:SetPoint(pos.point, pos.x, pos.y)
-	Internal:TriggerCallback(parent, pos.point, pos.x, pos.y)
+	Internal:TriggerCallback(parent, pos.point, roundOffset(pos.x), roundOffset(pos.y))
 end
 
 function Internal:CreateDialog()
@@ -2851,7 +2872,7 @@ local function adjustPosition(frame, dx, dy)
 	y = (y or 0) + dy / scale
 	frame:ClearAllPoints()
 	frame:SetPoint(point, relativeTo or UIParent, relativePoint or point, x, y)
-	Internal:TriggerCallback(frame, point, x, y)
+	Internal:TriggerCallback(frame, point, roundOffset(x), roundOffset(y))
 end
 
 local function resetSelectionIndicators()
@@ -2922,7 +2943,7 @@ local function finishSelectionDrag(self)
 	end
 	parent:ClearAllPoints()
 	parent:SetPoint(point, x, y)
-	Internal:TriggerCallback(parent, point, x, y)
+	Internal:TriggerCallback(parent, point, roundOffset(x), roundOffset(y))
 end
 
 -- Overlap chooser ---------------------------------------------------------------

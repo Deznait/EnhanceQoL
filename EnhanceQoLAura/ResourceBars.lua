@@ -1721,11 +1721,25 @@ powertypeClasses = {
 	},
 }
 
-local POWER_ENUM = {}
-for k, v in pairs(EnumPowerType or {}) do
-	local key = k:gsub("(%l)(%u)", "%1_%2"):upper()
-	POWER_ENUM[key] = v
-end
+local POWER_ENUM = {
+	MANA = (EnumPowerType and EnumPowerType.Mana) or 0,
+	RAGE = (EnumPowerType and EnumPowerType.Rage) or 1,
+	FOCUS = (EnumPowerType and EnumPowerType.Focus) or 2,
+	ENERGY = (EnumPowerType and EnumPowerType.Energy) or 3,
+	COMBO_POINTS = (EnumPowerType and EnumPowerType.ComboPoints) or 4,
+	RUNES = (EnumPowerType and EnumPowerType.Runes) or 5,
+	RUNIC_POWER = (EnumPowerType and EnumPowerType.RunicPower) or 6,
+	SOUL_SHARDS = (EnumPowerType and EnumPowerType.SoulShards) or 7,
+	LUNAR_POWER = (EnumPowerType and EnumPowerType.LunarPower) or (EnumPowerType and EnumPowerType.Alternate) or 8,
+	HOLY_POWER = (EnumPowerType and EnumPowerType.HolyPower) or 9,
+	MAELSTROM = (EnumPowerType and EnumPowerType.Maelstrom) or 11,
+	CHI = (EnumPowerType and EnumPowerType.Chi) or 12,
+	INSANITY = (EnumPowerType and EnumPowerType.Insanity) or 13,
+	ARCANE_CHARGES = (EnumPowerType and EnumPowerType.ArcaneCharges) or 16,
+	FURY = (EnumPowerType and EnumPowerType.Fury) or 17,
+	PAIN = (EnumPowerType and EnumPowerType.Pain) or 18,
+	ESSENCE = (EnumPowerType and EnumPowerType.Essence) or 19,
+}
 
 classPowerTypes = {
 	"RAGE",
@@ -2117,6 +2131,7 @@ function updatePowerBar(type, runeSlot)
 		return
 	end
 	local pType = POWER_ENUM[type]
+	if not pType then return end
 	local cfg = getBarSettings(type) or {}
 	local maxPower = bar._lastMax
 	if not maxPower then

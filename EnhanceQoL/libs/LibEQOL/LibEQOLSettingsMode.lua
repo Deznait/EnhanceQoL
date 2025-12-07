@@ -1,4 +1,4 @@
-local MODULE_MAJOR, MINOR = "LibEQOLSettingsMode-1.0", 5010001
+local MODULE_MAJOR, MINOR = "LibEQOLSettingsMode-1.0", 6001000
 local LibStub = _G.LibStub
 assert(LibStub, MODULE_MAJOR .. " requires LibStub")
 
@@ -188,26 +188,27 @@ function lib:SetDefaultRootName(name)
 	end
 end
 
-local function prefixTag(tag)
+local function prefixTag(tag, explicitPrefix)
 	if type(tag) ~= "string" then
 		return tag
 	end
-	local p = State.prefixSet and State.prefix
+	local p = explicitPrefix or (State.prefixSet and State.prefix)
 	if p and not tag:find(p, 1, true) then
 		return p .. tag
 	end
 	return tag
 end
 
-local function registerCategory(name, parent, sort, newTagID)
-	newTagID = prefixTag(newTagID)
+local function registerCategory(name, parent, sort, newTagID, prefixOverride)
+	local categoryPrefix = prefixOverride or (State.prefixSet and State.prefix) or nil
+	newTagID = prefixTag(newTagID, categoryPrefix)
 	if parent == nil then
 		local cat, layout = Settings.RegisterVerticalLayoutCategory(name)
 		Settings.RegisterAddOnCategory(cat)
 		cat:SetShouldSortAlphabetically(sort ~= false)
 		cat._LibEQOLNewTagID = newTagID
 		State.categoryTags[cat:GetID()] = newTagID
-		State.categoryPrefixes[cat:GetID()] = State.prefixSet and State.prefix
+		State.categoryPrefixes[cat:GetID()] = categoryPrefix
 		return cat, layout
 	end
 	local cat, layout = Settings.RegisterVerticalLayoutSubcategory(parent, name)
@@ -215,7 +216,7 @@ local function registerCategory(name, parent, sort, newTagID)
 	cat:SetShouldSortAlphabetically(sort ~= false)
 	cat._LibEQOLNewTagID = newTagID
 	State.categoryTags[cat:GetID()] = newTagID
-	State.categoryPrefixes[cat:GetID()] = State.prefixSet and State.prefix
+	State.categoryPrefixes[cat:GetID()] = categoryPrefix
 	return cat, layout
 end
 
@@ -320,18 +321,18 @@ local function addSearchTags(initializer, searchtags, text)
 	end
 end
 
-function lib:CreateRootCategory(name, sort, newTagID)
-	local cat, layout = registerCategory(name or State.rootName, nil, sort, newTagID)
+function lib:CreateRootCategory(name, sort, newTagID, prefix)
+	local cat, layout = registerCategory(name or State.rootName, nil, sort, newTagID, prefix)
 	State.rootCategory = cat
 	State.rootLayout = layout
 	return cat, layout
 end
 
-function lib:CreateCategory(parent, name, sort, newTagID)
+function lib:CreateCategory(parent, name, sort, newTagID, prefix)
 	if not parent then
 		parent = State.rootCategory or select(1, self:CreateRootCategory(State.rootName))
 	end
-	local cat, layout = registerCategory(name, parent, sort, newTagID)
+	local cat, layout = registerCategory(name, parent, sort, newTagID, prefix)
 	State.categories[name] = cat
 	return cat, layout
 end
@@ -437,21 +438,35 @@ function lib:CreateDropdown(cat, data)
 	)
 	local function optionsFunc()
 		local container = Settings.CreateControlTextContainer()
-		local list = data.values
-		if data.optionfunc then
-			local ok, result = pcall(data.optionfunc)
-			if ok and type(result) == "table" then
-				list = result
+			local list = data.values
+			if data.optionfunc then
+				local ok, result = pcall(data.optionfunc)
+				if ok and type(result) == "table" then
+					list = result
+				end
 			end
-		end
-		if type(list) == "table" then
-			for key, value in pairs(list) do
-				container:Add(key, value)
+			if type(list) == "table" then
+				local orderedKeys = type(data.order) == "table" and data.order
+					or (type(list._order) == "table" and list._order)
+				local seen = nil
+				if orderedKeys then
+					seen = {}
+					for _, key in ipairs(orderedKeys) do
+						if key ~= "_order" and list[key] ~= nil then
+							container:Add(key, list[key])
+							seen[key] = true
+						end
+					end
+				end
+				for key, value in pairs(list) do
+					if key ~= "_order" and (not seen or not seen[key]) then
+						container:Add(key, value)
+					end
+				end
 			end
+			return container:GetData()
 		end
-		return container:GetData()
-	end
-	local dropdown = Settings.CreateDropdown(cat, setting, optionsFunc, data.desc)
+		local dropdown = Settings.CreateDropdown(cat, setting, optionsFunc, data.desc)
 	applyParentInitializer(dropdown, data.parent, data.parentCheck)
 	applyModifyPredicate(dropdown, data)
 	addSearchTags(dropdown, data.searchtags, data.name or data.text)
@@ -472,24 +487,25 @@ function lib:CreateSoundDropdown(cat, data)
 		data.get,
 		data.set,
 		data
-	)
-	local initializer = Settings.CreateElementInitializer("LibEQOL@project-abbreviated-hash@_SoundDropdownTemplate", {
-		setting = setting,
-		options = data.values or data.options,
-		optionfunc = data.optionfunc,
-		callback = data.callback,
-		soundResolver = data.soundResolver,
-		previewSoundFunc = data.previewSoundFunc,
-		playbackChannel = data.playbackChannel,
-		getPlaybackChannel = data.getPlaybackChannel,
+		)
+		local initializer = Settings.CreateElementInitializer("LibEQOL@project-abbreviated-hash@_SoundDropdownTemplate", {
+			setting = setting,
+			options = data.values or data.options,
+			optionfunc = data.optionfunc,
+			order = data.order,
+			callback = data.callback,
+			soundResolver = data.soundResolver,
+			previewSoundFunc = data.previewSoundFunc,
+			playbackChannel = data.playbackChannel,
+			getPlaybackChannel = data.getPlaybackChannel,
 		placeholderText = data.placeholderText,
 		previewTooltip = data.previewTooltip,
 		name = data.name or data.text or data.key,
 		menuHeight = data.menuHeight,
-		frameWidth = data.frameWidth,
-		frameHeight = data.frameHeight,
-		parentCheck = data.parentCheck,
-	})
+			frameWidth = data.frameWidth,
+			frameHeight = data.frameHeight,
+			parentCheck = data.parentCheck,
+		})
 	initializer:SetSetting(setting)
 	addSearchTags(initializer, data.searchtags, data.name or data.text)
 	applyParentInitializer(initializer, data.parent, data.parentCheck)
@@ -539,6 +555,7 @@ function lib:CreateMultiDropdown(cat, data)
 		label = data.name or data.text or data.key,
 		options = data.values,
 		optionfunc = data.optionfunc,
+		order = data.order,
 		isSelectedFunc = data.isSelected,
 		setSelectedFunc = data.setSelected,
 		getSelection = data.getSelection or data.get,
