@@ -28,7 +28,7 @@ local function DisableBossFrames()
 		if InCombatLockdown() then return end
 		if parent ~= hiddenParent and not throttleHook then
 			throttleHook = true
-			C_Timer.After(0.2, function() self:SetParent(hiddenParent) end)
+			C_Timer.After(0, function() self:SetParent(hiddenParent) end)
 		end
 	end)
 	for i = 1, (MAX_BOSS_FRAMES or maxBossFrames or 5) do
@@ -124,7 +124,7 @@ local function getFont(path)
 	if path and path ~= "" then return path end
 	return addon.variables and addon.variables.defaultFont or (LSM and LSM:Fetch("font", LSM.DefaultMedia.font)) or STANDARD_TEXT_FONT
 end
-local function isBossUnit(unit) return unit and unit:match("^boss%d+$") end
+local function isBossUnit(unit) return unit == "boss" or (unit and unit:match("^boss%d+$")) end
 local UNITS = {
 	player = {
 		unit = "player",
@@ -2021,10 +2021,6 @@ local function layoutBossFrames(cfg)
 		local totalHeight = frameHeight * shown + spacing * (shown - 1)
 		bossContainer:SetHeight(totalHeight)
 		bossContainer:SetWidth(maxWidth)
-	else
-		local defWidth = (cfg and cfg.width) or (def and def.width) or MIN_WIDTH
-		bossContainer:SetWidth(defWidth)
-		bossContainer:SetHeight(0.001)
 	end
 end
 
@@ -2036,10 +2032,7 @@ local function hideBossFrames(forceHide)
 	bossLayoutDirty = false
 	if addon.EditModeLib and addon.EditModeLib:IsInEditMode() and ensureDB("boss").enabled and not forceHide then
 		-- Keep container visible in edit mode for positioning
-		if bossContainer then
-			bossContainer:SetHeight(0.001)
-			bossContainer:Show()
-		end
+		if bossContainer then bossContainer:Show() end
 		return
 	end
 	if InCombatLockdown() then
@@ -2053,7 +2046,6 @@ local function hideBossFrames(forceHide)
 		if forceHide or not ensureDB("boss").enabled then
 			bossContainer:Hide()
 		else
-			bossContainer:SetHeight(0.001)
 			bossContainer:Show()
 		end
 	end
@@ -2112,58 +2104,66 @@ end
 local function updateBossFrames(force)
 	local cfg = ensureDB("boss")
 	if not cfg.enabled then
-		hideBossFrames()
+		hideBossFrames(true)
 		return
 	end
 	if not bossContainer then ensureBossContainer() end
 	DisableBossFrames()
-	local any
+	local anyShown
 	local inEdit = addon.EditModeLib and addon.EditModeLib:IsInEditMode()
 	for i = 1, maxBossFrames do
 		local unit = "boss" .. i
-		if not InCombatLockdown() and (force or not states[unit] or not states[unit].frame or inEdit) then applyConfig(unit) end
+		if force or not states[unit] or not states[unit].frame or inEdit then applyConfig(unit) end
 		local st = states[unit]
 		if st then st.cfg = cfg end
 		if st and st.frame then
-			if not InCombatLockdown() then
-				if inEdit then
+			if inEdit then
+				if not InCombatLockdown() then
 					if UnregisterStateDriver then UnregisterStateDriver(st.frame, "visibility") end
-					st.frame:SetAttribute("state-visibility", nil)
+					if st.frame.SetAttribute then st.frame:SetAttribute("state-visibility", nil) end
 					if st.frame.SetAttribute then st.frame:SetAttribute("unit", "player") end
 					st.frame:Show()
 				else
-					if st.frame.SetAttribute then st.frame:SetAttribute("unit", unit) end
-					applyVisibilityDriver(unit, cfg.enabled)
+					bossInitPending = true
 				end
-			elseif not inEdit then
-				bossInitPending = true
-			end
-			if UnitExists(unit) or inEdit then
-				any = true
 				if st.barGroup then st.barGroup:Show() end
 				if st.status then st.status:Show() end
-				if inEdit then
-					applyBossEditSample(i, cfg)
+				applyBossEditSample(i, cfg)
+				anyShown = true
+			else
+				local exists = UnitExists and UnitExists(unit)
+				if not InCombatLockdown() then
+					if st.frame.SetAttribute then
+						st.frame:SetAttribute("unit", unit)
+						st.frame:SetAttribute("type1", "target")
+						st.frame:SetAttribute("type2", "togglemenu")
+						st.frame:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+					end
+					applyVisibilityDriver(unit, cfg.enabled)
 				else
+					if exists then
+						bossShowPending = true
+						bossHidePending = nil
+					else
+						bossHidePending = true
+						bossShowPending = nil
+					end
+				end
+				if exists then
+					anyShown = true
+					if st.barGroup then st.barGroup:Show() end
+					if st.status then st.status:Show() end
 					updateNameAndLevel(cfg, unit)
 					updateHealth(cfg, unit)
 					updatePower(cfg, unit)
+				else
+					if st.barGroup then st.barGroup:Hide() end
+					if st.status then st.status:Hide() end
 				end
 			end
 		end
 	end
 	anchorBossContainer(cfg)
-	if not any and not inEdit then
-		if not InCombatLockdown() then
-			if bossContainer then bossContainer:Hide() end
-			bossHidePending = nil
-			bossShowPending = nil
-		else
-			bossHidePending = true
-			bossShowPending = nil
-		end
-		return
-	end
 	layoutBossFrames(cfg)
 	if not InCombatLockdown() then
 		if bossContainer then bossContainer:Show() end
