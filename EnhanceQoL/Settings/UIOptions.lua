@@ -15,6 +15,8 @@ local HasFrameVisibilityOverride = addon.functions.HasFrameVisibilityOverride or
 local ACTION_BAR_FRAME_NAMES = constants.ACTION_BAR_FRAME_NAMES or {}
 local ACTION_BAR_ANCHOR_ORDER = constants.ACTION_BAR_ANCHOR_ORDER or {}
 local ACTION_BAR_ANCHOR_CONFIG = constants.ACTION_BAR_ANCHOR_CONFIG or {}
+local wipe = wipe
+local fontOrder = {}
 
 addon.db = addon.db or {}
 addon.db.actionBarHiddenHotkeys = type(addon.db.actionBarHiddenHotkeys) == "table" and addon.db.actionBarHiddenHotkeys or {}
@@ -53,7 +55,10 @@ local function buildFontDropdown()
 		end
 	end
 	local list, order = addon.functions.prepareListForDropdown(map)
-	list._order = order
+	wipe(fontOrder)
+	for i, key in ipairs(order) do
+		fontOrder[i] = key
+	end
 	return list
 end
 
@@ -123,7 +128,7 @@ local function createAnchorControls(category)
 		BOTTOMLEFT = L["bottomLeft"] or "Bottom Left",
 		BOTTOMRIGHT = L["bottomRight"] or "Bottom Right",
 	}
-	anchorOptions._order = ACTION_BAR_ANCHOR_ORDER
+	local anchorOrder = ACTION_BAR_ANCHOR_ORDER
 
 	for index = 1, #ACTION_BAR_FRAME_NAMES do
 		local label
@@ -136,15 +141,16 @@ local function createAnchorControls(category)
 		local dbKey = "actionBarAnchor" .. index
 		local defaultKey = "actionBarAnchorDefault" .. index
 
-		addon.functions.SettingsCreateDropdown(category, {
-			var = dbKey,
-			text = label,
-			list = anchorOptions,
-			default = addon.db[defaultKey] or ACTION_BAR_ANCHOR_ORDER[1],
-			get = function()
-				local current = addon.db[dbKey]
-				if not current or not ACTION_BAR_ANCHOR_CONFIG[current] then current = addon.db[defaultKey] end
-				if not current or not ACTION_BAR_ANCHOR_CONFIG[current] then current = ACTION_BAR_ANCHOR_ORDER[1] end
+			addon.functions.SettingsCreateDropdown(category, {
+				var = dbKey,
+				text = label,
+				list = anchorOptions,
+				order = anchorOrder,
+				default = addon.db[defaultKey] or ACTION_BAR_ANCHOR_ORDER[1],
+				get = function()
+					local current = addon.db[dbKey]
+					if not current or not ACTION_BAR_ANCHOR_CONFIG[current] then current = addon.db[defaultKey] end
+					if not current or not ACTION_BAR_ANCHOR_CONFIG[current] then current = ACTION_BAR_ANCHOR_ORDER[1] end
 				return current
 			end,
 			set = function(key)
@@ -186,12 +192,12 @@ end
 local function createLabelControls(category)
 	addon.functions.SettingsCreateHeadline(category, L["actionBarLabelGroupTitle"] or "Button text")
 
+	local outlineOrder = { "NONE", "OUTLINE", "THICKOUTLINE", "MONOCHROMEOUTLINE" }
 	local outlineOptions = {
 		NONE = L["fontOutlineNone"] or NONE,
 		OUTLINE = L["fontOutlineThin"] or "Outline",
 		THICKOUTLINE = L["fontOutlineThick"] or "Thick Outline",
 		MONOCHROMEOUTLINE = L["fontOutlineMono"] or "Monochrome Outline",
-		_order = { "NONE", "OUTLINE", "THICKOUTLINE", "MONOCHROMEOUTLINE" },
 	}
 
 	local macroOverride
@@ -229,6 +235,7 @@ local function createLabelControls(category)
 		var = "actionBarMacroFontFace",
 		text = L["actionBarMacroFontLabel"] or "Macro name font",
 		listFunc = buildFontDropdown,
+		order = fontOrder,
 		default = addon.variables.defaultFont,
 		get = function()
 			local current = addon.db.actionBarMacroFontFace or addon.variables.defaultFont
@@ -250,6 +257,7 @@ local function createLabelControls(category)
 		var = "actionBarMacroFontOutline",
 		text = L["actionBarFontOutlineLabel"] or "Font outline",
 		list = outlineOptions,
+		order = outlineOrder,
 		default = "OUTLINE",
 		get = function() return addon.db.actionBarMacroFontOutline or "OUTLINE" end,
 		set = function(key)
@@ -304,6 +312,7 @@ local function createLabelControls(category)
 		var = "actionBarHotkeyFontFace",
 		text = L["actionBarHotkeyFontLabel"] or "Keybind font",
 		listFunc = buildFontDropdown,
+		order = fontOrder,
 		default = addon.variables.defaultFont,
 		get = function()
 			local current = addon.db.actionBarHotkeyFontFace or addon.variables.defaultFont
@@ -325,6 +334,7 @@ local function createLabelControls(category)
 		var = "actionBarHotkeyFontOutline",
 		text = L["actionBarFontOutlineLabel"] or "Font outline",
 		list = outlineOptions,
+		order = outlineOrder,
 		default = "OUTLINE",
 		get = function() return addon.db.actionBarHotkeyFontOutline or "OUTLINE" end,
 		set = function(key)

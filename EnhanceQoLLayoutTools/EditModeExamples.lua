@@ -152,6 +152,7 @@ local examples = {
 			{
 				name = "Dropdown",
 				kind = SettingType.Dropdown,
+				height = 180,
 				field = "dropdown",
 				default = "Option A",
 				values = {
@@ -176,6 +177,7 @@ local examples = {
 			{
 				name = "Roles",
 				kind = SettingType.MultiDropdown,
+				height = 180,
 				field = "roles",
 				hideSummary = true,
 				default = { TANK = true, HEALER = true },
@@ -284,6 +286,7 @@ local examples = {
 				name = "Dropdown + Color",
 				kind = SettingType.DropdownColor,
 				field = "dropdownColorChoice",
+				height = 180,
 				default = "Default",
 				values = {
 					{ text = "Default", isRadio = true },

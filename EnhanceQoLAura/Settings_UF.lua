@@ -170,24 +170,25 @@ end
 
 local function showCopySettingsPopup(fromUnit, toUnit)
 	if not (fromUnit and toUnit and UF.CopySettings) then return end
-	StaticPopupDialogs[copyDialogKey] = StaticPopupDialogs[copyDialogKey] or {
-		text = "%s",
-		button1 = L["Copy"] or ACCEPT,
-		button2 = CANCEL,
-		hideOnEscape = true,
-		timeout = 0,
-		whileDead = 1,
-		preferredIndex = 3,
-		OnAccept = function(self, data)
-			local payload = data or self.data
-			if payload and payload.from and payload.to and UF.CopySettings then
-				if UF.CopySettings(payload.from, payload.to, { keepAnchor = true, keepEnabled = true }) then
-					refresh(payload.to)
-					refreshSettingsUI()
+	StaticPopupDialogs[copyDialogKey] = StaticPopupDialogs[copyDialogKey]
+		or {
+			text = "%s",
+			button1 = L["Copy"] or ACCEPT,
+			button2 = CANCEL,
+			hideOnEscape = true,
+			timeout = 0,
+			whileDead = 1,
+			preferredIndex = 3,
+			OnAccept = function(self, data)
+				local payload = data or self.data
+				if payload and payload.from and payload.to and UF.CopySettings then
+					if UF.CopySettings(payload.from, payload.to, { keepAnchor = true, keepEnabled = true }) then
+						refresh(payload.to)
+						refreshSettingsUI()
+					end
 				end
-			end
-		end,
-	}
+			end,
+		}
 	local dialog = StaticPopupDialogs[copyDialogKey]
 	if not dialog then return end
 	local fromLabel = copyFrameLabels[fromUnit] or fromUnit
@@ -240,6 +241,7 @@ local function radioDropdown(name, options, getter, setter, default, parentId)
 	return {
 		name = name,
 		kind = settingType.Dropdown,
+		height = 180,
 		parentId = parentId,
 		default = default,
 		generator = function(_, root)
@@ -346,13 +348,12 @@ local function buildUnitSettings(unit)
 	list[#list + 1] = {
 		name = L["Copy settings"] or "Copy settings",
 		kind = settingType.Dropdown,
+		height = 180,
 		parentId = "utility",
 		default = nil,
 		generator = function(_, root)
 			for _, opt in ipairs(copyOptions) do
-				root:CreateRadio(opt.label, function() return false end, function()
-					showCopySettingsPopup(opt.value, unit)
-				end)
+				root:CreateRadio(opt.label, function() return false end, function() showCopySettingsPopup(opt.value, unit) end)
 			end
 		end,
 		isEnabled = function() return #copyOptions > 0 end,
@@ -454,12 +455,19 @@ local function buildUnitSettings(unit)
 	local healthDef = def.health or {}
 
 	if not isBoss then
-		list[#list + 1] = checkbox(L["UFUseClassColor"] or "Use class color", function() return getValue(unit, { "health", "useClassColor" }, healthDef.useClassColor == true) == true end, function(val)
-			setValue(unit, { "health", "useClassColor" }, val and true or false)
-			if val then setValue(unit, { "health", "useCustomColor" }, false) end
-			refreshSelf()
-			refreshSettingsUI()
-		end, healthDef.useClassColor == true, "health", function() return getValue(unit, { "health", "useCustomColor" }, healthDef.useCustomColor == true) ~= true end)
+		list[#list + 1] = checkbox(
+			L["UFUseClassColor"] or "Use class color",
+			function() return getValue(unit, { "health", "useClassColor" }, healthDef.useClassColor == true) == true end,
+			function(val)
+				setValue(unit, { "health", "useClassColor" }, val and true or false)
+				if val then setValue(unit, { "health", "useCustomColor" }, false) end
+				refreshSelf()
+				refreshSettingsUI()
+			end,
+			healthDef.useClassColor == true,
+			"health",
+			function() return getValue(unit, { "health", "useCustomColor" }, healthDef.useCustomColor == true) ~= true end
+		)
 	end
 
 	list[#list + 1] = checkboxColor({
@@ -662,10 +670,16 @@ local function buildUnitSettings(unit)
 			},
 		})
 
-		list[#list + 1] = checkbox(L["Use absorb glow"] or "Use absorb glow", function() return getValue(unit, { "health", "useAbsorbGlow" }, healthDef.useAbsorbGlow ~= false) ~= false end, function(val)
-			setValue(unit, { "health", "useAbsorbGlow" }, val and true or false)
-			refresh()
-		end, healthDef.useAbsorbGlow ~= false, "absorb")
+		list[#list + 1] = checkbox(
+			L["Use absorb glow"] or "Use absorb glow",
+			function() return getValue(unit, { "health", "useAbsorbGlow" }, healthDef.useAbsorbGlow ~= false) ~= false end,
+			function(val)
+				setValue(unit, { "health", "useAbsorbGlow" }, val and true or false)
+				refresh()
+			end,
+			healthDef.useAbsorbGlow ~= false,
+			"absorb"
+		)
 
 		list[#list + 1] = checkbox(L["Show sample absorb"] or "Show sample absorb", function() return sampleAbsorb[unit] == true end, function(val)
 			sampleAbsorb[unit] = val and true or false

@@ -12,6 +12,8 @@ local cm = addon.CombatMeter
 local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_CombatMeter")
 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
 local TEXTURE_PATH = "Interface\\AddOns\\EnhanceQoLCombatMeter\\Texture\\"
+local wipe = wipe
+local barTextureOrder = {}
 
 -- TODO remove Combat Meter settings when WoW Midnight launches
 if addon.SettingsLayout and addon.SettingsLayout.characterInspectCategory then
@@ -152,7 +154,10 @@ if addon.SettingsLayout and addon.SettingsLayout.characterInspectCategory then
 			end
 		end
 		local sorted, order = addon.functions.prepareListForDropdown(all)
-		sorted._order = order
+		wipe(barTextureOrder)
+		for i, key in ipairs(order) do
+			barTextureOrder[i] = key
+		end
 		return sorted
 	end
 
@@ -161,6 +166,7 @@ if addon.SettingsLayout and addon.SettingsLayout.characterInspectCategory then
 		text = L["Bar Texture"],
 		default = TEXTURE_PATH .. "eqol_base_flat_8x8.tga",
 		listFunc = buildBarTextureOptions,
+		order = barTextureOrder,
 		get = function()
 			local list = buildBarTextureOptions()
 			local cur = addon.db["combatMeterBarTexture"] or (TEXTURE_PATH .. "eqol_base_flat_8x8.tga")

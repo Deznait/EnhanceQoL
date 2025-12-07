@@ -209,8 +209,8 @@ data = {
 				sType = "colorpicker",
 			},
 			{
-				list = { [1] = VIDEO_OPTIONS_LOW, [2] = VIDEO_OPTIONS_MEDIUM, [3] = VIDEO_OPTIONS_HIGH, [4] = VIDEO_OPTIONS_ULTRA, [5] = VIDEO_OPTIONS_ULTRA_HIGH, _order = { 1, 2, 3, 4, 5 } },
-
+				list = { [1] = VIDEO_OPTIONS_LOW, [2] = VIDEO_OPTIONS_MEDIUM, [3] = VIDEO_OPTIONS_HIGH, [4] = VIDEO_OPTIONS_ULTRA, [5] = VIDEO_OPTIONS_ULTRA_HIGH },
+				order = { 1, 2, 3, 4, 5 },
 				text = L["mouseTrailDensity"],
 				get = function() return addon.db["mouseTrailDensity"] or 1 end,
 				set = function(key)

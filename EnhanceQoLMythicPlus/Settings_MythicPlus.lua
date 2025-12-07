@@ -9,6 +9,7 @@ end
 
 local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_MythicPlus")
 local LSM = LibStub("LibSharedMedia-3.0")
+local wipe = wipe
 
 local cTeleports = addon.functions.SettingsCreateCategory(nil, L["Teleports"], nil, "Teleports")
 addon.SettingsLayout.teleportsCategory = cTeleports
@@ -127,6 +128,7 @@ if cPotion then
 		addon.functions.SettingsCreateCheckbox(cPotion, entry)
 	end
 
+	local potionTextureOrder = {}
 	local function buildPotionTextureOptions()
 		local map = {
 			["DEFAULT"] = DEFAULT,
@@ -144,7 +146,10 @@ if cPotion then
 		local sorted, order = addon.functions.prepareListForDropdown(noDefault)
 		sorted["DEFAULT"] = DEFAULT
 		table.insert(order, 1, "DEFAULT")
-		sorted._order = order
+		wipe(potionTextureOrder)
+		for i, key in ipairs(order) do
+			potionTextureOrder[i] = key
+		end
 		return sorted
 	end
 
@@ -153,6 +158,7 @@ if cPotion then
 		text = L["Bar Texture"],
 		default = "DEFAULT",
 		listFunc = buildPotionTextureOptions,
+		order = potionTextureOrder,
 		get = function()
 			local cur = addon.db["potionTrackerBarTexture"] or "DEFAULT"
 			local list = buildPotionTextureOptions()
@@ -236,13 +242,13 @@ if cMythic then
 		[3] = L["DBM / BigWigs Pull Timer"],
 		[4] = L["Both"],
 	})
-	listPull._order = orderPull
 	addon.functions.SettingsCreateDropdown(cMythic, {
 		var = "PullTimerType",
 		text = L["PullTimer"],
 		type = Settings.VarType.Number,
 		default = 2,
 		list = listPull,
+		order = orderPull,
 		get = function() return addon.db["PullTimerType"] or 1 end,
 		set = function(value) addon.db["PullTimerType"] = value end,
 		parent = true,
@@ -300,13 +306,13 @@ if cMythic then
 	local function isObjectiveEnabled() return objEnable and objEnable.setting and objEnable.setting:GetValue() == true end
 
 	local listObj, orderObj = addon.functions.prepareListForDropdown({ [1] = L["HideTracker"], [2] = L["collapse"] })
-	listObj._order = orderObj
 	addon.functions.SettingsCreateDropdown(cMythic, {
 		var = "mythicPlusObjectiveTrackerSetting",
 		text = L["mythicPlusObjectiveTrackerSetting"],
 		type = Settings.VarType.Number,
 		default = addon.db["mythicPlusObjectiveTrackerSetting"] or 1,
 		list = listObj,
+		order = orderObj,
 		get = function() return addon.db["mythicPlusObjectiveTrackerSetting"] or 1 end,
 		set = function(value)
 			addon.db["mythicPlusObjectiveTrackerSetting"] = value
@@ -359,6 +365,7 @@ if cMythic then
 			return addon.db["talentReminderSettings"][guid][specID]
 		end
 
+		local talentLoadoutOrders = {}
 		local function buildTalentLoadoutList(specID)
 			local source = (specID and addon.MythicPlus.variables.knownLoadout and addon.MythicPlus.variables.knownLoadout[specID]) or {}
 			local normalized = {}
@@ -367,7 +374,16 @@ if cMythic then
 			end
 			if not normalized["0"] then normalized["0"] = "" end
 			local list, order = addon.functions.prepareListForDropdown(normalized)
-			list._order = order
+			local orderTarget = talentLoadoutOrders[specID]
+			if orderTarget then
+				wipe(orderTarget)
+			else
+				orderTarget = {}
+				talentLoadoutOrders[specID] = orderTarget
+			end
+			for i, key in ipairs(order) do
+				orderTarget[i] = key
+			end
 			return list
 		end
 
@@ -478,6 +494,8 @@ if cMythic then
 
 		if #addon.MythicPlus.variables.specNames > 0 and #addon.MythicPlus.variables.seasonMapInfo > 0 then
 			for _, specData in ipairs(addon.MythicPlus.variables.specNames) do
+				local orderTable = talentLoadoutOrders[specData.value] or {}
+				talentLoadoutOrders[specData.value] = orderTable
 				addon.functions.SettingsCreateHeadline(cTalent, specData.text)
 				for _, mapData in ipairs(addon.MythicPlus.variables.seasonMapInfo) do
 					addon.functions.SettingsCreateDropdown(cTalent, {
@@ -486,6 +504,7 @@ if cMythic then
 						type = Settings.VarType.String,
 						default = "0",
 						listFunc = function() return buildTalentLoadoutList(specData.value) end,
+						order = orderTable,
 						get = function()
 							local specSettings = ensureTalentSettings(specData.value)
 							local current = specSettings and specSettings[mapData.id]

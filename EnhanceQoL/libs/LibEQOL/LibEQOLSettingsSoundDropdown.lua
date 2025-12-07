@@ -44,8 +44,7 @@ end
 
 local function NormalizeOptions(list, order)
 	if type(list) ~= "table" then return {} end
-	order = (type(order) == "table" and #order > 0 and order)
-		or (type(list._order) == "table" and #list._order > 0 and list._order)
+	order = (type(order) == "table" and #order > 0 and order) or nil
 
 	local normalized = {}
 	local usesIndex = #list > 0

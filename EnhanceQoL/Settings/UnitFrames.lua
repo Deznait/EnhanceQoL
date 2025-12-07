@@ -34,8 +34,17 @@ addon.functions.SettingsCreateHeadline(cUnitFrame, L["Health Text"])
 
 addon.functions.SettingsCreateText(cUnitFrame, "|cff99e599" .. string.format(L["HealthTextExplain2"], VIDEO_OPTIONS_DISABLED) .. "|r")
 
+local healthTextOrder = { "OFF", "PERCENT", "ABS", "BOTH" }
+local healthTextOptions = {
+	OFF = VIDEO_OPTIONS_DISABLED,
+	PERCENT = STATUS_TEXT_PERCENT,
+	ABS = STATUS_TEXT_VALUE,
+	BOTH = STATUS_TEXT_BOTH,
+}
+
 addon.functions.SettingsCreateDropdown(cUnitFrame, {
-	list = { OFF = VIDEO_OPTIONS_DISABLED, PERCENT = STATUS_TEXT_PERCENT, ABS = STATUS_TEXT_VALUE, BOTH = STATUS_TEXT_BOTH, _order = { "OFF", "PERCENT", "ABS", "BOTH" } },
+	list = healthTextOptions,
+	order = healthTextOrder,
 	text = L["PlayerHealthText"],
 	get = function() return addon.db["healthTextPlayerMode"] or "OFF" end,
 	set = function(key)
@@ -48,7 +57,8 @@ addon.functions.SettingsCreateDropdown(cUnitFrame, {
 	sType = "dropdown",
 })
 addon.functions.SettingsCreateDropdown(cUnitFrame, {
-	list = { OFF = VIDEO_OPTIONS_DISABLED, PERCENT = STATUS_TEXT_PERCENT, ABS = STATUS_TEXT_VALUE, BOTH = STATUS_TEXT_BOTH, _order = { "OFF", "PERCENT", "ABS", "BOTH" } },
+	list = healthTextOptions,
+	order = healthTextOrder,
 	text = L["TargetHealthText"],
 	get = function() return addon.db["healthTextTargetMode"] or "OFF" end,
 	set = function(key)
@@ -61,7 +71,8 @@ addon.functions.SettingsCreateDropdown(cUnitFrame, {
 	sType = "dropdown",
 })
 addon.functions.SettingsCreateDropdown(cUnitFrame, {
-	list = { OFF = VIDEO_OPTIONS_DISABLED, PERCENT = STATUS_TEXT_PERCENT, ABS = STATUS_TEXT_VALUE, BOTH = STATUS_TEXT_BOTH, _order = { "OFF", "PERCENT", "ABS", "BOTH" } },
+	list = healthTextOptions,
+	order = healthTextOrder,
 	text = L["BossHealthText"],
 	get = function() return addon.db["healthTextBossMode"] or "OFF" end,
 	set = function(key)

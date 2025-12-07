@@ -104,7 +104,7 @@ function LibEQOL_MultiDropdownMixin:SetOptions(list)
 			table.insert(normalized, self:CloneOption(option))
 		end
 	else
-		local orderedKeys = self.optionOrder or (type(list._order) == "table" and list._order or nil)
+		local orderedKeys = self.optionOrder
 		local seen = nil
 		if orderedKeys then
 			seen = {}

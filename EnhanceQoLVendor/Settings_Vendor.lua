@@ -10,6 +10,12 @@ end
 if not (addon.functions and addon.functions.SettingsCreateCategory) then return end
 
 local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_Vendor")
+local wipe = wipe
+local listOrders = {
+	vendorIncludeSellList = {},
+	vendorExcludeSellList = {},
+	vendorIncludeDestroyList = {},
+}
 
 local function isChecked(var)
 	local entry = addon.SettingsLayout.elements and addon.SettingsLayout.elements[var]
@@ -58,14 +64,19 @@ local function parseItemID(input)
 end
 
 local function buildList(listKey)
-	local list, order = {}, {}
+	local list = {}
+	local order = listOrders[listKey]
+	if order then
+		wipe(order)
+	else
+		order = {}
+	end
 	for id, name in pairs(addon.db[listKey] or {}) do
 		local key = tostring(id)
 		list[key] = string.format("%s (%s)", name or key, key)
 		table.insert(order, key)
 	end
 	table.sort(order, function(a, b) return list[a] < list[b] end)
-	list._order = order
 	return list
 end
 
@@ -364,6 +375,7 @@ addon.functions.SettingsCreateDropdown(cVendor, {
 	var = "vendorIncludeRemove",
 	text = REMOVE,
 	listFunc = function() return buildList("vendorIncludeSellList") end,
+	order = listOrders.vendorIncludeSellList,
 	default = "",
 	get = function() return "" end,
 	set = function(value) removeItemFromList("vendorIncludeSellList", value) end,
@@ -380,6 +392,7 @@ addon.functions.SettingsCreateDropdown(cVendor, {
 	var = "vendorExcludeRemove",
 	text = REMOVE,
 	listFunc = function() return buildList("vendorExcludeSellList") end,
+	order = listOrders.vendorExcludeSellList,
 	default = "",
 	get = function() return "" end,
 	set = function(value) removeItemFromList("vendorExcludeSellList", value) end,
@@ -433,6 +446,7 @@ local destroyChildren = {
 		parent = true,
 		parentCheck = function() return isChecked("vendorDestroyEnable") end,
 		listFunc = function() return buildList("vendorIncludeDestroyList") end,
+		order = listOrders.vendorIncludeDestroyList,
 		default = "",
 		get = function() return "" end,
 		set = function(value) removeItemFromList("vendorIncludeDestroyList", value) end,

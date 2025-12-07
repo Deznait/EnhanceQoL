@@ -10,6 +10,7 @@ end
 if not (addon.functions and addon.functions.SettingsCreateCategory) then return end
 
 local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_DrinkMacro")
+local wipe = wipe
 
 local function isCheckboxEnabled(var)
 	local entry = addon.SettingsLayout.elements and addon.SettingsLayout.elements[var]
@@ -241,6 +242,7 @@ local priorityLabels = {
 }
 
 local basePriorityOrder = { "stone", "potion", "combatpotion", "spell" }
+local priorityOrders = { {}, {}, {}, {} }
 
 local function priorityOptions(slot)
 	local used = {}
@@ -248,7 +250,10 @@ local function priorityOptions(slot)
 		local current = addon.db.healthPriorityOrder and addon.db.healthPriorityOrder[i]
 		if current and current ~= "none" then used[current] = true end
 	end
-	local list, order = {}, {}
+	local list = {}
+	local order = priorityOrders[slot] or {}
+	wipe(order)
+	priorityOrders[slot] = order
 	for _, key in ipairs(basePriorityOrder) do
 		if not used[key] then
 			if key == "spell" and not addon.db.healthUseCustomSpells then
@@ -261,7 +266,6 @@ local function priorityOptions(slot)
 	end
 	list["none"] = priorityLabels.none
 	table.insert(order, "none")
-	list._order = order
 	return list
 end
 
@@ -274,6 +278,7 @@ for i = 1, 4 do
 		parent = true,
 		element = healthEnable.element,
 		listFunc = function() return priorityOptions(i) end,
+		order = priorityOrders[i],
 		default = defaultOrder[i] or "none",
 		get = function()
 			ensureHealthPriority()
@@ -310,8 +315,8 @@ addon.functions.SettingsCreateDropdown(cDrink, {
 		["10"] = L["Reset: 10s"],
 		["30"] = L["Reset: 30s"],
 		["60"] = L["Reset: 60s"],
-		_order = { "combat", "target", "10", "30", "60" },
 	},
+	order = { "combat", "target", "10", "30", "60" },
 	default = "combat",
 	get = function() return addon.db.healthReset or "combat" end,
 	set = function(value)
@@ -332,6 +337,8 @@ addon.functions.SettingsCreateCheckbox(cDrink, {
 })
 
 local function customSpellsEnabled() return healthParentCheck() and addon.db.healthUseCustomSpells == true end
+
+local customSpellOrder = {}
 
 StaticPopupDialogs["EQOL_ADD_HEALTH_SPELL"] = StaticPopupDialogs["EQOL_ADD_HEALTH_SPELL"]
 	or {
@@ -384,17 +391,18 @@ addon.functions.SettingsCreateButton(cDrink, {
 })
 
 local function customSpellList()
-	local list, order = { [""] = "" }, { "" }
+	local list = { [""] = "" }
+	wipe(customSpellOrder)
+	table.insert(customSpellOrder, "")
 	local spells = addon.db.healthCustomSpells or {}
 	for _, sid in ipairs(spells) do
 		local info = C_Spell.GetSpellInfo(sid)
 		local name = info and info.name or tostring(sid)
 		local key = tostring(sid)
 		list[key] = string.format("%s (%s)", name, key)
-		table.insert(order, key)
+		table.insert(customSpellOrder, key)
 	end
-	table.sort(order, function(a, b) return list[a] < list[b] end)
-	list._order = order
+	table.sort(customSpellOrder, function(a, b) return list[a] < list[b] end)
 	return list
 end
 
@@ -405,6 +413,7 @@ addon.functions.SettingsCreateDropdown(cDrink, {
 	parent = true,
 	element = addon.SettingsLayout.elements["healthUseCustomSpells"] and addon.SettingsLayout.elements["healthUseCustomSpells"].element or healthEnable.element,
 	listFunc = customSpellList,
+	order = customSpellOrder,
 	default = "",
 	get = function() return "" end,
 	set = function(value)

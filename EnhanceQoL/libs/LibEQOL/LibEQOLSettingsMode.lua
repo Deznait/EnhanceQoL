@@ -447,7 +447,6 @@ function lib:CreateDropdown(cat, data)
 			end
 			if type(list) == "table" then
 				local orderedKeys = type(data.order) == "table" and data.order
-					or (type(list._order) == "table" and list._order)
 				local seen = nil
 				if orderedKeys then
 					seen = {}

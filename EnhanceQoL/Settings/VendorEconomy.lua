@@ -1,6 +1,9 @@
 local addonName, addon = ...
 
 local L = LibStub("AceLocale-3.0"):GetLocale(addonName)
+local wipe = wipe
+local mailboxContactsOrder = {}
+local moneyTrackerOrder = {}
 
 local cVendorEconomy = addon.functions.SettingsCreateCategory(nil, L["VendorsEconomy"], nil, "VendorsEconomy")
 addon.SettingsLayout.vendorEconomyCategory = cVendorEconomy
@@ -141,8 +144,10 @@ data = {
 			{
 				listFunc = function()
 					local contacts = addon.db["mailboxContacts"] or {}
-					local entries, order = {}, { "" }
+					local entries = {}
 					local tList = { [""] = "" }
+					wipe(mailboxContactsOrder)
+					table.insert(mailboxContactsOrder, "")
 
 					for key, rec in pairs(contacts) do
 						local class = rec and rec.class
@@ -159,11 +164,11 @@ data = {
 
 					for _, entry in ipairs(entries) do
 						tList[entry.key] = entry.label
-						order[#order + 1] = entry.key
+						table.insert(mailboxContactsOrder, entry.key)
 					end
-					tList._order = order
 					return tList
 				end,
+				order = mailboxContactsOrder,
 				text = L["mailboxRemoveHeader"],
 				get = function() return "" end,
 				set = function(key)
@@ -235,8 +240,10 @@ data = {
 			{
 				listFunc = function()
 					local tracker = addon.db["moneyTracker"] or {}
-					local entries, order = {}, { "" }
+					local entries = {}
 					local tList = { [""] = "" }
+					wipe(moneyTrackerOrder)
+					table.insert(moneyTrackerOrder, "")
 
 					for guid, v in pairs(tracker) do
 						if guid ~= UnitGUID("player") then
@@ -254,11 +261,11 @@ data = {
 
 					for _, entry in ipairs(entries) do
 						tList[entry.key] = entry.label
-						order[#order + 1] = entry.key
+						table.insert(moneyTrackerOrder, entry.key)
 					end
-					tList._order = order
 					return tList
 				end,
+				order = moneyTrackerOrder,
 				text = L["mailboxRemoveHeader"],
 				get = function() return "" end,
 				set = function(key)

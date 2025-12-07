@@ -400,12 +400,13 @@ local modifierList = {
 	ALT = ALT_KEY_TEXT,
 	CTRL = CTRL_KEY_TEXT,
 }
-modifierList._order = { "SHIFT", "ALT", "CTRL" }
+local modifierListOrder = { "SHIFT", "ALT", "CTRL" }
 
 addon.functions.SettingsCreateDropdown(cTooltip, {
 	var = "TooltipMythicScoreModifier",
 	text = MODIFIERS_COLON,
 	list = modifierList,
+	order = modifierListOrder,
 	get = function() return addon.db["TooltipMythicScoreModifier"] or "SHIFT" end,
 	set = function(value) addon.db["TooltipMythicScoreModifier"] = value end,
 	default = "SHIFT",

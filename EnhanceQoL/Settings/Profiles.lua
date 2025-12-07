@@ -1,13 +1,17 @@
 local addonName, addon = ...
 
 local L = LibStub("AceLocale-3.0"):GetLocale(addonName)
+local wipe = wipe
 
 local cProfiles = addon.functions.SettingsCreateCategory(nil, L["Profiles"], nil, "Profiles")
 addon.SettingsLayout.chatframeCategory = cProfiles
+local profileOrderActive, profileOrderGlobal, profileOrderCopy, profileOrderDelete = {}, {}, {}, {}
 
 -- Build a sorted dropdown list, optionally keeping an empty entry pinned to the top
-local function buildSortedProfileList(excludeFunc, includeEmpty)
-	local list, order = {}, {}
+local function buildSortedProfileList(orderTarget, excludeFunc, includeEmpty)
+	local list = {}
+	local order = orderTarget or {}
+	if orderTarget then wipe(orderTarget) end
 
 	if includeEmpty then
 		list[""] = ""
@@ -29,12 +33,12 @@ local function buildSortedProfileList(excludeFunc, includeEmpty)
 		table.insert(order, name)
 	end
 
-	list._order = order
 	return list
 end
 
 local data = {
-	listFunc = function() return buildSortedProfileList() end,
+	listFunc = function() return buildSortedProfileList(profileOrderActive) end,
+	order = profileOrderActive,
 	text = L["ProfileActive"],
 	get = function() return EnhanceQoLDB.profileKeys[UnitGUID("player")] or EnhanceQoLDB.profileGlobal end,
 	set = function(value)
@@ -49,7 +53,8 @@ local data = {
 addon.functions.SettingsCreateDropdown(cProfiles, data)
 
 data = {
-	listFunc = function() return buildSortedProfileList() end,
+	listFunc = function() return buildSortedProfileList(profileOrderGlobal) end,
+	order = profileOrderGlobal,
 	text = L["ProfileUseGlobal"],
 	get = function() return EnhanceQoLDB.profileGlobal end,
 	set = function(value) EnhanceQoLDB.profileGlobal = value end,
@@ -63,8 +68,9 @@ addon.functions.SettingsCreateText(cProfiles, L["ProfileUseGlobalDesc"])
 data = {
 	listFunc = function()
 		local currentProfile = EnhanceQoLDB.profileKeys[UnitGUID("player")]
-		return buildSortedProfileList(function(name) return name == currentProfile end, true)
+		return buildSortedProfileList(profileOrderCopy, function(name) return name == currentProfile end, true)
 	end,
+	order = profileOrderCopy,
 	text = L["ProfileCopy"],
 	get = function() return "" end,
 	set = function(value)
@@ -101,8 +107,9 @@ data = {
 	listFunc = function()
 		local currentProfile = EnhanceQoLDB.profileKeys[UnitGUID("player")]
 		local globalProfile = EnhanceQoLDB.profileGlobal
-		return buildSortedProfileList(function(name) return name == currentProfile or name == globalProfile end, true)
+		return buildSortedProfileList(profileOrderDelete, function(name) return name == currentProfile or name == globalProfile end, true)
 	end,
+	order = profileOrderDelete,
 	text = L["ProfileDelete"],
 	get = function() return "" end,
 	set = function(value)
