@@ -141,6 +141,10 @@ function addon.functions.SettingsCreateDropdown(cat, cbData)
 	return addon.SettingsLayout.elements[cbData.var]
 end
 
+function addon.functions.SettingsAttachNotify(setting, notify)
+	if notify and setting then SettingsLib:AttachNotify(setting, notify) end
+end
+
 ---------------------------------------------------------
 -- MultiDropdown
 ---------------------------------------------------------

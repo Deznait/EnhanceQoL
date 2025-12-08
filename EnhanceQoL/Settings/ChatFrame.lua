@@ -197,12 +197,12 @@ data = {
 						get = function() return addon.db.chatIMCustomSoundFile or "" end,
 						set = function(key) addon.db.chatIMCustomSoundFile = key end,
 						parentCheck = function()
-							return addon.SettingsLayout.elements["chatIMUseCustomSound"]
+							return (addon.SettingsLayout.elements["chatIMUseCustomSound"]
 								and addon.SettingsLayout.elements["chatIMUseCustomSound"].setting
 								and addon.SettingsLayout.elements["chatIMUseCustomSound"].setting:GetValue() == true
 								and addon.SettingsLayout.elements["enableChatIM"]
 								and addon.SettingsLayout.elements["enableChatIM"].setting
-								and addon.SettingsLayout.elements["enableChatIM"].setting:GetValue() == true
+								and addon.SettingsLayout.elements["enableChatIM"].setting:GetValue() == true) or false
 						end,
 						parent = true,
 						sType = "sounddropdown",

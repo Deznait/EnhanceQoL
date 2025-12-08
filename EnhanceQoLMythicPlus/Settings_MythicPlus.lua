@@ -440,7 +440,14 @@ if cMythic then
 			func = function(v) addon.db["talentReminderUseCustomSound"] = v end,
 			parent = true,
 			element = soundDifference.element,
-			parentCheck = function() return isTalentReminderEnabled() and isSoundReminderEnabled() end,
+			parentCheck = function()
+				return addon.SettingsLayout.elements["talentReminderEnabled"]
+					and addon.SettingsLayout.elements["talentReminderEnabled"].setting
+					and addon.SettingsLayout.elements["talentReminderEnabled"].setting:GetValue() == true
+					and addon.SettingsLayout.elements["talentReminderSoundOnDifference"]
+					and addon.SettingsLayout.elements["talentReminderSoundOnDifference"].setting
+					and addon.SettingsLayout.elements["talentReminderSoundOnDifference"].setting:GetValue() == true
+			end,
 		})
 
 		addon.functions.SettingsCreateSoundDropdown(cTalent, {
@@ -459,7 +466,7 @@ if cMythic then
 				if file then PlaySoundFile(file, "Master") end
 			end,
 			parent = true,
-			element = customSound and customSound.element or soundDifference.element,
+			element = customSound.element,
 			parentCheck = function() return isTalentReminderEnabled() and isSoundReminderEnabled() and addon.db["talentReminderUseCustomSound"] == true end,
 		})
 
@@ -474,6 +481,10 @@ if cMythic then
 			element = talentEnable.element,
 			parentCheck = isTalentReminderEnabled,
 		})
+
+		addon.functions.SettingsAttachNotify(talentEnable.setting, "talentReminderSoundOnDifference")
+		addon.functions.SettingsAttachNotify(talentEnable.setting, "talentReminderUseCustomSound")
+		addon.functions.SettingsAttachNotify(soundDifference.setting, "talentReminderUseCustomSound")
 
 		addon.functions.SettingsCreateText(cTalent, "|cff99e599" .. L["talentReminderHint"]:format(CRF_EDIT_MODE) .. "|r")
 
