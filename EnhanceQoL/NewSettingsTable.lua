@@ -22,4 +22,10 @@ addon.variables.NewVersionTableEQOL = {
 	["EQOL_ActionBar"] = true,
 	["EQOL_actionBarHideBorders"] = true,
 	["EQOL_actionBarHideAssistedRotation"] = true,
+
+	["EQOL_Frames"] = true,
+	["EQOL_cooldownViewerVisibility_EssentialCooldownViewer"] = true,
+	["EQOL_cooldownViewerVisibility_UtilityCooldownViewer"] = true,
+	["EQOL_cooldownViewerVisibility_BuffBarCooldownViewer"] = true,
+	["EQOL_cooldownViewerVisibility_BuffIconCooldownViewer"] = true,
 }

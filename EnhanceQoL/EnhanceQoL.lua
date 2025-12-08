@@ -112,12 +112,12 @@ local COOLDOWN_VIEWER_FRAMES = {
 addon.constants.COOLDOWN_VIEWER_FRAMES = COOLDOWN_VIEWER_FRAMES
 
 local COOLDOWN_VIEWER_VISIBILITY_MODES = {
-	NONE = "NONE",
-	HIDE_WHILE_MOUNTED = "HIDE_WHILE_MOUNTED",
+	IN_COMBAT = "IN_COMBAT",
+	WHILE_MOUNTED = "WHILE_MOUNTED",
+	WHILE_NOT_MOUNTED = "WHILE_NOT_MOUNTED",
+	MOUSEOVER = "MOUSEOVER",
 }
 addon.constants.COOLDOWN_VIEWER_VISIBILITY_MODES = COOLDOWN_VIEWER_VISIBILITY_MODES
-
-local COOLDOWN_VIEWER_MOUNT_DRIVER = "[mounted] hide; [stance:3] hide; [stance:6] hide; show"
 
 local DEFAULT_BUTTON_SINK_COLUMNS = 4
 
@@ -1173,29 +1173,94 @@ local function IsCooldownViewerEnabled()
 end
 addon.functions.IsCooldownViewerEnabled = IsCooldownViewerEnabled
 
-local function sanitizeCooldownViewerMode(mode)
-	if mode == COOLDOWN_VIEWER_VISIBILITY_MODES.HIDE_WHILE_MOUNTED then return mode end
-	return COOLDOWN_VIEWER_VISIBILITY_MODES.NONE
+local function normalizeCooldownViewerConfigValue(val, acc)
+	acc = acc or {}
+	if val == COOLDOWN_VIEWER_VISIBILITY_MODES.IN_COMBAT then acc[COOLDOWN_VIEWER_VISIBILITY_MODES.IN_COMBAT] = true end
+	if val == COOLDOWN_VIEWER_VISIBILITY_MODES.WHILE_MOUNTED then acc[COOLDOWN_VIEWER_VISIBILITY_MODES.WHILE_MOUNTED] = true end
+	if val == COOLDOWN_VIEWER_VISIBILITY_MODES.WHILE_NOT_MOUNTED then acc[COOLDOWN_VIEWER_VISIBILITY_MODES.WHILE_NOT_MOUNTED] = true end
+	if val == COOLDOWN_VIEWER_VISIBILITY_MODES.MOUSEOVER then acc[COOLDOWN_VIEWER_VISIBILITY_MODES.MOUSEOVER] = true end
+	-- Legacy mapping: "hide while mounted" -> show while not mounted
+	if val == "HIDE_WHILE_MOUNTED" then acc[COOLDOWN_VIEWER_VISIBILITY_MODES.WHILE_NOT_MOUNTED] = true end
+	if val == "HIDE_IN_COMBAT" then acc[COOLDOWN_VIEWER_VISIBILITY_MODES.IN_COMBAT] = nil end
+	return acc
 end
 
-local function applyCooldownViewerMode(frameName, mode)
+local function sanitizeCooldownViewerConfig(cfg)
+	if type(cfg) == "table" then
+		local result
+		for key, value in pairs(cfg) do
+			if value == true then result = normalizeCooldownViewerConfigValue(key, result or {}) end
+		end
+		return result
+	end
+	if type(cfg) == "string" then return normalizeCooldownViewerConfigValue(cfg, {}) end
+	return nil
+end
+
+local function IsInDruidTravelForm()
+	local class = addon.variables and addon.variables.unitClass
+	if not class and UnitClass then
+		local _, eng = UnitClass("player")
+		class = eng
+	end
+	if not class or class ~= "DRUID" then return false end
+	if not GetShapeshiftForm then return false end
+	local form = GetShapeshiftForm()
+	return form == 3 or form == 6
+end
+
+local function computeCooldownViewerHidden(cfg, state)
+	if not cfg or not next(cfg) then return false end
+
+	local mounted = (IsMounted and IsMounted()) or IsInDruidTravelForm()
+	local inCombat = (InCombatLockdown and InCombatLockdown()) or (UnitAffectingCombat and UnitAffectingCombat("player"))
+	local hovered = state and state.hovered
+
+	local shouldShow = false
+	if cfg[COOLDOWN_VIEWER_VISIBILITY_MODES.IN_COMBAT] and inCombat then shouldShow = true end
+	if cfg[COOLDOWN_VIEWER_VISIBILITY_MODES.WHILE_MOUNTED] and mounted then shouldShow = true end
+	if cfg[COOLDOWN_VIEWER_VISIBILITY_MODES.WHILE_NOT_MOUNTED] and not mounted then shouldShow = true end
+	if cfg[COOLDOWN_VIEWER_VISIBILITY_MODES.MOUSEOVER] and hovered then shouldShow = true end
+
+	return not shouldShow
+end
+
+local function IsCooldownViewerInEditMode()
+	if addon.variables and addon.variables.cooldownViewerEditMode ~= nil then return addon.variables.cooldownViewerEditMode end
+	if addon.EditMode and addon.EditMode.IsInEditMode then
+		local ok, result = pcall(addon.EditMode.IsInEditMode, addon.EditMode)
+		if ok then return result end
+	end
+	return false
+end
+
+local function applyCooldownViewerMode(frameName, cfg)
 	local frame = frameName and _G[frameName]
 	if not frame then return false end
 
-	local expression
-	if mode == COOLDOWN_VIEWER_VISIBILITY_MODES.HIDE_WHILE_MOUNTED then expression = COOLDOWN_VIEWER_MOUNT_DRIVER end
-
-	ApplyUnitFrameStateDriver(frame, expression)
-	if not expression then
-		if InCombatLockdown and InCombatLockdown() then
-			addon.variables = addon.variables or {}
-			addon.variables.pendingCooldownViewerShow = addon.variables.pendingCooldownViewerShow or {}
-			addon.variables.pendingCooldownViewerShow[frame] = true
-			EnsureCooldownViewerWatcher()
-		elseif frame.Show and not frame:IsShown() then
-			frame:Show()
+	addon.variables = addon.variables or {}
+	addon.variables.cooldownViewerStates = addon.variables.cooldownViewerStates or {}
+	local state = addon.variables.cooldownViewerStates[frame]
+	if not state then
+		state = { frame = frame, hovered = false }
+		addon.variables.cooldownViewerStates[frame] = state
+		if frame.HookScript then
+			frame:HookScript("OnEnter", function()
+				state.hovered = true
+				if addon.functions.ApplyCooldownViewerVisibility then addon.functions.ApplyCooldownViewerVisibility() end
+			end)
+			frame:HookScript("OnLeave", function()
+				state.hovered = false
+				if addon.functions.ApplyCooldownViewerVisibility then addon.functions.ApplyCooldownViewerVisibility() end
+			end)
 		end
 	end
+
+	local shouldHide = computeCooldownViewerHidden(cfg, state)
+	if IsCooldownViewerInEditMode() then shouldHide = false end
+
+	local targetAlpha = shouldHide and 0 or 1
+	if frame:GetAlpha() ~= targetAlpha then frame:SetAlpha(targetAlpha) end
 	return true
 end
 
@@ -1207,16 +1272,27 @@ end
 
 function addon.functions.GetCooldownViewerVisibility(frameName)
 	local db = ensureCooldownViewerDb()
-	return sanitizeCooldownViewerMode(db[frameName])
+	local sanitized = sanitizeCooldownViewerConfig(db[frameName])
+	if not sanitized then return nil end
+	local copy = {}
+	for k, v in pairs(sanitized) do
+		if v == true then copy[k] = true end
+	end
+	return copy
 end
 
-function addon.functions.SetCooldownViewerVisibility(frameName, mode)
+function addon.functions.SetCooldownViewerVisibility(frameName, key, shouldSelect)
 	local db = ensureCooldownViewerDb()
-	local sanitized = sanitizeCooldownViewerMode(mode)
-	if sanitized == COOLDOWN_VIEWER_VISIBILITY_MODES.NONE then
-		db[frameName] = nil
+	local current = sanitizeCooldownViewerConfig(db[frameName]) or {}
+	if shouldSelect then
+		current = normalizeCooldownViewerConfigValue(key, current)
 	else
-		db[frameName] = sanitized
+		current[key] = nil
+	end
+	if current and next(current) then
+		db[frameName] = current
+	else
+		db[frameName] = nil
 	end
 	if addon.functions.ApplyCooldownViewerVisibility then addon.functions.ApplyCooldownViewerVisibility() end
 end
@@ -1242,25 +1318,17 @@ function addon.functions.ApplyCooldownViewerVisibility()
 	addon.variables = addon.variables or {}
 	local enabled = IsCooldownViewerEnabled()
 	local missingFrame = false
-	local pendingShow = addon.variables.pendingCooldownViewerShow
 
 	for _, frameName in ipairs(COOLDOWN_VIEWER_FRAMES) do
-		local mode = addon.functions.GetCooldownViewerVisibility(frameName)
-		if not enabled then mode = COOLDOWN_VIEWER_VISIBILITY_MODES.NONE end
-		if not applyCooldownViewerMode(frameName, mode) then missingFrame = true end
+		local cfg = addon.functions.GetCooldownViewerVisibility(frameName)
+		if not enabled then cfg = nil end
+		if not applyCooldownViewerMode(frameName, cfg) then missingFrame = true end
 	end
 
 	if enabled and missingFrame then
 		scheduleCooldownViewerReapply()
 	elseif addon.variables then
 		addon.variables.cooldownViewerRetryCount = nil
-	end
-
-	if pendingShow and not (InCombatLockdown and InCombatLockdown()) then
-		for frame in pairs(pendingShow) do
-			if frame and frame.Show then frame:Show() end
-		end
-		addon.variables.pendingCooldownViewerShow = nil
 	end
 end
 
@@ -1273,20 +1341,37 @@ local function EnsureCooldownViewerWatcher()
 	watcher:RegisterEvent("COOLDOWN_VIEWER_DATA_LOADED")
 	watcher:RegisterEvent("CVAR_UPDATE")
 	watcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+	watcher:RegisterEvent("PLAYER_REGEN_DISABLED")
+	watcher:RegisterEvent("PLAYER_MOUNT_DISPLAY_CHANGED")
+	watcher:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
 	watcher:SetScript("OnEvent", function(_, event, name)
 		if event == "CVAR_UPDATE" and name ~= "cooldownViewerEnabled" then return end
 		if addon.variables then addon.variables.cooldownViewerRetryCount = nil end
-		if event == "PLAYER_REGEN_ENABLED" and addon.variables and addon.variables.pendingCooldownViewerShow then
-			for frame in pairs(addon.variables.pendingCooldownViewerShow) do
-				if frame and frame.Show then frame:Show() end
-			end
-			addon.variables.pendingCooldownViewerShow = nil
-		end
 		if addon.functions.ApplyCooldownViewerVisibility then addon.functions.ApplyCooldownViewerVisibility() end
 	end)
 	addon.variables.cooldownViewerWatcher = watcher
 end
 addon.functions.EnsureCooldownViewerWatcher = EnsureCooldownViewerWatcher
+
+local function EnsureCooldownViewerEditCallbacks()
+	addon.variables = addon.variables or {}
+	if addon.variables.cooldownViewerEditHooked then return end
+	if not addon.EditMode or not addon.EditMode.lib or not addon.EditMode.lib.RegisterCallback then return end
+
+	local owner = addon.variables.cooldownViewerEditOwner or {}
+	addon.variables.cooldownViewerEditOwner = owner
+	local function refreshEditModeFlag(active)
+		addon.variables.cooldownViewerEditMode = active and true or false
+		if addon.functions.ApplyCooldownViewerVisibility then addon.functions.ApplyCooldownViewerVisibility() end
+	end
+
+	addon.EditMode.lib:RegisterCallback("enter", function() refreshEditModeFlag(true) end, owner)
+	addon.EditMode.lib:RegisterCallback("exit", function() refreshEditModeFlag(false) end, owner)
+
+	addon.variables.cooldownViewerEditMode = addon.EditMode:IsInEditMode()
+	addon.variables.cooldownViewerEditHooked = true
+end
+addon.functions.EnsureCooldownViewerEditCallbacks = EnsureCooldownViewerEditCallbacks
 
 local hookedButtons = {}
 local EnsureCooldownViewerWatcher -- forward declaration
@@ -2273,6 +2358,7 @@ local function initUnitFrame()
 
 	if addon.functions.ApplyCooldownViewerVisibility then addon.functions.ApplyCooldownViewerVisibility() end
 	if addon.functions.EnsureCooldownViewerWatcher then addon.functions.EnsureCooldownViewerWatcher() end
+	if addon.functions.EnsureCooldownViewerEditCallbacks then addon.functions.EnsureCooldownViewerEditCallbacks() end
 end
 
 local function initBagsFrame()

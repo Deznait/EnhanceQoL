@@ -12,7 +12,7 @@ local RefreshAllActionBarAnchors = addon.functions.RefreshAllActionBarAnchors or
 local GetVisibilityRuleMetadata = addon.functions.GetVisibilityRuleMetadata or function() return {} end
 local HasFrameVisibilityOverride = addon.functions.HasFrameVisibilityOverride or function() return false end
 local SetCooldownViewerVisibility = addon.functions.SetCooldownViewerVisibility or function() end
-local GetCooldownViewerVisibility = addon.functions.GetCooldownViewerVisibility or function() return "NONE" end
+local GetCooldownViewerVisibility = addon.functions.GetCooldownViewerVisibility or function() return nil end
 local IsCooldownViewerEnabled = addon.functions.IsCooldownViewerEnabled or function() return false end
 
 local ACTION_BAR_FRAME_NAMES = constants.ACTION_BAR_FRAME_NAMES or {}
@@ -508,15 +508,13 @@ end
 local function createCooldownViewerDropdowns(category)
 	if not category or #COOLDOWN_VIEWER_FRAMES == 0 then return end
 
-	addon.functions.SettingsCreateHeadline(category, L["cooldownManagerHeader"] or "Cooldown Manager")
+	addon.functions.SettingsCreateHeadline(category, L["cooldownManagerHeader"] or "Show when")
 
-	local dropdownValues = {
-		[COOLDOWN_VIEWER_VISIBILITY_MODES.NONE] = L["cooldownManagerNoOverride"] or NONE,
-		[COOLDOWN_VIEWER_VISIBILITY_MODES.HIDE_WHILE_MOUNTED] = L["cooldownManagerHideMounted"] or "Hide while mounted",
-	}
-	local dropdownOrder = {
-		COOLDOWN_VIEWER_VISIBILITY_MODES.NONE,
-		COOLDOWN_VIEWER_VISIBILITY_MODES.HIDE_WHILE_MOUNTED,
+	local options = {
+		{ value = COOLDOWN_VIEWER_VISIBILITY_MODES.IN_COMBAT, text = L["cooldownManagerShowCombat"] or "In combat" },
+		{ value = COOLDOWN_VIEWER_VISIBILITY_MODES.WHILE_MOUNTED, text = L["cooldownManagerShowMounted"] or "Mounted" },
+		{ value = COOLDOWN_VIEWER_VISIBILITY_MODES.WHILE_NOT_MOUNTED, text = L["cooldownManagerShowNotMounted"] or "Not mounted" },
+		{ value = COOLDOWN_VIEWER_VISIBILITY_MODES.MOUSEOVER, text = L["cooldownManagerShowMouseover"] or "On mouseover" },
 	}
 	local labels = {
 		EssentialCooldownViewer = L["cooldownViewerEssential"] or "Essential Cooldown Viewer",
@@ -526,24 +524,27 @@ local function createCooldownViewerDropdowns(category)
 	}
 
 	local function dropdownEnabled() return IsCooldownViewerEnabled() end
-	local desc = L["cooldownManagerHideMountedDesc"] or "Requires the Cooldown Viewer to be enabled (cooldownViewerEnabled = 1)."
+	local desc = L["cooldownManagerShowDesc"] or "Requires the Cooldown Viewer to be enabled (cooldownViewerEnabled = 1). Visible while any selected condition is true."
 
 	for _, frameName in ipairs(COOLDOWN_VIEWER_FRAMES) do
 		local label = labels[frameName] or frameName
-		addon.functions.SettingsCreateDropdown(category, {
+		addon.functions.SettingsCreateMultiDropdown(category, {
 			var = "cooldownViewerVisibility_" .. tostring(frameName),
 			text = label,
-			list = dropdownValues,
-			order = dropdownOrder,
-			default = COOLDOWN_VIEWER_VISIBILITY_MODES.NONE,
-			get = function()
-				local cur = GetCooldownViewerVisibility(frameName)
-				if not dropdownValues[cur] then cur = COOLDOWN_VIEWER_VISIBILITY_MODES.NONE end
-				return cur
+			options = options,
+			hideSummary = true,
+			isSelectedFunc = function(key)
+				local cfg = GetCooldownViewerVisibility(frameName)
+				return cfg and cfg[key] == true
 			end,
-			set = function(key)
-				if not dropdownValues[key] then key = COOLDOWN_VIEWER_VISIBILITY_MODES.NONE end
-				SetCooldownViewerVisibility(frameName, key)
+			setSelectedFunc = function(key, shouldSelect) SetCooldownViewerVisibility(frameName, key, shouldSelect) end,
+			getSelection = function() return GetCooldownViewerVisibility(frameName) or {} end,
+			setSelection = function(map)
+				for _, opt in ipairs(options) do
+					local key = opt.value
+					local desired = map and map[key] == true
+					SetCooldownViewerVisibility(frameName, key, desired)
+				end
 			end,
 			isEnabled = dropdownEnabled,
 			desc = desc,
