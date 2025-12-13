@@ -556,7 +556,7 @@ local function isPermanentAura(aura, unitToken)
 	if C_UnitAuras.DoesAuraHaveExpirationTime then
 		local tmpDurRes = C_UnitAuras.DoesAuraHaveExpirationTime(unitToken, aura.auraInstanceID)
 		if issecretvalue(tmpDurRes) then return false end
-		return tmpDurRes
+		return not tmpDurRes
 	end
 	if issecretvalue and issecretvalue(duration) then return false end
 	if duration and duration > 0 then return false end
