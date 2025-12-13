@@ -553,7 +553,11 @@ local function isPermanentAura(aura, unitToken)
 	local expiration = aura.expirationTime
 	unitToken = unitToken or "target"
 
-	if C_UnitAuras.DoesAuraHaveExpirationTime then return C_UnitAuras.DoesAuraHaveExpirationTime(unitToken, aura.auraInstanceID) end
+	if C_UnitAuras.DoesAuraHaveExpirationTime then
+		local tmpDurRes = C_UnitAuras.DoesAuraHaveExpirationTime(unitToken, aura.auraInstanceID)
+		if issecretvalue(tmpDurRes) then return false end
+		return tmpDurRes
+	end
 	if issecretvalue and issecretvalue(duration) then return false end
 	if duration and duration > 0 then return false end
 	if expiration and expiration > 0 then return false end
@@ -625,6 +629,10 @@ local function applyAuraToButton(btn, aura, ac, isDebuff, unitToken)
 	btn.cd:SetHideCountdownNumbers(ac.showCooldown == false)
 	if issecretvalue and issecretvalue(aura.applications) or aura.applications and aura.applications > 1 then
 		local appStacks = aura.applications
+		if C_UnitAuras.GetAuraApplicationDisplayCount then
+			appStacks = C_UnitAuras.GetAuraApplicationDisplayCount(unitToken, aura.auraInstanceID, 2, 1000) -- TODO actual 4th param is required because otherwise it's always "*" this always get's the right stack shown
+		end
+
 		btn.count:SetText(appStacks)
 		btn.count:Show()
 	else
