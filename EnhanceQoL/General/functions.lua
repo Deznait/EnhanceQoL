@@ -741,17 +741,17 @@ local function updateButtonInfo(itemButton, bag, slot, frameName)
 						itemButton.ItemBoundType = itemButton:CreateFontString(nil, "ARTWORK")
 						itemButton.ItemBoundType:SetDrawLayer("ARTWORK", 1)
 						itemButton.ItemBoundType:SetFont(addon.variables.defaultFont, 10, "OUTLINE")
-					itemButton.ItemBoundType:SetShadowOffset(2, 2)
-					itemButton.ItemBoundType:SetShadowColor(0, 0, 0, 1)
-				end
+						itemButton.ItemBoundType:SetShadowOffset(2, 2)
+						itemButton.ItemBoundType:SetShadowColor(0, 0, 0, 1)
+					end
 
-				itemButton.ItemBoundType:ClearAllPoints()
-				addon.functions.ApplyBagBoundPosition(itemButton.ItemBoundType, itemButton, addon.db["bagIlvlPosition"])
-				itemButton.ItemBoundType:SetFormattedText(bType)
-				itemButton.ItemBoundType:Show()
-			elseif itemButton.ItemBoundType then
-				itemButton.ItemBoundType:Hide()
-			end
+					itemButton.ItemBoundType:ClearAllPoints()
+					addon.functions.ApplyBagBoundPosition(itemButton.ItemBoundType, itemButton, addon.db["bagIlvlPosition"])
+					itemButton.ItemBoundType:SetFormattedText(bType)
+					itemButton.ItemBoundType:Show()
+				elseif itemButton.ItemBoundType then
+					itemButton.ItemBoundType:Hide()
+				end
 			elseif itemButton.ItemLevelText then
 				if itemButton.ItemBoundType then itemButton.ItemBoundType:Hide() end
 				if itemButton.ItemUpgradeIcon then itemButton.ItemUpgradeIcon:Hide() end

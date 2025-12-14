@@ -724,7 +724,9 @@ local function checkItem(tooltip, id, name, guid)
 		end
 	end
 
-	if id then
+	local showItemID = addon.db["TooltipShowItemID"]
+
+	if showItemID and id then
 		if first then
 			tooltip:AddLine(" ")
 			first = false

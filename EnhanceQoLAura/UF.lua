@@ -253,6 +253,10 @@ local defaults = {
 			separateDebuffAnchor = false,
 			debuffAnchor = nil, -- falls back to anchor
 			debuffOffset = nil, -- falls back to offset
+			countAnchor = "BOTTOMRIGHT",
+			countOffset = { x = -2, y = 2 },
+			countFontSize = nil,
+			countFontOutline = nil,
 		},
 		cast = {
 			enabled = true,
@@ -614,6 +618,20 @@ local function ensureAuraButton(container, icons, index, ac)
 	return btn, icons
 end
 
+local function styleAuraCount(btn, ac)
+	if not btn or not btn.count then return end
+	ac = ac or {}
+	local anchor = ac.countAnchor or "BOTTOMRIGHT"
+	local off = ac.countOffset or { x = -2, y = 2 }
+	btn.count:ClearAllPoints()
+	btn.count:SetPoint(anchor, btn.overlay or btn, anchor, off.x or 0, off.y or 0)
+	local fontPath = ac.countFont and getFont(ac.countFont) or nil
+	local _, curSize, curFlags = btn.count:GetFont()
+	local size = ac.countFontSize or curSize or 14
+	local flags = ac.countFontOutline or curFlags
+	if fontPath or size or flags then btn.count:SetFont(fontPath or getFont(), size, flags) end
+end
+
 local function applyAuraToButton(btn, aura, ac, isDebuff, unitToken)
 	if not btn or not aura then return end
 	unitToken = unitToken or "target"
@@ -627,6 +645,7 @@ local function applyAuraToButton(btn, aura, ac, isDebuff, unitToken)
 		btn.cd:SetCooldown(aura.expirationTime - aura.duration, aura.duration, aura.timeMod)
 	end
 	btn.cd:SetHideCountdownNumbers(ac.showCooldown == false)
+	styleAuraCount(btn, ac)
 	if issecretvalue and issecretvalue(aura.applications) or aura.applications and aura.applications > 1 then
 		local appStacks = aura.applications
 		if C_UnitAuras.GetAuraApplicationDisplayCount then
@@ -1057,6 +1076,10 @@ do
 		separateDebuffAnchor = false,
 		debuffAnchor = nil,
 		debuffOffset = nil,
+		countAnchor = "BOTTOMRIGHT",
+		countOffset = { x = -2, y = 2 },
+		countFontSize = nil,
+		countFontOutline = nil,
 	}
 	defaults.target = targetDefaults
 

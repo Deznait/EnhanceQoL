@@ -1431,6 +1431,78 @@ local function buildUnitSettings(unit)
 			refresh()
 		end, auraDef.showCooldown ~= false, "auras")
 
+		list[#list + 1] = slider(L["Aura stack size"] or "Aura stack size", 8, 32, 1, function() return getValue(unit, { "auraIcons", "countFontSize" }, auraDef.countFontSize or 14) end, function(val)
+			setValue(unit, { "auraIcons", "countFontSize" }, val or 14)
+			refresh()
+		end, auraDef.countFontSize or 14, "auras", true)
+
+		local stackOutlineOptions = {
+			{ value = "NONE", label = L["None"] or "None" },
+			{ value = "OUTLINE", label = L["Outline"] or "Outline" },
+			{ value = "THICKOUTLINE", label = L["Thick outline"] or "Thick outline" },
+			{ value = "MONOCHROMEOUTLINE", label = L["Monochrome outline"] or "Monochrome outline" },
+		}
+		list[#list + 1] = radioDropdown(
+			L["Aura stack outline"] or "Aura stack outline",
+			stackOutlineOptions,
+			function() return getValue(unit, { "auraIcons", "countFontOutline" }, auraDef.countFontOutline or "OUTLINE") end,
+			function(val)
+				setValue(unit, { "auraIcons", "countFontOutline" }, val or nil)
+				refresh()
+			end,
+			auraDef.countFontOutline or "OUTLINE",
+			"auras"
+		)
+
+		local stackAnchorOptions = {
+			{ value = "TOPLEFT", label = L["Top left"] or "Top left" },
+			{ value = "TOPRIGHT", label = L["Top right"] or "Top right" },
+			{ value = "BOTTOMLEFT", label = L["Bottom left"] or "Bottom left" },
+			{ value = "BOTTOMRIGHT", label = L["Bottom right"] or "Bottom right" },
+			{ value = "CENTER", label = L["Center"] or "Center" },
+		}
+		list[#list + 1] = radioDropdown(
+			L["Aura stack position"] or "Aura stack position",
+			stackAnchorOptions,
+			function() return getValue(unit, { "auraIcons", "countAnchor" }, auraDef.countAnchor or "BOTTOMRIGHT") end,
+			function(val)
+				setValue(unit, { "auraIcons", "countAnchor" }, val or "BOTTOMRIGHT")
+				refresh()
+			end,
+			auraDef.countAnchor or "BOTTOMRIGHT",
+			"auras"
+		)
+
+		list[#list + 1] = slider(
+			L["Aura stack offset X"] or "Aura stack offset X",
+			-50,
+			50,
+			1,
+			function() return getValue(unit, { "auraIcons", "countOffset", "x" }, (auraDef.countOffset and auraDef.countOffset.x) or -2) end,
+			function(val)
+				setValue(unit, { "auraIcons", "countOffset", "x" }, val or 0)
+				refresh()
+			end,
+			(auraDef.countOffset and auraDef.countOffset.x) or -2,
+			"auras",
+			true
+		)
+
+		list[#list + 1] = slider(
+			L["Aura stack offset Y"] or "Aura stack offset Y",
+			-50,
+			50,
+			1,
+			function() return getValue(unit, { "auraIcons", "countOffset", "y" }, (auraDef.countOffset and auraDef.countOffset.y) or 2) end,
+			function(val)
+				setValue(unit, { "auraIcons", "countOffset", "y" }, val or 0)
+				refresh()
+			end,
+			(auraDef.countOffset and auraDef.countOffset.y) or 2,
+			"auras",
+			true
+		)
+
 		list[#list + 1] = checkbox(L["UFHidePermanentAuras"] or "Hide permanent auras", function()
 			local val = getValue(unit, { "auraIcons", "hidePermanentAuras" })
 			if val == nil then val = getValue(unit, { "auraIcons", "hidePermanent" }) end
