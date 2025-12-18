@@ -1296,3 +1296,14 @@ function addon.functions.fmtToPattern(fmt)
 	pat = pat:gsub("%%%%s", ".+") -- "%s" -> ".+"
 	return "^" .. pat .. "$"
 end
+
+addon.functions.FindBindingIndex = function(data)
+	local found = {}
+	if not type(data) == "table" then return end
+
+	for i = 1, GetNumBindings() do
+		local command = GetBinding(i)
+		if data[command] then found[command] = i end
+	end
+	return found
+end

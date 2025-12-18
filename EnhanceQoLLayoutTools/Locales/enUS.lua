@@ -16,6 +16,8 @@ L["ScaleInstructions"] = "Use %s + Mouse Wheel to scale. Use %s + Right-Click to
 
 -- Frames list
 L["Frames"] = "Frames"
+L["Enable scaling for"] = "Enable scaling for"
+L["Enable moving for"] = "Enable moving for"
 
 -- Optional legacy keys (if old pages are ever used)
 L["uiScalerPlayerSpellsFrameMove"] = "Enable to move " .. (PLAYERSPELLS_BUTTON or "Talents & Spells")

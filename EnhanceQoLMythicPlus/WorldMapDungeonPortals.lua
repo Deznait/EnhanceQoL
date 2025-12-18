@@ -19,6 +19,8 @@ local DISPLAY_MODE = "EQOL_DungeonPortals"
 local ICON_ACTIVE = "Interface\\AddOns\\EnhanceQoLMythicPlus\\Art\\teleport_active.tga"
 local ICON_INACTIVE = "Interface\\AddOns\\EnhanceQoLMythicPlus\\Art\\teleport_inactive.tga"
 
+_G["BINDING_NAME_EQOL_TOGGLE_WORLDMAP_TELEPORT"] = L["teleportsWorldMapBinding"] or "Toggle World Map Teleport panel"
+
 -- Cache some frequently used API
 local FirstOwnedItemID
 do
@@ -995,6 +997,12 @@ f:SetScript("OnEvent", function(self, event, arg1)
 			SafeSetVisible(tabButton, tabButton._eqolPendingVisible)
 			tabButton._eqolPendingVisible = nil
 		end
+		if f._pendingOpen then
+			f._pendingOpen = nil
+			if addon.MythicPlus and addon.MythicPlus.functions and addon.MythicPlus.functions.OpenWorldMapTeleportPanel then
+				addon.MythicPlus.functions.OpenWorldMapTeleportPanel(true)
+			end
+		end
 		if WorldMapFrame and WorldMapFrame:IsShown() and addon.db and addon.db["teleportsWorldMapEnabled"] then C_Timer.After(0, function() f:RefreshPanel() end) end
 		-- fall through to allow refresh if map is visible
 	end
@@ -1119,4 +1127,34 @@ function addon.MythicPlus.functions.RefreshWorldMapTeleportPanel()
 			f._selectOnNextShow = true
 		end
 	end
+end
+
+function addon.MythicPlus.functions.OpenWorldMapTeleportPanel(force)
+	if not addon or not addon.db or not addon.db["teleportsWorldMapEnabled"] then return end
+	if not force and InCombatLockdown and InCombatLockdown() then
+		f._pendingOpen = true
+		return
+	end
+
+	if not WorldMapFrame then pcall(UIParentLoadAddOn, "Blizzard_WorldMap") end
+	if f and f.TryInit then f:TryInit() end
+
+	if not WorldMapFrame then return end
+
+	if not WorldMapFrame:IsShown() then
+		if ToggleMap then
+			ToggleMap()
+		else
+			ShowUIPanel(WorldMapFrame)
+		end
+	end
+
+	if QuestMapFrame and QuestMapFrame.SetDisplayMode then
+		QuestMapFrame:SetDisplayMode(DISPLAY_MODE)
+	elseif f then
+		f._selectOnNextShow = true
+	end
+
+	if QuestMapFrame and QuestMapFrame.ValidateTabs then QuestMapFrame:ValidateTabs() end
+	if f and f.RefreshPanel then f:RefreshPanel() end
 end

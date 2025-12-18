@@ -128,17 +128,6 @@ local function toggleLFGFilterPosition()
 	end
 end
 
-addon.functions.FindBindingIndex = function(data)
-	local found = {}
-	if not type(data) == "table" then return end
-
-	for i = 1, GetNumBindings() do
-		local command = GetBinding(i)
-		if data[command] then found[command] = i end
-	end
-	return found
-end
-
 function addon.functions.initDungeonFrame()
 	addon.functions.InitDBValue("autoChooseDelvePower", false)
 	addon.functions.InitDBValue("lfgSortByRio", false)

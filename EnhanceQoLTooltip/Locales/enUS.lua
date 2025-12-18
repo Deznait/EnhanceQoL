@@ -24,6 +24,10 @@ L["TooltipBuffHideInCombat"] = "Only hide it in combat"
 L["TooltipBuffHideInDungeon"] = "Only hide it in dungeons"
 
 -- Debuff
+L["TooltipDebuffHideType"] = "Hide tooltip on Debuff"
+L["TooltipDebuffHideInCombat"] = "Only hide it in combat"
+L["TooltipDebuffHideInDungeon"] = "Only hide it in dungeons"
+L["Debuff"] = "Debuff"
 
 -- Unit
 L["TooltipUnitHideType"] = "Hide tooltip on Unit"

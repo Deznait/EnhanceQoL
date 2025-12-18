@@ -16,4 +16,12 @@
             EnhanceQoL.ChatIM.ChannelHistory:ToggleWindow()
         end
     </Binding>
+
+    <Binding name="EQOL_TOGGLE_WORLDMAP_TELEPORT"
+             category="Enhance QoL"
+             >
+        if EnhanceQoL and EnhanceQoL.MythicPlus and EnhanceQoL.MythicPlus.functions and EnhanceQoL.MythicPlus.functions.OpenWorldMapTeleportPanel then
+            EnhanceQoL.MythicPlus.functions.OpenWorldMapTeleportPanel()
+        end
+    </Binding>
 </Bindings>

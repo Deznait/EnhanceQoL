@@ -66,6 +66,21 @@ if not addon.variables.isMidnight then table.insert(data, {
 table.sort(data, function(a, b) return a.text < b.text end)
 addon.functions.SettingsCreateCheckboxes(cTeleports, data)
 
+-- Keybinding: World Map Teleport panel
+if addon.functions.FindBindingIndex then
+	local bind = addon.functions.FindBindingIndex({ EQOL_TOGGLE_WORLDMAP_TELEPORT = true })
+	if bind and next(bind) then
+		local section = addon.functions.SettingsCreateExpandableSection(cTeleports, {
+			name = L["teleportsWorldMapBinding"],
+			expanded = true,
+			colorizeTitle = false,
+		})
+		for _, idx in pairs(bind) do
+			addon.functions.SettingsCreateKeybind(cTeleports, idx, section)
+		end
+	end
+end
+
 -- Potion Tracker (Combat & Dungeon)
 local cPotion = addon.SettingsLayout.characterInspectCategory
 if cPotion then
