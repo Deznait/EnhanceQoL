@@ -10,6 +10,7 @@
 - Collections: optional auto-unwrap for new mounts, pets, and toys (clears fanfare/alerts).
 - UI & Input: toggle to hide the micro menu notification diamonds.
 - Profiles: export/import the active profile (full overwrite) via copy/paste with reload after import.
+- Added Naaru's Enfold toy (ID 263489) support to teleport/hearthstone handling.
 
 ### 🔄 Changed
 
