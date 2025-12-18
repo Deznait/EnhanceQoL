@@ -2537,72 +2537,69 @@ local function initUnitFrame()
 end
 
 local function initBagsFrame()
-	-- TODO actual bug in beta - we can't change anything with tooltip
-	if not addon.variables.isMidnight then
-		addon.functions.InitDBValue("moneyTracker", {})
-		addon.functions.InitDBValue("enableMoneyTracker", false)
-		addon.functions.InitDBValue("showOnlyGoldOnMoney", false)
-		addon.functions.InitDBValue("warbandGold", 0)
-		if addon.db["moneyTracker"][UnitGUID("player")] == nil or type(addon.db["moneyTracker"][UnitGUID("player")]) ~= "table" then addon.db["moneyTracker"][UnitGUID("player")] = {} end
+	addon.functions.InitDBValue("moneyTracker", {})
+	addon.functions.InitDBValue("enableMoneyTracker", false)
+	addon.functions.InitDBValue("showOnlyGoldOnMoney", false)
+	addon.functions.InitDBValue("warbandGold", 0)
+	if addon.db["moneyTracker"][UnitGUID("player")] == nil or type(addon.db["moneyTracker"][UnitGUID("player")]) ~= "table" then addon.db["moneyTracker"][UnitGUID("player")] = {} end
 
-		local moneyFrame = ContainerFrameCombinedBags.MoneyFrame
-		local otherMoney = {}
+	local moneyFrame = ContainerFrameCombinedBags.MoneyFrame
+	local otherMoney = {}
 
-		local function ShowBagMoneyTooltip(self)
-			if not addon.db["enableMoneyTracker"] then return end
-			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-			GameTooltip:ClearLines()
+	local function ShowBagMoneyTooltip(self)
+		if not addon.db["enableMoneyTracker"] then return end
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:ClearLines()
 
-			local list, total = {}, 0
-			for _, info in pairs(addon.db["moneyTracker"]) do
-				total = total + (info.money or 0)
-				table.insert(list, info)
+		local list, total = {}, 0
+		for _, info in pairs(addon.db["moneyTracker"]) do
+			total = total + (info.money or 0)
+			table.insert(list, info)
+		end
+		table.sort(list, function(a, b) return (a.money or 0) > (b.money or 0) end)
+
+		GameTooltip:AddDoubleLine(L["warbandGold"], addon.functions.formatMoney(addon.db["warbandGold"] or 0, "tracker"))
+		GameTooltip:AddLine(" ")
+
+		for _, info in ipairs(list) do
+			local col = (CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS)[info.class] or { r = 1, g = 1, b = 1 }
+			local displayName
+			if info.realm == GetRealmName() or not info.realm or info.realm == "" then
+				displayName = string.format("|cff%02x%02x%02x%s|r", col.r * 255, col.g * 255, col.b * 255, info.name)
+			else
+				displayName = string.format("|cff%02x%02x%02x%s-%s|r", col.r * 255, col.g * 255, col.b * 255, info.name, info.realm)
 			end
-			table.sort(list, function(a, b) return (a.money or 0) > (b.money or 0) end)
-
-			GameTooltip:AddDoubleLine(L["warbandGold"], addon.functions.formatMoney(addon.db["warbandGold"] or 0, "tracker"))
-			GameTooltip:AddLine(" ")
-
-			for _, info in ipairs(list) do
-				local col = (CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS)[info.class] or { r = 1, g = 1, b = 1 }
-				local displayName
-				if info.realm == GetRealmName() or not info.realm or info.realm == "" then
-					displayName = string.format("|cff%02x%02x%02x%s|r", col.r * 255, col.g * 255, col.b * 255, info.name)
-				else
-					displayName = string.format("|cff%02x%02x%02x%s-%s|r", col.r * 255, col.g * 255, col.b * 255, info.name, info.realm)
-				end
-				GameTooltip:AddDoubleLine(displayName, addon.functions.formatMoney(info.money, "tracker"))
-			end
-
-			GameTooltip:AddLine(" ")
-			GameTooltip:AddDoubleLine(TOTAL, addon.functions.formatMoney(total, "tracker"))
-			GameTooltip:Show()
+			GameTooltip:AddDoubleLine(displayName, addon.functions.formatMoney(info.money, "tracker"))
 		end
 
-		local function HideBagMoneyTooltip()
-			if not addon.db["enableMoneyTracker"] then return end
-			GameTooltip:Hide()
-		end
+		GameTooltip:AddLine(" ")
+		GameTooltip:AddDoubleLine(TOTAL, addon.functions.formatMoney(total, "tracker"))
+		GameTooltip:Show()
+	end
 
-		moneyFrame:HookScript("OnEnter", ShowBagMoneyTooltip)
-		moneyFrame:HookScript("OnLeave", HideBagMoneyTooltip)
-		for _, coin in ipairs({ "GoldButton", "SilverButton", "CopperButton" }) do
-			local btn = moneyFrame[coin]
-			if btn then
-				btn:HookScript("OnEnter", ShowBagMoneyTooltip)
-				btn:HookScript("OnLeave", HideBagMoneyTooltip)
-			end
-		end
+	local function HideBagMoneyTooltip()
+		if not addon.db["enableMoneyTracker"] then return end
+		GameTooltip:Hide()
+	end
 
-		moneyFrame = ContainerFrame1.MoneyFrame
-		moneyFrame:HookScript("OnEnter", ShowBagMoneyTooltip)
-		moneyFrame:HookScript("OnLeave", HideBagMoneyTooltip)
-		for _, coin in ipairs({ "GoldButton", "SilverButton", "CopperButton" }) do
-			local btn = moneyFrame[coin]
-			if btn then
-				btn:HookScript("OnEnter", ShowBagMoneyTooltip)
-				btn:HookScript("OnLeave", HideBagMoneyTooltip)
-			end
+	moneyFrame:HookScript("OnEnter", ShowBagMoneyTooltip)
+	moneyFrame:HookScript("OnLeave", HideBagMoneyTooltip)
+	for _, coin in ipairs({ "GoldButton", "SilverButton", "CopperButton" }) do
+		local btn = moneyFrame[coin]
+		if btn then
+			btn:HookScript("OnEnter", ShowBagMoneyTooltip)
+			btn:HookScript("OnLeave", HideBagMoneyTooltip)
+		end
+	end
+
+	moneyFrame = ContainerFrame1.MoneyFrame
+	moneyFrame:HookScript("OnEnter", ShowBagMoneyTooltip)
+	moneyFrame:HookScript("OnLeave", HideBagMoneyTooltip)
+	for _, coin in ipairs({ "GoldButton", "SilverButton", "CopperButton" }) do
+		local btn = moneyFrame[coin]
+		if btn then
+			btn:HookScript("OnEnter", ShowBagMoneyTooltip)
+			btn:HookScript("OnLeave", HideBagMoneyTooltip)
 		end
 	end
 end
@@ -3552,16 +3549,13 @@ function addon.functions.createInstantCatalystButton()
 	icon:SetTexture("Interface\\AddOns\\EnhanceQoL\\Icons\\InstantCatalyst.tga")
 	button.icon = icon
 
-	-- TODO bug in midnight beta we can't modify tooltip
-	if not addon.variables.isMidnight then
-		button:SetScript("OnEnter", function(self)
-			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-			GameTooltip:ClearLines()
-			GameTooltip:AddLine(L["Instant Catalyst"])
-			GameTooltip:Show()
-		end)
-		button:SetScript("OnLeave", function(self) GameTooltip:Hide() end)
-	end
+	button:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:ClearLines()
+		GameTooltip:AddLine(L["Instant Catalyst"])
+		GameTooltip:Show()
+	end)
+	button:SetScript("OnLeave", function(self) GameTooltip:Hide() end)
 
 	if anchor then
 		button:SetPoint("RIGHT", anchor, "RIGHT", -2, 0)
@@ -4004,6 +3998,7 @@ local function setAllHooks()
 	addon.functions.initProfile()
 	addon.functions.initMapNav()
 	addon.functions.initChatFrame()
+	addon.functions.initUIOptions()
 	initParty()
 	initActionBars()
 	initUI()

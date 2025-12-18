@@ -1,6 +1,105 @@
+-- luacheck: globals C_Timer C_MountJournal LE_MOUNT_JOURNAL_FILTER_COLLECTED LE_MOUNT_JOURNAL_FILTER_UNUSABLE C_PetJournal CollectionsMicroButton MainMenuMicroButton_HideAlert CollectionsMicroButton_SetAlertShown MicroButtonPulseStop CreateFrame
+
 local addonName, addon = ...
 
 local L = LibStub("AceLocale-3.0"):GetLocale(addonName)
+
+-- Mount/pet fanfare auto-clear (unwrap)
+local mountUnwrapDebounce = false
+
+local function ApplyNotificationOverlaySetting(first)
+	local hideOverlay = addon.db and addon.db.hideMicroMenuNotificationOverlay
+	if first and not hideOverlay then return end
+	if not MICRO_BUTTONS then return end
+
+	for _, name in ipairs(MICRO_BUTTONS) do
+		local overlay = _G[name] and _G[name].NotificationOverlay
+		if overlay then overlay:SetAlpha(hideOverlay and 0 or 1) end
+	end
+end
+
+local function ShouldAutoUnwrapMounts() return addon.db and addon.db.autoUnwrapMounts end
+
+local function StopCollectionAlert(microButton)
+	if microButton and MainMenuMicroButton_HideAlert then MainMenuMicroButton_HideAlert(microButton) end
+	if CollectionsMicroButton_SetAlertShown then CollectionsMicroButton_SetAlertShown(false) end
+end
+
+local function ClearMountFanfare()
+	if not C_MountJournal or not C_MountJournal.GetNumMountsNeedingFanfare then return false end
+	if C_MountJournal.GetNumMountsNeedingFanfare() <= 0 then return false end
+
+	local lastSetting = {}
+	for i = LE_MOUNT_JOURNAL_FILTER_COLLECTED, LE_MOUNT_JOURNAL_FILTER_UNUSABLE do
+		lastSetting[i] = C_MountJournal.GetCollectedFilterSetting(i) and true or false
+		C_MountJournal.SetCollectedFilterSetting(i, i == LE_MOUNT_JOURNAL_FILTER_COLLECTED)
+	end
+
+	for i = 1, C_MountJournal.GetNumDisplayedMounts() do
+		local mId = C_MountJournal.GetDisplayedMountID(i)
+		if C_MountJournal.NeedsFanfare(mId) then C_MountJournal.ClearFanfare(mId) end
+	end
+
+	for i = LE_MOUNT_JOURNAL_FILTER_COLLECTED, LE_MOUNT_JOURNAL_FILTER_UNUSABLE do
+		if lastSetting[i] ~= nil then C_MountJournal.SetCollectedFilterSetting(i, lastSetting[i]) end
+	end
+
+	return true
+end
+
+local function ClearPetFanfare()
+	if not C_PetJournal or not C_PetJournal.GetNumPetsNeedingFanfare or not C_PetJournal.GetOwnedPetIDs then return false end
+	if (C_PetJournal.GetNumPetsNeedingFanfare() or 0) == 0 then return false end
+
+	local cleared = false
+	local ids = C_PetJournal.GetOwnedPetIDs()
+	for _, petID in ipairs(ids or {}) do
+		if petID and C_PetJournal.PetNeedsFanfare and C_PetJournal.PetNeedsFanfare(petID) then
+			if C_PetJournal.ClearFanfare then C_PetJournal.ClearFanfare(petID) end
+			cleared = true
+		end
+	end
+
+	return cleared
+end
+
+local function AutoUnwrapMounts(microButton, text, force)
+	if not ShouldAutoUnwrapMounts() then return end
+	local hideAlert = force or text == COLLECTION_UNOPENED_PLURAL or text == COLLECTION_UNOPENED_SINGULAR
+	if not force and not hideAlert then return end
+	if mountUnwrapDebounce then return end
+	mountUnwrapDebounce = true
+	C_Timer.After(0.2, function()
+		if not ShouldAutoUnwrapMounts() then
+			mountUnwrapDebounce = false
+			return
+		end
+		local mountCleared = ClearMountFanfare()
+		local petCleared = ClearPetFanfare()
+		if mountCleared or petCleared or hideAlert then StopCollectionAlert(microButton or CollectionsMicroButton) end
+		mountUnwrapDebounce = false
+	end)
+end
+
+hooksecurefunc("MainMenuMicroButton_ShowAlert", function(microButton, text, tutorialIndex, cvarBitfield) AutoUnwrapMounts(microButton, text) end)
+
+local autoUnwrapEventFrame
+local function UpdateAutoUnwrapWatcher()
+	if not autoUnwrapEventFrame then
+		autoUnwrapEventFrame = CreateFrame("Frame")
+		autoUnwrapEventFrame:SetScript("OnEvent", function(_, event)
+			if event == "NEW_PET_ADDED" or event == "NEW_MOUNT_ADDED" then AutoUnwrapMounts(CollectionsMicroButton, nil, true) end
+			if event == "PLAYER_LOGIN" then AutoUnwrapMounts(CollectionsMicroButton, nil, true) end
+		end)
+	end
+
+	autoUnwrapEventFrame:UnregisterAllEvents()
+	if ShouldAutoUnwrapMounts() then
+		autoUnwrapEventFrame:RegisterEvent("PLAYER_LOGIN")
+		autoUnwrapEventFrame:RegisterEvent("NEW_PET_ADDED")
+		autoUnwrapEventFrame:RegisterEvent("NEW_MOUNT_ADDED")
+	end
+end
 
 local cUIInput = addon.functions.SettingsCreateCategory(nil, L["UIInput"], nil, "UIInput")
 addon.SettingsLayout.uiInputCategory = cUIInput
@@ -272,6 +371,15 @@ data = {
 		end,
 	},
 	{
+		var = "autoUnwrapMounts",
+		text = L["autoUnwrapMounts"],
+		desc = L["autoUnwrapMountsDesc"],
+		func = function(v)
+			addon.db["autoUnwrapMounts"] = v
+			UpdateAutoUnwrapWatcher()
+		end,
+	},
+	{
 		var = "hideZoneText",
 		text = L["hideZoneText"],
 		func = function(v)
@@ -285,6 +393,15 @@ data = {
 		func = function(v)
 			addon.db["hideMinimapButton"] = v
 			addon.functions.toggleMinimapButton(addon.db["hideMinimapButton"])
+		end,
+	},
+	{
+		var = "hideMicroMenuNotificationOverlay",
+		text = L["hideMicroMenuNotificationOverlay"],
+		desc = L["hideMicroMenuNotificationOverlayDesc"],
+		func = function(v)
+			addon.db["hideMicroMenuNotificationOverlay"] = v and true or false
+			ApplyNotificationOverlaySetting()
 		end,
 	},
 	{
@@ -339,6 +456,11 @@ addon.functions.SettingsCreateCheckboxes(cUIInput, data)
 ----- REGION END
 
 function addon.functions.initUIInput()
+	addon.functions.InitDBValue("autoUnwrapMounts", false)
+	addon.functions.InitDBValue("hideMicroMenuNotificationOverlay", false)
+	UpdateAutoUnwrapWatcher()
+	ApplyNotificationOverlaySetting(true)
+
 	if addon.db and addon.db.modifyXPRepBar then
 		local height, width, scale = 571, 17, 1
 		if addon.db and addon.db.modifyXPRepBarHeight then height = addon.db and addon.db.modifyXPRepBarHeight end

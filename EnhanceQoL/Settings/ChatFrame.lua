@@ -465,8 +465,8 @@ data = {
 					if addon.ChatIM and addon.ChatIM.ChannelHistory and addon.ChatIM.ChannelHistory.UpdateLogFontSize then addon.ChatIM.ChannelHistory:UpdateLogFontSize(value) end
 				end,
 				min = 8,
-				max = 18,
-				step = 0.5,
+				max = 20,
+				step = 1,
 				parent = true,
 				default = 12,
 				sType = "slider",

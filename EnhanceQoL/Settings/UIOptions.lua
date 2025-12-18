@@ -638,5 +638,7 @@ local function createFrameCategory()
 	createCooldownViewerDropdowns(category)
 end
 
+function addon.functions.initUIOptions() end
+
 createActionBarCategory()
 createFrameCategory()

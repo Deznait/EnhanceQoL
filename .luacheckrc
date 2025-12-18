@@ -117,6 +117,7 @@ globals = {
 	"PLAYER_DIFFICULTY6",
 	"GetInstanceInfo()",
 	"BankFrame",
+	"MICRO_BUTTONS",
 	"DruidComboPointBarFrame",
 	"PROFESSIONS_CRAFTER_ORDER_TAB_NPC",
 	"CRAFTING_ORDERS_OWN_REAGENTS_CONFIRMATION",
