@@ -246,6 +246,11 @@ local defaults = {
 				texCoords = { 0.5, 1, 0, 0.5 }, -- combat icon region
 			},
 		},
+		resting = {
+			enabled = true,
+			size = 20,
+			offset = { x = 0, y = 0 },
+		},
 		classResource = {
 			enabled = true,
 			anchor = "TOP",
@@ -1868,6 +1873,7 @@ local function syncTextFrameLevels(st)
 	setFrameLevelAbove(st.healthTextLayer, st.health, 2)
 	setFrameLevelAbove(st.powerTextLayer, st.power, 2)
 	setFrameLevelAbove(st.statusTextLayer, st.status, 2)
+	if st.restLoop and st.statusTextLayer then setFrameLevelAbove(st.restLoop, st.statusTextLayer, 3) end
 	if st.castTextLayer then setFrameLevelAbove(st.castTextLayer, st.castBar, 2) end
 end
 
@@ -1935,6 +1941,74 @@ local function updateCombatIndicator(cfg)
 		st.combatIcon:Show()
 	else
 		st.combatIcon:Hide()
+	end
+end
+
+local function ensureRestLoop(st)
+	if not st or st.restLoop or not st.frame then return end
+	local loop = CreateFrame("Frame", nil, st.frame)
+	loop:Hide()
+	local tex = loop:CreateTexture(nil, "OVERLAY")
+	if tex.SetAtlas then
+		tex:SetAtlas("UI-HUD-UnitFrame-Player-Rest-Flipbook", true)
+	else
+		tex:SetTexture("Interface\\PlayerFrame\\UI-Player-Status")
+	end
+	tex:SetPoint("CENTER")
+	loop.restTexture = tex
+	local anim = loop:CreateAnimationGroup()
+	anim:SetLooping("REPEAT")
+	anim:SetToFinalAlpha(true)
+	local flip = anim:CreateAnimation("FlipBook")
+	flip:SetTarget(tex)
+	flip:SetDuration(1.5)
+	flip:SetOrder(1)
+	if flip.SetSmoothing then flip:SetSmoothing("NONE") end
+	if flip.SetFlipBookRows then flip:SetFlipBookRows(7) end
+	if flip.SetFlipBookColumns then flip:SetFlipBookColumns(6) end
+	if flip.SetFlipBookFrames then flip:SetFlipBookFrames(42) end
+	if flip.SetFlipBookFrameWidth then flip:SetFlipBookFrameWidth(0) end
+	if flip.SetFlipBookFrameHeight then flip:SetFlipBookFrameHeight(0) end
+	st.restLoop = loop
+	st.restLoopAnim = anim
+end
+
+local function applyRestLoopLayout(cfg)
+	local st = states[PLAYER_UNIT]
+	if not st or not st.restLoop then return end
+	local def = defaultsFor(PLAYER_UNIT)
+	local rdef = def and def.resting or {}
+	local rcfg = (cfg and cfg.resting) or rdef
+	local size = max(10, rcfg.size or rdef.size or 20)
+	local ox = (rcfg.offset and rcfg.offset.x) or (rdef.offset and rdef.offset.x) or 0
+	local oy = (rcfg.offset and rcfg.offset.y) or (rdef.offset and rdef.offset.y) or 0
+	local texSize = max(1, size * 1.5)
+	st.restLoop:ClearAllPoints()
+	st.restLoop:SetPoint("CENTER", st.barGroup or st.frame, "CENTER", ox, oy)
+	st.restLoop:SetSize(size, size)
+	if st.restLoop.restTexture then st.restLoop.restTexture:SetSize(texSize, texSize) end
+	if st.statusTextLayer then setFrameLevelAbove(st.restLoop, st.statusTextLayer, 3) end
+end
+
+local function updateRestingIndicator(cfg)
+	local st = states[PLAYER_UNIT]
+	if not st or not st.restLoop then return end
+	local def = defaultsFor(PLAYER_UNIT)
+	local rdef = def and def.resting or {}
+	local rcfg = (cfg and cfg.resting) or rdef
+	if not cfg or cfg.enabled == false or rcfg.enabled == false then
+		if st.restLoopAnim and st.restLoopAnim:IsPlaying() then st.restLoopAnim:Stop() end
+		st.restLoop:Hide()
+		return
+	end
+	applyRestLoopLayout(cfg)
+	local resting = (IsResting and IsResting()) or (UnitIsResting and UnitIsResting(PLAYER_UNIT))
+	if resting then
+		st.restLoop:Show()
+		if st.restLoopAnim and not st.restLoopAnim:IsPlaying() then st.restLoopAnim:Play() end
+	else
+		if st.restLoopAnim and st.restLoopAnim:IsPlaying() then st.restLoopAnim:Stop() end
+		st.restLoop:Hide()
 	end
 end
 
@@ -2154,7 +2228,10 @@ local function ensureFrames(unit)
 	st.raidIcon:SetSize(18, 18)
 	st.raidIcon:SetPoint("TOP", st.frame, "TOP", 0, -2)
 	st.raidIcon:Hide()
-	if unit == PLAYER_UNIT then st.combatIcon = st.statusTextLayer:CreateTexture("EQOLUFPlayerCombatIcon", "OVERLAY") end
+	if unit == PLAYER_UNIT then
+		st.combatIcon = st.statusTextLayer:CreateTexture("EQOLUFPlayerCombatIcon", "OVERLAY")
+		ensureRestLoop(st)
+	end
 
 	if unit == "target" then
 		st.auraContainer = CreateFrame("Frame", nil, st.frame)
@@ -2300,6 +2377,7 @@ local function applyConfig(unit)
 		if unit == PET_UNIT then applyFrameRuleOverride(BLIZZ_PET_FRAME_NAME, false) end
 		if unit == PLAYER_UNIT then restoreClassResourceFrames() end
 		if unit == "target" then resetTargetAuras() end
+		if unit == PLAYER_UNIT then updateRestingIndicator(cfg) end
 		return
 	end
 	ensureFrames(unit)
@@ -2318,7 +2396,10 @@ local function applyConfig(unit)
 	updateHealth(cfg, unit)
 	updatePower(cfg, unit)
 	checkRaidTargetIcon(unit, st)
-	if unit == PLAYER_UNIT then updateCombatIndicator(cfg) end
+	if unit == PLAYER_UNIT then
+		updateCombatIndicator(cfg)
+		updateRestingIndicator(cfg)
+	end
 	-- if unit == "target" then hideBlizzardTargetFrame() end
 	if st and st.frame then
 		if st.barGroup then st.barGroup:Show() end
@@ -2579,6 +2660,7 @@ local generalEvents = {
 	"PLAYER_LOGIN",
 	"PLAYER_REGEN_DISABLED",
 	"PLAYER_REGEN_ENABLED",
+	"PLAYER_UPDATE_RESTING",
 	"UNIT_PET",
 	"PLAYER_FOCUS_CHANGED",
 	"INSTANCE_ENCOUNTER_ENGAGE_UNIT",
@@ -2779,6 +2861,7 @@ local function onEvent(self, event, unit, arg1)
 		if focusCfg.enabled then updateFocusFrame(focusCfg, true) end
 		if petCfg.enabled then applyConfig(PET_UNIT) end
 		updateCombatIndicator(playerCfg)
+		updateRestingIndicator(playerCfg)
 		updateAllRaidTargetIcons()
 		if bossCfg.enabled then
 			updateBossFrames(true)
@@ -2793,6 +2876,7 @@ local function onEvent(self, event, unit, arg1)
 		updateHealth(playerCfg, "player")
 		updatePower(playerCfg, "player")
 		updateCombatIndicator(playerCfg)
+		updateRestingIndicator(playerCfg)
 	elseif event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
 		updateCombatIndicator(playerCfg)
 		if event == "PLAYER_REGEN_ENABLED" then
@@ -3024,6 +3108,8 @@ local function onEvent(self, event, unit, arg1)
 			updateFocusFrame(focusCfg, true)
 			checkRaidTargetIcon(FOCUS_UNIT, states[FOCUS_UNIT])
 		end
+	elseif event == "PLAYER_UPDATE_RESTING" then
+		updateRestingIndicator(playerCfg)
 	elseif event == "RAID_TARGET_UPDATE" then
 		updateAllRaidTargetIcons()
 	end

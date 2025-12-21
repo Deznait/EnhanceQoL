@@ -1570,6 +1570,61 @@ local function buildUnitSettings(unit)
 		true
 	)
 
+	if unit == "player" then
+		list[#list + 1] = { name = L["UFRestingIndicator"] or "Resting indicator", kind = settingType.Collapsible, id = "resting", defaultCollapsed = true }
+		local restDef = def.resting or {}
+		local function isRestEnabled() return getValue(unit, { "resting", "enabled" }, restDef.enabled ~= false) ~= false end
+
+		list[#list + 1] = checkbox(L["UFRestingEnable"] or "Show resting indicator", function() return getValue(unit, { "resting", "enabled" }, restDef.enabled ~= false) ~= false end, function(val)
+			setValue(unit, { "resting", "enabled" }, val and true or false)
+			refresh()
+		end, restDef.enabled ~= false, "resting")
+
+		list[#list + 1] = slider(L["UFRestingSize"] or "Resting size", 10, 80, 1, function() return getValue(unit, { "resting", "size" }, restDef.size or 20) end, function(val)
+			setValue(unit, { "resting", "size" }, val or restDef.size or 20)
+			refresh()
+		end, restDef.size or 20, "resting", true)
+		list[#list].isEnabled = isRestEnabled
+
+		list[#list + 1] = slider(
+			L["UFRestingOffsetX"] or "Resting offset X",
+			-200,
+			200,
+			1,
+			function() return getValue(unit, { "resting", "offset", "x" }, (restDef.offset and restDef.offset.x) or 0) end,
+			function(val)
+				local defx = (restDef.offset and restDef.offset.x) or 0
+				local off = getValue(unit, { "resting", "offset" }, { x = defx, y = 0 }) or {}
+				off.x = val ~= nil and val or defx
+				setValue(unit, { "resting", "offset" }, off)
+				refresh()
+			end,
+			(restDef.offset and restDef.offset.x) or 0,
+			"resting",
+			true
+		)
+		list[#list].isEnabled = isRestEnabled
+
+		list[#list + 1] = slider(
+			L["UFRestingOffsetY"] or "Resting offset Y",
+			-200,
+			200,
+			1,
+			function() return getValue(unit, { "resting", "offset", "y" }, (restDef.offset and restDef.offset.y) or 0) end,
+			function(val)
+				local defy = (restDef.offset and restDef.offset.y) or 0
+				local off = getValue(unit, { "resting", "offset" }, { x = 0, y = defy }) or {}
+				off.y = val ~= nil and val or defy
+				setValue(unit, { "resting", "offset" }, off)
+				refresh()
+			end,
+			(restDef.offset and restDef.offset.y) or 0,
+			"resting",
+			true
+		)
+		list[#list].isEnabled = isRestEnabled
+	end
+
 	if unit == "target" then
 		list[#list + 1] = { name = L["Auras"] or "Auras", kind = settingType.Collapsible, id = "auras", defaultCollapsed = true }
 		local auraDef = def.auraIcons or { size = 24, padding = 2, max = 16, showCooldown = true }
