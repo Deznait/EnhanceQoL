@@ -7,7 +7,7 @@ else
 	error(parentAddonName .. " is not loaded")
 end
 
-local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_LayoutTools")
+local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_Mover")
 local db = addon.db["eqolLayoutTools"]
 
 local groupOrder = {
@@ -139,7 +139,7 @@ local settings = {
 		get = function() return db.enabled end,
 		set = function(value)
 			db.enabled = value
-			addon.LayoutTools.functions.ApplyAll()
+			addon.Mover.functions.ApplyAll()
 		end,
 	},
 	{
@@ -165,10 +165,10 @@ local settings = {
 	},
 }
 
-addon.LayoutTools.variables.groupOrder = groupOrder
-addon.LayoutTools.variables.groups = groups
-addon.LayoutTools.variables.frames = frames
-addon.LayoutTools.variables.settings = settings
+addon.Mover.variables.groupOrder = groupOrder
+addon.Mover.variables.groups = groups
+addon.Mover.variables.frames = frames
+addon.Mover.variables.settings = settings
 
 local function initSettingsDefaults()
 	for _, def in ipairs(settings) do
@@ -180,7 +180,7 @@ initSettingsDefaults()
 
 for groupId, group in pairs(groups) do
 	local order = groupOrder[groupId] or group.order
-	addon.LayoutTools.functions.RegisterGroup(groupId, group.label, {
+	addon.Mover.functions.RegisterGroup(groupId, group.label, {
 		order = order,
 		expanded = group.expanded,
 	})
@@ -188,5 +188,5 @@ end
 
 for _, def in ipairs(frames) do
 	if def.group and groupOrder[def.group] and def.groupOrder == nil then def.groupOrder = groupOrder[def.group] end
-	addon.LayoutTools.functions.RegisterFrame(def)
+	addon.Mover.functions.RegisterFrame(def)
 end

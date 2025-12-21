@@ -20,3 +20,4 @@
 ## Globe-Main: EnhanceQoL
 
 EnhanceQoLQuery.lua
+EditModeExamples.lua

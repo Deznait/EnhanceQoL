@@ -35,7 +35,7 @@ move-folders:
   EnhanceQoL/EnhanceQoLAura: EnhanceQoLAura
   EnhanceQoL/EnhanceQoLCombatMeter: EnhanceQoLCombatMeter
   EnhanceQoL/EnhanceQoLDrinkMacro: EnhanceQoLDrinkMacro
-  EnhanceQoL/EnhanceQoLLayoutTools: EnhanceQoLLayoutTools
+  EnhanceQoL/EnhanceQoLMover: EnhanceQoLMover
   EnhanceQoL/EnhanceQoLMouse: EnhanceQoLMouse
   EnhanceQoL/EnhanceQoLMythicPlus: EnhanceQoLMythicPlus
   EnhanceQoL/EnhanceQoLSharedMedia: EnhanceQoLSharedMedia

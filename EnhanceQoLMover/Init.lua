@@ -6,9 +6,9 @@ else
 	error(parentAddonName .. " is not loaded")
 end
 
-addon.LayoutTools = addon.LayoutTools or {}
-addon.LayoutTools.functions = addon.LayoutTools.functions or {}
-addon.LayoutTools.variables = addon.LayoutTools.variables or {}
+addon.Mover = addon.Mover or {}
+addon.Mover.functions = addon.Mover.functions or {}
+addon.Mover.variables = addon.Mover.variables or {}
 
 addon.functions.InitDBValue("eqolLayoutTools", {})
 local db = addon.db["eqolLayoutTools"]
@@ -41,7 +41,7 @@ local function resolveFramePath(path)
 	return obj
 end
 
-local registry = addon.LayoutTools.variables.registry or {
+local registry = addon.Mover.variables.registry or {
 	groups = {},
 	groupList = {},
 	frames = {},
@@ -50,7 +50,7 @@ local registry = addon.LayoutTools.variables.registry or {
 	addonIndex = {},
 	noAddonEntries = {},
 }
-addon.LayoutTools.variables.registry = registry
+addon.Mover.variables.registry = registry
 registry.addonIndex = registry.addonIndex or {}
 registry.noAddonEntries = registry.noAddonEntries or {}
 
@@ -137,7 +137,7 @@ local function modifierPressed()
 	return (mod == "SHIFT" and IsShiftKeyDown()) or (mod == "CTRL" and IsControlKeyDown()) or (mod == "ALT" and IsAltKeyDown())
 end
 
-function addon.LayoutTools.functions.RegisterGroup(id, label, opts)
+function addon.Mover.functions.RegisterGroup(id, label, opts)
 	if not id or id == "" then return nil end
 	local group = registry.groups[id]
 	if not group then
@@ -159,7 +159,7 @@ end
 
 local function makeSettingKey(id) return "layoutToolsFrame_" .. tostring(id):gsub("[^%w]", "_") end
 
-function addon.LayoutTools.functions.RegisterFrame(def)
+function addon.Mover.functions.RegisterFrame(def)
 	if not def or not def.id then return nil end
 	if registry.frames[def.id] then return registry.frames[def.id] end
 
@@ -225,7 +225,7 @@ function addon.LayoutTools.functions.RegisterFrame(def)
 	registry.frames[entry.id] = entry
 	table.insert(registry.frameList, entry)
 
-	addon.LayoutTools.functions.RegisterGroup(entry.group, entry.groupLabel, {
+	addon.Mover.functions.RegisterGroup(entry.group, entry.groupLabel, {
 		order = entry.groupOrder,
 	})
 
@@ -234,14 +234,14 @@ function addon.LayoutTools.functions.RegisterFrame(def)
 	end
 
 	ensureFrameDb(entry)
-	addon.LayoutTools.functions.MigrateLegacyPosition(entry)
+	addon.Mover.functions.MigrateLegacyPosition(entry)
 	indexEntryByAddon(entry)
-	addon.LayoutTools.functions.TryHookEntry(entry)
+	addon.Mover.functions.TryHookEntry(entry)
 
 	return entry
 end
 
-function addon.LayoutTools.functions.GetGroups()
+function addon.Mover.functions.GetGroups()
 	local out = {}
 	for _, id in ipairs(registry.groupList) do
 		local group = registry.groups[id]
@@ -256,7 +256,7 @@ function addon.LayoutTools.functions.GetGroups()
 	return out
 end
 
-function addon.LayoutTools.functions.GetEntriesForGroup(groupId)
+function addon.Mover.functions.GetEntriesForGroup(groupId)
 	local list = {}
 	for _, entry in ipairs(registry.frameList) do
 		if entry.group == groupId then table.insert(list, entry) end
@@ -265,26 +265,26 @@ function addon.LayoutTools.functions.GetEntriesForGroup(groupId)
 	return list
 end
 
-function addon.LayoutTools.functions.GetEntryForFrameName(name)
+function addon.Mover.functions.GetEntryForFrameName(name)
 	local id = name and registry.byName[name] or nil
 	return id and registry.frames[id] or nil
 end
 
-function addon.LayoutTools.functions.IsFrameEnabled(entry)
+function addon.Mover.functions.IsFrameEnabled(entry)
 	local resolved = resolveEntry(entry)
 	if not resolved then return false end
 	local frameDb = ensureFrameDb(resolved)
 	return frameDb and frameDb.enabled ~= false
 end
 
-function addon.LayoutTools.functions.SetFrameEnabled(entry, value)
+function addon.Mover.functions.SetFrameEnabled(entry, value)
 	local resolved = resolveEntry(entry)
 	if not resolved then return end
 	local frameDb = ensureFrameDb(resolved)
 	if frameDb then frameDb.enabled = value and true or false end
 end
 
-function addon.LayoutTools.functions.MigrateLegacyPosition(entry)
+function addon.Mover.functions.MigrateLegacyPosition(entry)
 	local resolved = resolveEntry(entry)
 	if not resolved then return end
 	local frameDb = ensureFrameDb(resolved)
@@ -301,28 +301,28 @@ function addon.LayoutTools.functions.MigrateLegacyPosition(entry)
 	end
 end
 
-addon.LayoutTools.variables.pendingApply = addon.LayoutTools.variables.pendingApply or {}
-addon.LayoutTools.variables.combatQueue = addon.LayoutTools.variables.combatQueue or {}
+addon.Mover.variables.pendingApply = addon.Mover.variables.pendingApply or {}
+addon.Mover.variables.combatQueue = addon.Mover.variables.combatQueue or {}
 
-function addon.LayoutTools.functions.deferApply(frame, entry)
+function addon.Mover.functions.deferApply(frame, entry)
 	if not frame then return end
-	addon.LayoutTools.variables.pendingApply[frame] = entry or true
+	addon.Mover.variables.pendingApply[frame] = entry or true
 end
 
 local function isEntryActive(entry)
 	if not db.enabled then return false end
-	return addon.LayoutTools.functions.IsFrameEnabled(entry)
+	return addon.Mover.functions.IsFrameEnabled(entry)
 end
 
-function addon.LayoutTools.functions.applyFrameSettings(frame, entry)
+function addon.Mover.functions.applyFrameSettings(frame, entry)
 	if not frame then return end
-	local resolved = resolveEntry(entry) or addon.LayoutTools.functions.GetEntryForFrameName(frame:GetName() or "")
+	local resolved = resolveEntry(entry) or addon.Mover.functions.GetEntryForFrameName(frame:GetName() or "")
 	if not resolved then return end
 	if not isEntryActive(resolved) then return end
 	local frameDb = ensureFrameDb(resolved)
 	if not frameDb or not frameDb.point or frameDb.x == nil or frameDb.y == nil then return end
 	if InCombatLockdown() and frame:IsProtected() then
-		addon.LayoutTools.functions.deferApply(frame, resolved)
+		addon.Mover.functions.deferApply(frame, resolved)
 		return
 	end
 	frame._eqol_isApplying = true
@@ -331,8 +331,8 @@ function addon.LayoutTools.functions.applyFrameSettings(frame, entry)
 	frame._eqol_isApplying = nil
 end
 
-function addon.LayoutTools.functions.StoreFramePosition(frame, entry)
-	local resolved = resolveEntry(entry) or addon.LayoutTools.functions.GetEntryForFrameName(frame:GetName() or "")
+function addon.Mover.functions.StoreFramePosition(frame, entry)
+	local resolved = resolveEntry(entry) or addon.Mover.functions.GetEntryForFrameName(frame:GetName() or "")
 	if not resolved then return end
 	local frameDb = ensureFrameDb(resolved)
 	if not frameDb then return end
@@ -343,16 +343,16 @@ function addon.LayoutTools.functions.StoreFramePosition(frame, entry)
 	frameDb.y = yOfs
 end
 
-function addon.LayoutTools.functions.createHooks(frame, entry)
+function addon.Mover.functions.createHooks(frame, entry)
 	if not frame then return end
 	if frame.IsForbidden and frame:IsForbidden() then return end
 	if frame._eqolLayoutHooks then return end
 
-	local resolved = resolveEntry(entry) or addon.LayoutTools.functions.GetEntryForFrameName(frame:GetName() or "")
+	local resolved = resolveEntry(entry) or addon.Mover.functions.GetEntryForFrameName(frame:GetName() or "")
 	if not resolved then return end
 
 	if InCombatLockdown() then
-		addon.LayoutTools.variables.combatQueue[frame] = resolved
+		addon.Mover.variables.combatQueue[frame] = resolved
 		return
 	end
 
@@ -376,7 +376,7 @@ function addon.LayoutTools.functions.createHooks(frame, entry)
 		if InCombatLockdown() and frame:IsProtected() then return end
 		frame:StopMovingOrSizing()
 		frame._eqol_isDragging = nil
-		addon.LayoutTools.functions.StoreFramePosition(frame, resolved)
+		addon.Mover.functions.StoreFramePosition(frame, resolved)
 	end
 
 	local function attachHandle(anchor)
@@ -429,7 +429,7 @@ function addon.LayoutTools.functions.createHooks(frame, entry)
 		local frameDb = ensureFrameDb(resolved)
 		if not frameDb or not frameDb.point or frameDb.x == nil or frameDb.y == nil then return end
 		if InCombatLockdown() and self:IsProtected() then
-			addon.LayoutTools.functions.deferApply(self, resolved)
+			addon.Mover.functions.deferApply(self, resolved)
 			return
 		end
 		self._eqol_isApplying = true
@@ -438,10 +438,10 @@ function addon.LayoutTools.functions.createHooks(frame, entry)
 		self._eqol_isApplying = nil
 	end)
 
-	frame:HookScript("OnShow", function(self) addon.LayoutTools.functions.applyFrameSettings(self, resolved) end)
+	frame:HookScript("OnShow", function(self) addon.Mover.functions.applyFrameSettings(self, resolved) end)
 
 	frame._eqolLayoutHooks = true
-	addon.LayoutTools.variables.combatQueue[frame] = nil
+	addon.Mover.variables.combatQueue[frame] = nil
 
 	local function setHandleEnabled(handle, enabled)
 		if not handle then return end
@@ -461,26 +461,26 @@ function addon.LayoutTools.functions.createHooks(frame, entry)
 	updateHandleState()
 end
 
-function addon.LayoutTools.functions.TryHookEntry(entry)
+function addon.Mover.functions.TryHookEntry(entry)
 	local resolved = resolveEntry(entry)
 	if not resolved then return end
 	if not isAnyAddonLoaded(resolved) then return end
 	for _, name in ipairs(resolved.names or {}) do
 		local frame = resolveFramePath(name)
 		if frame then
-			addon.LayoutTools.functions.createHooks(frame, resolved)
-			addon.LayoutTools.functions.applyFrameSettings(frame, resolved)
+			addon.Mover.functions.createHooks(frame, resolved)
+			addon.Mover.functions.applyFrameSettings(frame, resolved)
 		end
 	end
 end
 
-function addon.LayoutTools.functions.TryHookAll()
+function addon.Mover.functions.TryHookAll()
 	for _, entry in ipairs(registry.frameList) do
-		addon.LayoutTools.functions.TryHookEntry(entry)
+		addon.Mover.functions.TryHookEntry(entry)
 	end
 end
 
-function addon.LayoutTools.functions.UpdateHandleState(entry)
+function addon.Mover.functions.UpdateHandleState(entry)
 	local resolved = resolveEntry(entry)
 	if not resolved then return end
 	for _, name in ipairs(resolved.names or {}) do
@@ -489,14 +489,14 @@ function addon.LayoutTools.functions.UpdateHandleState(entry)
 	end
 end
 
-function addon.LayoutTools.functions.RefreshEntry(entry)
-	addon.LayoutTools.functions.TryHookEntry(entry)
-	addon.LayoutTools.functions.UpdateHandleState(entry)
+function addon.Mover.functions.RefreshEntry(entry)
+	addon.Mover.functions.TryHookEntry(entry)
+	addon.Mover.functions.UpdateHandleState(entry)
 end
 
-function addon.LayoutTools.functions.ApplyAll()
+function addon.Mover.functions.ApplyAll()
 	for _, entry in ipairs(registry.frameList) do
-		addon.LayoutTools.functions.RefreshEntry(entry)
+		addon.Mover.functions.RefreshEntry(entry)
 	end
 end
 
@@ -504,28 +504,28 @@ local eventHandlers = {
 	["ADDON_LOADED"] = function(arg1)
 		if arg1 == addonName then
 			for _, entry in ipairs(registry.noAddonEntries or {}) do
-				addon.LayoutTools.functions.TryHookEntry(entry)
+				addon.Mover.functions.TryHookEntry(entry)
 			end
 		end
 		print(arg1)
 		local list = registry.addonIndex and registry.addonIndex[arg1]
 		if list then
 			for _, entry in ipairs(list) do
-				addon.LayoutTools.functions.TryHookEntry(entry)
+				addon.Mover.functions.TryHookEntry(entry)
 			end
 		end
 	end,
 	["PLAYER_REGEN_ENABLED"] = function()
-		local combatQueue = addon.LayoutTools.variables.combatQueue or {}
+		local combatQueue = addon.Mover.variables.combatQueue or {}
 		for frame, entry in pairs(combatQueue) do
 			combatQueue[frame] = nil
-			if frame then addon.LayoutTools.functions.createHooks(frame, entry) end
+			if frame then addon.Mover.functions.createHooks(frame, entry) end
 		end
 
-		local pending = addon.LayoutTools.variables.pendingApply or {}
+		local pending = addon.Mover.variables.pendingApply or {}
 		for frame, entry in pairs(pending) do
 			pending[frame] = nil
-			if frame then addon.LayoutTools.functions.applyFrameSettings(frame, entry) end
+			if frame then addon.Mover.functions.applyFrameSettings(frame, entry) end
 		end
 	end,
 }

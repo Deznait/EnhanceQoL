@@ -2052,7 +2052,6 @@ local function initParty()
 	addon.functions.InitDBValue("autoAcceptGroupInviteFriendOnly", false)
 	addon.functions.InitDBValue("autoAcceptGroupInviteGuildOnly", false)
 	addon.functions.InitDBValue("showLeaderIconRaidFrame", false)
-	addon.functions.InitDBValue("showPartyFrameInSoloContent", false)
 
 	if CompactUnitFrame_SetUnit then
 		hooksecurefunc("CompactUnitFrame_SetUnit", function(s, type)
@@ -2075,41 +2074,6 @@ local function initParty()
 		end
 	end)
 
-	local last_solo
-	local pending_update = false
-	local updateFrame = CreateFrame("Frame")
-
-	-- TODO throws many errors in midnight in group content for now - maybe later in beta it works
-	if not addon.variables.isMidnight then
-		local function manage_raid_frame()
-			if not addon.db["showPartyFrameInSoloContent"] then return end
-			if InCombatLockdown() then
-				if not pending_update then
-					pending_update = true
-					updateFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-				end
-				return
-			end
-
-			local solo = 1
-			if IsInGroup() or IsInRaid() then solo = 0 end
-
-			if solo == 0 and last_solo == 0 then return end
-
-			CompactPartyFrame:SetShown(solo)
-			last_solo = solo
-		end
-
-		updateFrame:SetScript("OnEvent", function(self, event)
-			if event == "PLAYER_REGEN_ENABLED" and pending_update then
-				self:UnregisterEvent("PLAYER_REGEN_ENABLED")
-				pending_update = false
-				manage_raid_frame()
-			end
-		end)
-
-		hooksecurefunc(CompactPartyFrame, "UpdateVisibility", manage_raid_frame)
-	end
 end
 
 local function initMisc()
@@ -3728,9 +3692,9 @@ local function CreateUI()
 		elseif string.match(group, "^combatmeter") then
 			addon.CombatMeter.functions.treeCallback(container, group)
 		elseif string.match(group, "^move") then
-			addon.LayoutTools.functions.treeCallback(container, group)
+			addon.Mover.functions.treeCallback(container, group)
 		elseif string.sub(group, 1, string.len("ui\001move")) == "ui\001move" then
-			addon.LayoutTools.functions.treeCallback(container, group:sub(4))
+			addon.Mover.functions.treeCallback(container, group:sub(4))
 		end
 	end)
 	addon.treeGroup:SetStatusTable(addon.variables.statusTable)

@@ -11,6 +11,10 @@
 - UF Plus now let's you show the blizzard class resources and manage it
 - UF Plus optional castbar for boss frames added
 
+### ❌ Removed
+
+- Removed the option to show party frames in solo content
+
 ## [6.4.0] – 2025-12-17
 
 ### ✨ Added

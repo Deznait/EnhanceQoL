@@ -458,7 +458,6 @@ L["autoAcceptGroupInviteGuildOnly"] = "Guild members"
 L["autoAcceptGroupInviteFriendOnly"] = "Friends"
 
 L["showLeaderIconRaidFrame"] = "Show leader icon on raid-style party frames"
-L["showPartyFrameInSoloContent"] = "Show Party Frames in Solo Content"
 L["hidePlayerFrame"] = "Hide Player Frame"
 L["hidePartyFrameTitle"] = "Hide party frame title"
 L["unitFrameTruncateNames"] = "Truncate unit names"

@@ -7,7 +7,7 @@ else
 	error(parentAddonName .. " is not loaded")
 end
 
-local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_LayoutTools")
+local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_Mover")
 local db = addon.db["eqolLayoutTools"]
 
 local function buildSettings()
@@ -20,7 +20,7 @@ local function buildSettings()
 		expanded = true,
 	})
 
-	local settings = addon.LayoutTools.variables.settings or {}
+	local settings = addon.Mover.variables.settings or {}
 	for _, def in ipairs(settings) do
 		local kind = def.type or "checkbox"
 		local data = {}
@@ -37,22 +37,22 @@ local function buildSettings()
 		end
 	end
 
-	for _, group in ipairs(addon.LayoutTools.functions.GetGroups()) do
+	for _, group in ipairs(addon.Mover.functions.GetGroups()) do
 		local section = addon.functions.SettingsCreateExpandableSection(cLayout, {
 			name = group.label or group.id,
 			expanded = group.expanded,
 		})
 
-		for _, entry in ipairs(addon.LayoutTools.functions.GetEntriesForGroup(group.id)) do
+		for _, entry in ipairs(addon.Mover.functions.GetEntriesForGroup(group.id)) do
 			local e = entry
 			addon.functions.SettingsCreateCheckbox(cLayout, {
 				var = e.settingKey or e.id,
 				text = e.label or e.id,
 				default = e.defaultEnabled ~= false,
-				get = function() return addon.LayoutTools.functions.IsFrameEnabled(e) end,
+				get = function() return addon.Mover.functions.IsFrameEnabled(e) end,
 				set = function(value)
-					addon.LayoutTools.functions.SetFrameEnabled(e, value)
-					addon.LayoutTools.functions.RefreshEntry(e)
+					addon.Mover.functions.SetFrameEnabled(e, value)
+					addon.Mover.functions.RefreshEntry(e)
 				end,
 				parentSection = section,
 				parentCheck = function() return db.enabled end,
@@ -63,6 +63,6 @@ end
 
 buildSettings()
 
-function addon.LayoutTools.functions.treeCallback(container, group)
+function addon.Mover.functions.treeCallback(container, group)
 	if addon.SettingsLayout.layoutToolsCategory then Settings.OpenToCategory(addon.SettingsLayout.layoutToolsCategory:GetID()) end
 end

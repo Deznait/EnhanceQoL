@@ -1,8 +1,8 @@
-local L = LibStub("AceLocale-3.0"):NewLocale("EnhanceQoL_LayoutTools", "enUS", true)
+local L = LibStub("AceLocale-3.0"):NewLocale("EnhanceQoL_Mover", "enUS", true)
 
 -- Category
-L["Move"] = "Layout Tools"
-L["Layout Tools"] = "Layout Tools"
+L["Move"] = "Mover"
+L["Layout Tools"] = "Mover"
 L["Blizzard"] = "Blizzard"
 
 -- Global section
@@ -21,6 +21,7 @@ L["ScaleInstructions"] = "Use %s + Mouse Wheel to scale. Use %s + Right-Click to
 L["Frames"] = "Frames"
 L["Enable scaling for"] = "Enable scaling for"
 L["Enable moving for"] = "Enable moving for"
+L["Catalyst"] = "The Catalyst"
 
 -- Optional legacy keys (if old pages are ever used)
 L["uiScalerPlayerSpellsFrameMove"] = "Enable to move " .. (PLAYERSPELLS_BUTTON or "Talents & Spells")
