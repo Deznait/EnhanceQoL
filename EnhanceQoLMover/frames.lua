@@ -8,7 +8,7 @@ else
 end
 
 local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_Mover")
-local db = addon.db["eqolLayoutTools"]
+local db = addon.Mover.db
 
 local groupOrder = {
 	blizzard = 10,
@@ -132,7 +132,7 @@ local frames = {
 local settings = {
 	{
 		type = "checkbox",
-		var = "layoutToolsEnabled",
+		var = "moverEnabled",
 		dbKey = "enabled",
 		text = L["Global Move Enabled"] or "Enable moving",
 		default = false,
@@ -144,7 +144,7 @@ local settings = {
 	},
 	{
 		type = "checkbox",
-		var = "layoutToolsRequireModifier",
+		var = "moverRequireModifier",
 		dbKey = "requireModifier",
 		text = L["Require Modifier For Move"] or "Require modifier to move",
 		default = true,
@@ -153,7 +153,7 @@ local settings = {
 	},
 	{
 		type = "dropdown",
-		var = "layoutToolsModifier",
+		var = "moverModifier",
 		dbKey = "modifier",
 		text = L["Move Modifier"] or (L["Scale Modifier"] or "Modifier"),
 		list = { SHIFT = "SHIFT", CTRL = "CTRL", ALT = "ALT" },

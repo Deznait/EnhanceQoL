@@ -8,12 +8,12 @@ else
 end
 
 local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_Mover")
-local db = addon.db["eqolLayoutTools"]
+local db = addon.Mover.db
 
 local function buildSettings()
-	local categoryLabel = L["Layout Tools"] or L["Move"] or "Layout Tools"
-	local cLayout = addon.functions.SettingsCreateCategory(nil, categoryLabel, nil, "LayoutTools")
-	addon.SettingsLayout.layoutToolsCategory = cLayout
+	local categoryLabel = L["Layout Tools"] or L["Move"] or "Mover"
+	local cLayout = addon.functions.SettingsCreateCategory(nil, categoryLabel, nil, "Mover")
+	addon.SettingsLayout.moverCategory = cLayout
 
 	local sectionGeneral = addon.functions.SettingsCreateExpandableSection(cLayout, {
 		name = L["Global Settings"] or "General",
@@ -64,5 +64,5 @@ end
 buildSettings()
 
 function addon.Mover.functions.treeCallback(container, group)
-	if addon.SettingsLayout.layoutToolsCategory then Settings.OpenToCategory(addon.SettingsLayout.layoutToolsCategory:GetID()) end
+	if addon.SettingsLayout.moverCategory then Settings.OpenToCategory(addon.SettingsLayout.moverCategory:GetID()) end
 end

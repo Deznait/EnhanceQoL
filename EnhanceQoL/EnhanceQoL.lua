@@ -2073,7 +2073,6 @@ local function initParty()
 			removeLeaderIcon()
 		end
 	end)
-
 end
 
 local function initMisc()
@@ -4232,7 +4231,7 @@ local eventHandlers = {
 			loadMain()
 			EQOL.PersistSignUpNote()
 
-			loadSubAddon("EnhanceQoLLayoutTools")
+			loadSubAddon("EnhanceQoLMover")
 			--@debug@
 			loadSubAddon("EnhanceQoLQuery")
 			--@end-debug@

@@ -246,6 +246,7 @@ globals = {
 	"addon",
 	"header",
 	"EnhanceQoLDB",
+	"EnhanceQoLMoverDB",
 	"cbPreferMage",
 	"cbBuffFood",
 	"headerY",

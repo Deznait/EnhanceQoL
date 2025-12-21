@@ -2977,6 +2977,7 @@ function layoutRunes(bar)
 	local count = 6
 	local gap = 0
 	local inner = bar._rbInner or bar
+	local overlay = ensureTextOverlayFrame(bar) or bar
 	local w = max(1, inner:GetWidth() or (bar:GetWidth() or 0))
 	local h = max(1, inner:GetHeight() or (bar:GetHeight() or 0))
 	local cfg = getBarSettings("RUNES") or {}
@@ -3039,9 +3040,12 @@ function layoutRunes(bar)
 		end
 		-- cooldown text per segment
 		if not sb.fs then
-			sb.fs = sb:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-			sb.fs:SetPoint("CENTER", sb, "CENTER", 0, 0)
+			sb.fs = overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 		end
+		if sb.fs:GetParent() ~= overlay then sb.fs:SetParent(overlay) end
+		sb.fs:SetDrawLayer("OVERLAY")
+		sb.fs:ClearAllPoints()
+		sb.fs:SetPoint("CENTER", sb, "CENTER", 0, 0)
 		if sb._fsSize ~= size or sb._fsFont ~= fontPath or sb._fsOutline ~= fontOutline then
 			setFontWithFallback(sb.fs, fontPath, size, fontOutline)
 			sb._fsSize = size

@@ -10,8 +10,9 @@ addon.Mover = addon.Mover or {}
 addon.Mover.functions = addon.Mover.functions or {}
 addon.Mover.variables = addon.Mover.variables or {}
 
-addon.functions.InitDBValue("eqolLayoutTools", {})
-local db = addon.db["eqolLayoutTools"]
+if type(EnhanceQoLMoverDB) ~= "table" then EnhanceQoLMoverDB = {} end
+addon.Mover.db = EnhanceQoLMoverDB
+local db = addon.Mover.db
 
 local function initDbValue(key, defaultValue)
 	if db[key] == nil then db[key] = defaultValue end
@@ -157,7 +158,7 @@ function addon.Mover.functions.RegisterGroup(id, label, opts)
 	return group
 end
 
-local function makeSettingKey(id) return "layoutToolsFrame_" .. tostring(id):gsub("[^%w]", "_") end
+local function makeSettingKey(id) return "moverFrame_" .. tostring(id):gsub("[^%w]", "_") end
 
 function addon.Mover.functions.RegisterFrame(def)
 	if not def or not def.id then return nil end

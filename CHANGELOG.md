@@ -15,6 +15,10 @@
 
 - Removed the option to show party frames in solo content
 
+### 🐛 Fixed
+
+- Rune cooldown text now renders above the border to avoid clipping at small bar heights
+
 ## [6.4.0] – 2025-12-17
 
 ### ✨ Added
