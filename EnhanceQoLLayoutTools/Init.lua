@@ -47,10 +47,73 @@ local registry = addon.LayoutTools.variables.registry or {
 	frames = {},
 	frameList = {},
 	byName = {},
+	addonIndex = {},
+	noAddonEntries = {},
 }
 addon.LayoutTools.variables.registry = registry
+registry.addonIndex = registry.addonIndex or {}
+registry.noAddonEntries = registry.noAddonEntries or {}
 
 local IsAddonLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded
+
+local function entryAddonList(entry)
+	local list = {}
+	local seen = {}
+	if entry then
+		if type(entry.addon) == "string" then
+			if not seen[entry.addon] then
+				seen[entry.addon] = true
+				table.insert(list, entry.addon)
+			end
+		elseif type(entry.addon) == "table" then
+			for _, name in ipairs(entry.addon) do
+				if type(name) == "string" and not seen[name] then
+					seen[name] = true
+					table.insert(list, name)
+				end
+			end
+		end
+		if type(entry.addons) == "table" then
+			for _, name in ipairs(entry.addons) do
+				if type(name) == "string" and not seen[name] then
+					seen[name] = true
+					table.insert(list, name)
+				end
+			end
+		end
+	end
+	return list
+end
+
+local function indexEntryByAddon(entry)
+	local list = entryAddonList(entry)
+	if #list == 0 then
+		table.insert(registry.noAddonEntries, entry)
+		return
+	end
+	for _, name in ipairs(list) do
+		registry.addonIndex[name] = registry.addonIndex[name] or {}
+		table.insert(registry.addonIndex[name], entry)
+	end
+end
+
+local function isAnyAddonLoaded(entry)
+	local list = entryAddonList(entry)
+	if #list == 0 then return true end
+	if not IsAddonLoaded then return false end
+	for _, name in ipairs(list) do
+		if IsAddonLoaded(name) then return true end
+	end
+	return false
+end
+
+local function matchesAddon(entry, addonName)
+	if not addonName then return false end
+	for _, name in ipairs(entryAddonList(entry)) do
+		if name == addonName then return true end
+	end
+	return false
+end
 
 local function resolveEntry(entryOrId)
 	if type(entryOrId) == "table" then return entryOrId end
@@ -117,6 +180,36 @@ function addon.LayoutTools.functions.RegisterFrame(def)
 		names = { def.id }
 	end
 
+	local handles = {}
+	local handlesSeen = {}
+	local function addHandle(handle)
+		if type(handle) ~= "string" or handle == "" then return end
+		if handlesSeen[handle] then return end
+		handlesSeen[handle] = true
+		table.insert(handles, handle)
+	end
+
+	local function addRelativeHandles(list)
+		if type(list) == "string" then list = { list } end
+		if type(list) ~= "table" then return end
+		for _, rel in ipairs(list) do
+			if type(rel) == "string" and rel ~= "" then
+				for _, base in ipairs(names) do
+					addHandle(base .. "." .. rel)
+				end
+			end
+		end
+	end
+
+	if type(def.handles) == "string" then
+		addHandle(def.handles)
+	elseif type(def.handles) == "table" then
+		for _, handle in ipairs(def.handles) do
+			addHandle(handle)
+		end
+	end
+	addRelativeHandles(def.handlesRelative or def.dragbars or def.subframes)
+
 	local entry = {
 		id = def.id,
 		label = def.label or def.id,
@@ -125,9 +218,11 @@ function addon.LayoutTools.functions.RegisterFrame(def)
 		groupOrder = def.groupOrder,
 		defaultEnabled = def.defaultEnabled,
 		names = names,
-		handles = def.handles,
+		handles = (#handles > 0) and handles or nil,
 		addon = def.addon,
 		useRootHandle = def.useRootHandle,
+		ignoreFramePositionManager = def.ignoreFramePositionManager,
+		userPlaced = def.userPlaced,
 		settingKey = def.settingKey or makeSettingKey(def.id),
 	}
 
@@ -144,6 +239,8 @@ function addon.LayoutTools.functions.RegisterFrame(def)
 
 	ensureFrameDb(entry)
 	addon.LayoutTools.functions.MigrateLegacyPosition(entry)
+	indexEntryByAddon(entry)
+	addon.LayoutTools.functions.TryHookEntry(entry)
 
 	return entry
 end
@@ -266,6 +363,8 @@ function addon.LayoutTools.functions.createHooks(frame, entry)
 	frame._eqolLayoutEntryId = resolved.id
 	frame:SetMovable(true)
 	frame:SetClampedToScreen(true)
+	if resolved.userPlaced ~= nil and frame.SetUserPlaced then frame:SetUserPlaced(resolved.userPlaced) end
+	if resolved.ignoreFramePositionManager ~= nil then frame.ignoreFramePositionManager = resolved.ignoreFramePositionManager end
 	if frame.EnableMouse then frame:EnableMouse(true) end
 
 	local function onStartDrag()
@@ -378,7 +477,7 @@ end
 function addon.LayoutTools.functions.TryHookEntry(entry)
 	local resolved = resolveEntry(entry)
 	if not resolved then return end
-	if resolved.addon and IsAddonLoaded and not IsAddonLoaded(resolved.addon) then return end
+	if not isAnyAddonLoaded(resolved) then return end
 	for _, name in ipairs(resolved.names or {}) do
 		local frame = resolveFramePath(name)
 		if frame then
@@ -417,10 +516,13 @@ end
 local eventHandlers = {
 	["ADDON_LOADED"] = function(arg1)
 		if arg1 == addonName then
-			addon.LayoutTools.functions.TryHookAll()
+			for _, entry in ipairs(registry.noAddonEntries or {}) do
+				addon.LayoutTools.functions.TryHookEntry(entry)
+			end
 		end
-		for _, entry in ipairs(registry.frameList) do
-			if entry.addon and arg1 == entry.addon then
+		local list = registry.addonIndex and registry.addonIndex[arg1]
+		if list then
+			for _, entry in ipairs(list) do
 				addon.LayoutTools.functions.TryHookEntry(entry)
 			end
 		end

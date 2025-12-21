@@ -38,12 +38,95 @@ local frames = {
 		addon = "Blizzard_GameMenu",
 		defaultEnabled = true,
 	},
+	{
+		id = "AchievementFrame",
+		label = LOOT_JOURNAL_LEGENDARIES_SOURCE_ACHIEVEMENT,
+		group = "blizzard",
+		names = { "AchievementFrame" },
+		addon = "Blizzard_AchievementUI",
+		handlesRelative = { "Header" },
+		defaultEnabled = true,
+	},
+	{
+		id = "HousingControlsFrame",
+		label = AUCTION_CATEGORY_HOUSING,
+		group = "blizzard",
+		names = { "HousingControlsFrame" },
+		addon = "Blizzard_HousingControls",
+		handlesRelative = { "OwnerControlFrame" },
+		defaultEnabled = true,
+	},
+	{
+		id = "CharacterFrame",
+		label = CHARACTER_BUTTON,
+		group = "blizzard",
+		names = { "CharacterFrame" },
+		defaultEnabled = true,
+	},
+	{
+		id = "PlayerSpellsFrame",
+		label = INSPECT_TALENTS_BUTTON,
+		group = "blizzard",
+		names = { "PlayerSpellsFrame" },
+		handlesRelative = { "TalentsFrame", "SpecFrame" },
+		addon = "Blizzard_PlayerSpells",
+		defaultEnabled = true,
+	},
+	{
+		id = "PVEFrame",
+		label = GROUP_FINDER,
+		group = "blizzard",
+		names = { "PVEFrame" },
+		defaultEnabled = true,
+	},
+	{
+		id = "WorldMapFrame",
+		label = WORLDMAP_BUTTON,
+		group = "blizzard",
+		names = { "WorldMapFrame" },
+		defaultEnabled = true,
+	},
+	{
+		id = "ContainerFrameCombinedBags",
+		label = HUD_EDIT_MODE_BAGS_LABEL,
+		group = "blizzard",
+		names = { "ContainerFrameCombinedBags" },
+		handlesRelative = { "TitleContainer" },
+		defaultEnabled = true,
+	},
+	{
+		id = "MerchantFrame",
+		label = MERCHANT,
+		group = "blizzard",
+		names = { "MerchantFrame" },
+		defaultEnabled = true,
+		ignoreFramePositionManager = true,
+		userPlaced = true,
+	},
+
+	{
+		id = "AuctionHouseFrame",
+		label = BUTTON_LAG_AUCTIONHOUSE,
+		group = "blizzard",
+		names = { "AuctionHouseFrame" },
+		addon = "Blizzard_AuctionHouseUI",
+		defaultEnabled = true,
+	},
+
+	{
+		id = "MailFrame",
+		label = BUTTON_LAG_MAIL,
+		group = "blizzard",
+		names = { "MailFrame" },
+		defaultEnabled = true,
+	},
 }
 
 local settings = {
 	{
 		type = "checkbox",
 		var = "layoutToolsEnabled",
+		dbKey = "enabled",
 		text = L["Global Move Enabled"] or "Enable moving",
 		default = true,
 		get = function() return db.enabled end,
@@ -55,6 +138,7 @@ local settings = {
 	{
 		type = "checkbox",
 		var = "layoutToolsRequireModifier",
+		dbKey = "requireModifier",
 		text = L["Require Modifier For Move"] or "Require modifier to move",
 		default = true,
 		get = function() return db.requireModifier end,
@@ -63,6 +147,7 @@ local settings = {
 	{
 		type = "dropdown",
 		var = "layoutToolsModifier",
+		dbKey = "modifier",
 		text = L["Move Modifier"] or (L["Scale Modifier"] or "Modifier"),
 		list = { SHIFT = "SHIFT", CTRL = "CTRL", ALT = "ALT" },
 		order = { "SHIFT", "CTRL", "ALT" },
@@ -77,6 +162,14 @@ addon.LayoutTools.variables.groupOrder = groupOrder
 addon.LayoutTools.variables.groups = groups
 addon.LayoutTools.variables.frames = frames
 addon.LayoutTools.variables.settings = settings
+
+local function initSettingsDefaults()
+	for _, def in ipairs(settings) do
+		if def.dbKey and def.default ~= nil and db[def.dbKey] == nil then db[def.dbKey] = def.default end
+	end
+end
+
+initSettingsDefaults()
 
 for groupId, group in pairs(groups) do
 	local order = groupOrder[groupId] or group.order

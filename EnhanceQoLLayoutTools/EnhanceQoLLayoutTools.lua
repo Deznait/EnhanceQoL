@@ -25,7 +25,7 @@ local function buildSettings()
 		local kind = def.type or "checkbox"
 		local data = {}
 		for key, value in pairs(def) do
-			if key ~= "type" then data[key] = value end
+			if key ~= "type" and key ~= "dbKey" and key ~= "init" then data[key] = value end
 		end
 		data.parentSection = data.parentSection or sectionGeneral
 		if kind == "checkbox" then
