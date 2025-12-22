@@ -1684,6 +1684,19 @@ local function setCastInfoFromUnit(unit)
 				st.castIcon:SetShown(showIcon)
 				if showIcon then st.castIcon:SetTexture(texture) end
 			end
+			-- TODO: replace this interruptible-event workaround once C_CurveUtil.EvaluateColorFromBoolean and C_CurveUtil.EvaluateColorValueFromBoolean are available.
+			local np = C_NamePlate.GetNamePlateForUnit(unit)
+
+			if np and np.UnitFrame and np.UnitFrame.castBar and np.UnitFrame.castBar.barType then
+				notInterruptible = np.UnitFrame.castBar.barType ~= "standard" and np.UnitFrame.castBar.barType ~= "channel"
+			end
+			local clr = ccfg.color or defc.color or { 0.9, 0.7, 0.2, 1 }
+			if not issecretvalue(notInterruptible) and notInterruptible then
+				clr = ccfg.notInterruptibleColor or defc.notInterruptibleColor or clr
+			else
+				clr = ccfg.color or defc.color or { 0.9, 0.7, 0.2, 1 }
+			end
+			st.castBar:SetStatusBarColor(clr[1] or 0.9, clr[2] or 0.7, clr[3] or 0.2, clr[4] or 1)
 		else
 			stopCast(unit)
 		end
