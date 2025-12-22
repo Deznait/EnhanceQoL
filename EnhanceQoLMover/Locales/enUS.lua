@@ -19,6 +19,11 @@ L["Global Move Enabled"] = "Enable moving (global)"
 L["Global Scale Enabled"] = "Enable scaling for all frames"
 L["Require Modifier For Move"] = "Require a modifier key to move frames"
 L["Move Modifier"] = "Move modifier key"
+L["Global Move Enabled Desc"] = "Adds drag handles to supported frames so they can be repositioned."
+L["Global Scale Enabled Desc"] = "Enable scaling with the mouse wheel on the move handle. Hold the scale modifier; right-click resets."
+L["Require Modifier For Move Desc"] = "When enabled, you must hold the move modifier to drag frames."
+L["Move Modifier Desc"] = "Choose the modifier key required for dragging."
+L["Scale Modifier Desc"] = "Choose the modifier key used for scaling."
 
 -- Wheel scaling
 L["Wheel Scaling"] = "Wheel Scaling"
