@@ -1595,20 +1595,20 @@ local function buildUnitSettings(unit)
 			kind = settingType.Color,
 			parentId = "cast",
 			isEnabled = isCastEnabled,
-			get = function() return getValue(unit, { "cast", "notInterruptibleColor" }, castDef.notInterruptibleColor or { 0.6, 0.6, 0.6, 1 }) end,
+			get = function() return getValue(unit, { "cast", "notInterruptibleColor" }, castDef.notInterruptibleColor or { 204 / 255, 204 / 255, 204 / 255, 1 }) end,
 			set = function(_, color)
 				setColor(unit, { "cast", "notInterruptibleColor" }, color.r, color.g, color.b, color.a)
 				refresh()
 			end,
-			colorGet = function() return getValue(unit, { "cast", "notInterruptibleColor" }, castDef.notInterruptibleColor or { 0.6, 0.6, 0.6, 1 }) end,
+			colorGet = function() return getValue(unit, { "cast", "notInterruptibleColor" }, castDef.notInterruptibleColor or { 204 / 255, 204 / 255, 204 / 255, 1 }) end,
 			colorSet = function(_, color)
 				setColor(unit, { "cast", "notInterruptibleColor" }, color.r, color.g, color.b, color.a)
 				refresh()
 			end,
 			colorDefault = {
-				r = (castDef.notInterruptibleColor and castDef.notInterruptibleColor[1]) or 0.6,
-				g = (castDef.notInterruptibleColor and castDef.notInterruptibleColor[2]) or 0.6,
-				b = (castDef.notInterruptibleColor and castDef.notInterruptibleColor[3]) or 0.6,
+				r = (castDef.notInterruptibleColor and castDef.notInterruptibleColor[1]) or (204 / 255),
+				g = (castDef.notInterruptibleColor and castDef.notInterruptibleColor[2]) or (204 / 255),
+				b = (castDef.notInterruptibleColor and castDef.notInterruptibleColor[3]) or (204 / 255),
 				a = (castDef.notInterruptibleColor and castDef.notInterruptibleColor[4]) or 1,
 			},
 			hasOpacity = true,

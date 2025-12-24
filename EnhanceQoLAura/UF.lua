@@ -35,6 +35,7 @@ local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_Aura")
 local LSM = LibStub("LibSharedMedia-3.0")
 local AceGUI = addon.AceGUI or LibStub("AceGUI-3.0")
 local BLIZZARD_TEX = "Interface\\TargetingFrame\\UI-StatusBar"
+local DEFAULT_NOT_INTERRUPTIBLE_COLOR = { 204 / 255, 204 / 255, 204 / 255, 1 }
 local atlasByPower = {
 	LUNAR_POWER = "Unit_Druid_AstralPower_Fill",
 	MAELSTROM = "Unit_Shaman_Maelstrom_Fill",
@@ -328,7 +329,7 @@ local defaults = {
 			iconSize = 22,
 			texture = "DEFAULT",
 			color = { 0.9, 0.7, 0.2, 1 },
-			notInterruptibleColor = { 0.6, 0.6, 0.6, 1 },
+			notInterruptibleColor = DEFAULT_NOT_INTERRUPTIBLE_COLOR,
 		},
 		portrait = {
 			enabled = false,
@@ -1347,8 +1348,23 @@ local function hideBlizzardTargetFrame()
 	end
 end
 
+local function mergeDefaults(base, override)
+	local merged = CopyTable(base or {})
+	if type(override) ~= "table" then return merged end
+	for k, v in pairs(override) do
+		if type(v) == "table" and type(merged[k]) == "table" then
+			merged[k] = mergeDefaults(merged[k], v)
+		elseif type(v) == "table" then
+			merged[k] = CopyTable(v)
+		else
+			merged[k] = v
+		end
+	end
+	return merged
+end
+
 do
-	local targetDefaults = CopyTable(defaults.player)
+	local targetDefaults = mergeDefaults(defaults.player, defaults.target)
 	targetDefaults.enabled = false
 	targetDefaults.anchor = targetDefaults.anchor and CopyTable(targetDefaults.anchor) or { point = "CENTER", relativeTo = "UIParent", relativePoint = "CENTER", x = 0, y = -200 }
 	targetDefaults.anchor.x = (targetDefaults.anchor.x or 0) + 260
@@ -1636,7 +1652,10 @@ local function configureCastStatic(unit, ccfg, defc)
 	ccfg = ccfg or st.castCfg or {}
 	defc = defc or (defaultsFor(unit) and defaultsFor(unit).cast) or {}
 	local clr = ccfg.color or defc.color or { 0.9, 0.7, 0.2, 1 }
-	if st.castInfo.notInterruptible then clr = ccfg.notInterruptibleColor or defc.notInterruptibleColor or clr end
+	if st.castInfo.notInterruptible then
+		clr = ccfg.notInterruptibleColor or defc.notInterruptibleColor or clr
+		st.castBar:SetStatusBarDesaturated(true)
+	end
 	st.castBar:SetStatusBarColor(clr[1] or 0.9, clr[2] or 0.7, clr[3] or 0.2, clr[4] or 1)
 	local duration = (st.castInfo.endTime or 0) - (st.castInfo.startTime or 0)
 	local maxValue = duration and duration > 0 and duration / 1000 or 1
@@ -1797,6 +1816,7 @@ local function setCastInfoFromUnit(unit)
 				clr = ccfg.color or defc.color or { 0.9, 0.7, 0.2, 1 }
 			end
 			st.castBar:SetStatusBarColor(clr[1] or 0.9, clr[2] or 0.7, clr[3] or 0.2, clr[4] or 1)
+			st.castBar:SetStatusBarDesaturated(notInterruptible)
 		else
 			stopCast(unit)
 		end
