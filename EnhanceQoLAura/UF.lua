@@ -3110,15 +3110,21 @@ local function updateFocusFrame(cfg, forceApply)
 	applyVisibilityRules(UNIT.FOCUS)
 end
 
+local function getCfg(unit)
+	local st = states[unit]
+	if st and st.cfg then return st.cfg end
+	return ensureDB(unit)
+end
+
 local function onEvent(self, event, unit, arg1)
 	if (unitEventsMap[event] or portraitEventsMap[event]) and unit and not allowedEventUnit[unit] then return end
-	local playerCfg = (states[UNIT.PLAYER] and states[UNIT.PLAYER].cfg) or ensureDB("player")
-	local targetCfg = (states[UNIT.TARGET] and states[UNIT.TARGET].cfg) or ensureDB("target")
-	local totCfg = (states[UNIT.TARGET_TARGET] and states[UNIT.TARGET_TARGET].cfg) or ensureDB(UNIT.TARGET_TARGET)
-	local petCfg = (states[UNIT.PET] and states[UNIT.PET].cfg) or ensureDB(UNIT.PET)
-	local focusCfg = (states[UNIT.FOCUS] and states[UNIT.FOCUS].cfg) or ensureDB(UNIT.FOCUS)
-	local bossCfg = ensureDB("boss")
 	if event == "PLAYER_ENTERING_WORLD" then
+		local playerCfg = getCfg(UNIT.PLAYER)
+		local targetCfg = getCfg(UNIT.TARGET)
+		local totCfg = getCfg(UNIT.TARGET_TARGET)
+		local petCfg = getCfg(UNIT.PET)
+		local focusCfg = getCfg(UNIT.FOCUS)
+		local bossCfg = getCfg("boss")
 		refreshMainPower(UNIT.PLAYER)
 		applyConfig("player")
 		applyConfig("target")
@@ -3134,15 +3140,18 @@ local function onEvent(self, event, unit, arg1)
 			hideBossFrames()
 		end
 	elseif event == "PLAYER_DEAD" then
+		local playerCfg = getCfg(UNIT.PLAYER)
 		if states.player and states.player.health then states.player.health:SetValue(0) end
-		updateHealth(playerCfg, "player")
+		updateHealth(playerCfg, UNIT.PLAYER)
 	elseif event == "PLAYER_ALIVE" then
+		local playerCfg = getCfg(UNIT.PLAYER)
 		refreshMainPower(UNIT.PLAYER)
-		updateHealth(playerCfg, "player")
-		updatePower(playerCfg, "player")
+		updateHealth(playerCfg, UNIT.PLAYER)
+		updatePower(playerCfg, UNIT.PLAYER)
 		updateCombatIndicator(playerCfg)
 		updateRestingIndicator(playerCfg)
 	elseif event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
+		local playerCfg = getCfg(UNIT.PLAYER)
 		updateCombatIndicator(playerCfg)
 		if event == "PLAYER_REGEN_ENABLED" then
 			if bossLayoutDirty then layoutBossFrames() end
@@ -3151,6 +3160,9 @@ local function onEvent(self, event, unit, arg1)
 			bossLayoutDirty, bossHidePending, bossShowPending, bossInitPending = nil, nil, nil, nil
 		end
 	elseif event == "PLAYER_TARGET_CHANGED" then
+		local targetCfg = getCfg(UNIT.TARGET)
+		local totCfg = getCfg(UNIT.TARGET_TARGET)
+		local focusCfg = getCfg(UNIT.FOCUS)
 		local unitToken = UNIT.TARGET
 		local st = states[unitToken]
 		if not st or not st.frame then
@@ -3189,6 +3201,7 @@ local function onEvent(self, event, unit, arg1)
 		if totCfg.enabled then updateTargetTargetFrame(totCfg) end
 		if focusCfg.enabled then updateFocusFrame(focusCfg) end
 	elseif event == "UNIT_AURA" and unit == "target" then
+		local targetCfg = getCfg(UNIT.TARGET)
 		local eventInfo = arg1
 		if not UnitExists("target") then
 			resetTargetAuras()
@@ -3259,19 +3272,26 @@ local function onEvent(self, event, unit, arg1)
 		end
 		if firstChanged then updateTargetAuraIcons(firstChanged) end
 	elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_ABSORB_AMOUNT_CHANGED" then
-		if unit == UNIT.PLAYER then updateHealth(playerCfg, "player") end
-		if unit == "target" then updateHealth(targetCfg, "target") end
-		if unit == UNIT.PET then updateHealth(petCfg, UNIT.PET) end
-		if unit == UNIT.FOCUS then updateHealth(focusCfg, UNIT.FOCUS) end
-		if bossCfg.enabled and isBossUnit(unit) then updateHealth(bossCfg, unit) end
+		if unit == UNIT.PLAYER then updateHealth(getCfg(UNIT.PLAYER), UNIT.PLAYER) end
+		if unit == UNIT.TARGET then updateHealth(getCfg(UNIT.TARGET), UNIT.TARGET) end
+		if unit == UNIT.PET then updateHealth(getCfg(UNIT.PET), UNIT.PET) end
+		if unit == UNIT.FOCUS then updateHealth(getCfg(UNIT.FOCUS), UNIT.FOCUS) end
+		if isBossUnit(unit) then
+			local bossCfg = getCfg(unit)
+			if bossCfg.enabled then updateHealth(bossCfg, unit) end
+		end
 	elseif event == "UNIT_MAXPOWER" then
-		if unit == UNIT.PLAYER then updatePower(playerCfg, "player") end
-		if unit == "target" then updatePower(targetCfg, "target") end
-		if unit == UNIT.PET then updatePower(petCfg, UNIT.PET) end
-		if unit == UNIT.FOCUS then updatePower(focusCfg, UNIT.FOCUS) end
-		if bossCfg.enabled and isBossUnit(unit) then updatePower(bossCfg, unit) end
+		if unit == UNIT.PLAYER then updatePower(getCfg(UNIT.PLAYER), UNIT.PLAYER) end
+		if unit == UNIT.TARGET then updatePower(getCfg(UNIT.TARGET), UNIT.TARGET) end
+		if unit == UNIT.PET then updatePower(getCfg(UNIT.PET), UNIT.PET) end
+		if unit == UNIT.FOCUS then updatePower(getCfg(UNIT.FOCUS), UNIT.FOCUS) end
+		if isBossUnit(unit) then
+			local bossCfg = getCfg(unit)
+			if bossCfg.enabled then updatePower(bossCfg, unit) end
+		end
 	elseif event == "UNIT_DISPLAYPOWER" then
 		if unit == UNIT.PLAYER then
+			local playerCfg = getCfg(UNIT.PLAYER)
 			refreshMainPower(unit)
 			local st = states[unit]
 			local pcfg = playerCfg.power or {}
@@ -3281,8 +3301,9 @@ local function onEvent(self, event, unit, arg1)
 			elseif st and st.power then
 				st.power:Hide()
 			end
-			updatePower(playerCfg, "player")
-		elseif unit == "target" then
+			updatePower(playerCfg, UNIT.PLAYER)
+		elseif unit == UNIT.TARGET then
+			local targetCfg = getCfg(UNIT.TARGET)
 			local st = states[unit]
 			local pcfg = targetCfg.power or {}
 			if st and st.power and pcfg.enabled ~= false then
@@ -3291,8 +3312,9 @@ local function onEvent(self, event, unit, arg1)
 			elseif st and st.power then
 				st.power:Hide()
 			end
-			updatePower(targetCfg, "target")
+			updatePower(targetCfg, UNIT.TARGET)
 		elseif unit == UNIT.FOCUS then
+			local focusCfg = getCfg(UNIT.FOCUS)
 			local st = states[unit]
 			local pcfg = focusCfg.power or {}
 			if st and st.power and pcfg.enabled ~= false then
@@ -3303,6 +3325,7 @@ local function onEvent(self, event, unit, arg1)
 			end
 			updatePower(focusCfg, UNIT.FOCUS)
 		elseif unit == UNIT.PET then
+			local petCfg = getCfg(UNIT.PET)
 			local st = states[unit]
 			local pcfg = petCfg.power or {}
 			if st and st.power and pcfg.enabled ~= false then
@@ -3312,43 +3335,59 @@ local function onEvent(self, event, unit, arg1)
 				st.power:Hide()
 			end
 			updatePower(petCfg, UNIT.PET)
-		elseif bossCfg.enabled and isBossUnit(unit) then
-			local st = states[unit]
-			local pcfg = bossCfg.power or {}
-			if st and st.power and pcfg.enabled ~= false then
-				local _, powerToken = getMainPower(unit)
-				configureSpecialTexture(st.power, powerToken, (bossCfg.power or {}).texture, bossCfg.power)
-			elseif st and st.power then
-				st.power:Hide()
+		elseif isBossUnit(unit) then
+			local bossCfg = getCfg(unit)
+			if bossCfg.enabled then
+				local st = states[unit]
+				local pcfg = bossCfg.power or {}
+				if st and st.power and pcfg.enabled ~= false then
+					local _, powerToken = getMainPower(unit)
+					configureSpecialTexture(st.power, powerToken, (bossCfg.power or {}).texture, bossCfg.power)
+				elseif st and st.power then
+					st.power:Hide()
+				end
+				updatePower(bossCfg, unit)
 			end
-			updatePower(bossCfg, unit)
 		end
 	elseif event == "UNIT_POWER_UPDATE" and not FREQUENT[arg1] then
-		if unit == UNIT.PLAYER then updatePower(playerCfg, "player") end
-		if unit == "target" then updatePower(targetCfg, "target") end
-		if unit == UNIT.PET then updatePower(petCfg, UNIT.PET) end
-		if unit == UNIT.FOCUS then updatePower(focusCfg, UNIT.FOCUS) end
-		if bossCfg.enabled and isBossUnit(unit) then updatePower(bossCfg, unit) end
+		if unit == UNIT.PLAYER then updatePower(getCfg(UNIT.PLAYER), UNIT.PLAYER) end
+		if unit == UNIT.TARGET then updatePower(getCfg(UNIT.TARGET), UNIT.TARGET) end
+		if unit == UNIT.PET then updatePower(getCfg(UNIT.PET), UNIT.PET) end
+		if unit == UNIT.FOCUS then updatePower(getCfg(UNIT.FOCUS), UNIT.FOCUS) end
+		if isBossUnit(unit) then
+			local bossCfg = getCfg(unit)
+			if bossCfg.enabled then updatePower(bossCfg, unit) end
+		end
 	elseif event == "UNIT_POWER_FREQUENT" and FREQUENT[arg1] then
-		if unit == UNIT.PLAYER then updatePower(playerCfg, "player") end
-		if unit == "target" then updatePower(targetCfg, "target") end
-		if unit == UNIT.PET then updatePower(petCfg, UNIT.PET) end
-		if unit == UNIT.FOCUS then updatePower(focusCfg, UNIT.FOCUS) end
-		if bossCfg.enabled and isBossUnit(unit) then updatePower(bossCfg, unit) end
+		if unit == UNIT.PLAYER then updatePower(getCfg(UNIT.PLAYER), UNIT.PLAYER) end
+		if unit == UNIT.TARGET then updatePower(getCfg(UNIT.TARGET), UNIT.TARGET) end
+		if unit == UNIT.PET then updatePower(getCfg(UNIT.PET), UNIT.PET) end
+		if unit == UNIT.FOCUS then updatePower(getCfg(UNIT.FOCUS), UNIT.FOCUS) end
+		if isBossUnit(unit) then
+			local bossCfg = getCfg(unit)
+			if bossCfg.enabled then updatePower(bossCfg, unit) end
+		end
 	elseif event == "UNIT_NAME_UPDATE" or event == "PLAYER_LEVEL_UP" then
-		if unit == UNIT.PLAYER or event == "PLAYER_LEVEL_UP" then updateNameAndLevel(playerCfg, "player") end
-		if unit == "target" then updateNameAndLevel(targetCfg, "target") end
-		if unit == UNIT.FOCUS then updateNameAndLevel(focusCfg, UNIT.FOCUS) end
-		if unit == UNIT.PET then updateNameAndLevel(petCfg, UNIT.PET) end
-		if bossCfg.enabled and isBossUnit(unit) then updateNameAndLevel(bossCfg, unit) end
+		if unit == UNIT.PLAYER or event == "PLAYER_LEVEL_UP" then updateNameAndLevel(getCfg(UNIT.PLAYER), UNIT.PLAYER) end
+		if unit == UNIT.TARGET then updateNameAndLevel(getCfg(UNIT.TARGET), UNIT.TARGET) end
+		if unit == UNIT.FOCUS then updateNameAndLevel(getCfg(UNIT.FOCUS), UNIT.FOCUS) end
+		if unit == UNIT.PET then updateNameAndLevel(getCfg(UNIT.PET), UNIT.PET) end
+		if isBossUnit(unit) then
+			local bossCfg = getCfg(unit)
+			if bossCfg.enabled then updateNameAndLevel(bossCfg, unit) end
+		end
 	elseif portraitEventsMap[event] then
-		if unit == UNIT.PLAYER then updatePortrait(playerCfg, UNIT.PLAYER) end
-		if unit == UNIT.TARGET then updatePortrait(targetCfg, UNIT.TARGET) end
-		if unit == UNIT.TARGET_TARGET then updatePortrait(totCfg, UNIT.TARGET_TARGET) end
-		if unit == UNIT.FOCUS then updatePortrait(focusCfg, UNIT.FOCUS) end
-		if unit == UNIT.PET then updatePortrait(petCfg, UNIT.PET) end
-		if bossCfg.enabled and isBossUnit(unit) then updatePortrait(bossCfg, unit) end
+		if unit == UNIT.PLAYER then updatePortrait(getCfg(UNIT.PLAYER), UNIT.PLAYER) end
+		if unit == UNIT.TARGET then updatePortrait(getCfg(UNIT.TARGET), UNIT.TARGET) end
+		if unit == UNIT.TARGET_TARGET then updatePortrait(getCfg(UNIT.TARGET_TARGET), UNIT.TARGET_TARGET) end
+		if unit == UNIT.FOCUS then updatePortrait(getCfg(UNIT.FOCUS), UNIT.FOCUS) end
+		if unit == UNIT.PET then updatePortrait(getCfg(UNIT.PET), UNIT.PET) end
+		if isBossUnit(unit) then
+			local bossCfg = getCfg(unit)
+			if bossCfg.enabled then updatePortrait(bossCfg, unit) end
+		end
 	elseif event == "UNIT_TARGET" and unit == UNIT.TARGET then
+		local totCfg = getCfg(UNIT.TARGET_TARGET)
 		if totCfg.enabled then updateTargetTargetFrame(totCfg) end
 	elseif event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_CHANNEL_START" or event == "UNIT_SPELLCAST_CHANNEL_UPDATE" then
 		if unit == UNIT.TARGET then setCastInfoFromUnit(UNIT.TARGET) end
@@ -3371,6 +3410,7 @@ local function onEvent(self, event, unit, arg1)
 	elseif event == "ENCOUNTER_END" then
 		hideBossFrames()
 	elseif event == "UNIT_PET" and unit == "player" then
+		local petCfg = getCfg(UNIT.PET)
 		if petCfg.enabled then
 			applyConfig(UNIT.PET)
 			updateNameAndLevel(petCfg, UNIT.PET)
@@ -3378,12 +3418,13 @@ local function onEvent(self, event, unit, arg1)
 			updatePower(petCfg, UNIT.PET)
 		end
 	elseif event == "PLAYER_FOCUS_CHANGED" then
+		local focusCfg = getCfg(UNIT.FOCUS)
 		if focusCfg.enabled then
 			updateFocusFrame(focusCfg, true)
 			checkRaidTargetIcon(UNIT.FOCUS, states[UNIT.FOCUS])
 		end
 	elseif event == "PLAYER_UPDATE_RESTING" then
-		updateRestingIndicator(playerCfg)
+		updateRestingIndicator(getCfg(UNIT.PLAYER))
 	elseif event == "RAID_TARGET_UPDATE" then
 		updateAllRaidTargetIcons()
 	end
