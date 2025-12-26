@@ -99,6 +99,11 @@ L["Ping display"] = "Ping display"
 L["Max(home, world)"] = "Max(home, world)"
 L["home|world"] = "home | world"
 
+-- Coordinates stream
+L["Coordinates"] = "Coordinates"
+L["Coordinates update interval (s)"] = "Coordinates update interval (s)"
+L["Hide coordinates in instances"] = "Hide coordinates in instances"
+
 L["Hide Raid Tools"] = "Hide Raid Tools in Party"
 L["hideRaidTools"] = "Hide Raid Tools in Party"
 L["optionsFrameScale"] = "Options window scale"

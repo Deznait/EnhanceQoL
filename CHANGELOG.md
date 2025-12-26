@@ -16,6 +16,7 @@
 - Data Panels: difficulty stream now opens a difficulty selection menu on click.
 - Data Panels: new Mythic+ Key stream with owned-key display.
 - Data Panels: new Loot Spec stream with quick menu for loot spec and active spec.
+- Data Panels: new Coordinates stream for persistent player coordinates.
 - UF Plus now supports Click Casting Addons (like clique)
 
 ### 🔄 Changed
