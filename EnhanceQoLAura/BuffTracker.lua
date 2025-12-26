@@ -2485,6 +2485,7 @@ function addon.Aura.functions.buildBuffOptions(container, catId, buffId)
 				scanBuffs()
 			end)
 			txtEdit:SetRelativeWidth(0.6)
+			txtEdit:SetDisabled(false)
 			wrapper:AddChild(txtEdit)
 
 			if buff.trackType ~= "ENCHANT" then
