@@ -15,7 +15,7 @@ local cTeleports = addon.functions.SettingsCreateCategory(nil, L["Teleports"], n
 addon.SettingsLayout.teleportsCategory = cTeleports
 
 local sectionPotion = nil
-if addon.SettingsLayout.characterInspectCategory then
+if addon.SettingsLayout.characterInspectCategory and not addon.variables.isMidnight then
 	sectionPotion = addon.functions.SettingsCreateExpandableSection(addon.SettingsLayout.characterInspectCategory, {
 		name = L["Potion Tracker"],
 		expanded = true,
@@ -83,7 +83,7 @@ end
 
 -- Potion Tracker (Combat & Dungeon)
 local cPotion = addon.SettingsLayout.characterInspectCategory
-if cPotion then
+if cPotion and not addon.variables.isMidnight then
 	if L["potionTrackerMidnightWarning"] then addon.functions.SettingsCreateText(cPotion, L["potionTrackerMidnightWarning"], { parentSection = sectionPotion }) end
 
 	local potionEnable = addon.functions.SettingsCreateCheckbox(cPotion, {
