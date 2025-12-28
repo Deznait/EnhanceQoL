@@ -237,6 +237,7 @@ local defaults = {
 		},
 		power = {
 			enabled = true,
+			detached = false,
 			color = { 0.1, 0.45, 1, 1 },
 			backdrop = { enabled = true, color = { 0, 0, 0, 0.6 } },
 			useCustomColor = false,
@@ -973,15 +974,15 @@ local function applyAuraToButton(btn, aura, ac, isDebuff, unitToken)
 end
 
 UF._auraLayout = UF._auraLayout or {}
+local GROW_DIRS = { "UP", "DOWN", "LEFT", "RIGHT" }
 
 function UF._auraLayout.parseGrowth(growth)
 	if not growth or growth == "" then return end
 	local raw = tostring(growth):upper()
 	local first, second = raw:match("^(%a+)[_%s]+(%a+)$")
 	if not first then
-		local dirs = { "UP", "DOWN", "LEFT", "RIGHT" }
-		for i = 1, #dirs do
-			local dir = dirs[i]
+		for i = 1, #GROW_DIRS do
+			local dir = GROW_DIRS[i]
 			if raw:sub(1, #dir) == dir then
 				local rest = raw:sub(#dir + 1)
 				if rest == "UP" or rest == "DOWN" or rest == "LEFT" or rest == "RIGHT" then
@@ -2304,6 +2305,19 @@ local function setFrameLevelAbove(child, parent, offset)
 	child:SetFrameLevel((parent:GetFrameLevel() or 0) + (offset or 1))
 end
 
+local STRATA_ORDER = { "BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN", "FULLSCREEN_DIALOG", "TOOLTIP" }
+local STRATA_INDEX = {}
+for i = 1, #STRATA_ORDER do
+	STRATA_INDEX[STRATA_ORDER[i]] = i
+end
+
+local function elevateStrata(strata)
+	local idx = STRATA_INDEX[strata] or STRATA_INDEX.MEDIUM
+	if not idx then return "HIGH" end
+	if idx < #STRATA_ORDER then return STRATA_ORDER[idx + 1] end
+	return STRATA_ORDER[idx]
+end
+
 local function syncTextFrameLevels(st)
 	if not st then return end
 	setFrameLevelAbove(st.healthTextLayer, st.health, 2)
@@ -2624,11 +2638,13 @@ local function layoutFrame(cfg, unit)
 	local showStatus = showName or showLevel or showUnitStatus or (unit == UNIT.PLAYER and ciCfg.enabled ~= false)
 	local pcfg = cfg.power or {}
 	local powerEnabled = pcfg.enabled ~= false
+	local powerDetached = powerEnabled and pcfg.detached == true
 	local width = max(MIN_WIDTH, cfg.width or def.width)
 	local statusHeight = showStatus and (cfg.statusHeight or def.statusHeight) or 0
 	local healthHeight = cfg.healthHeight or def.healthHeight
 	local powerHeight = powerEnabled and (cfg.powerHeight or def.powerHeight) or 0
 	local barGap = powerEnabled and (cfg.barGap or def.barGap or 0) or 0
+	local stackHeight = healthHeight + (powerDetached and 0 or (powerHeight + barGap))
 	local borderOffset = 0
 	if cfg.border and cfg.border.enabled then
 		borderOffset = cfg.border.offset
@@ -2636,7 +2652,7 @@ local function layoutFrame(cfg, unit)
 		borderOffset = max(0, borderOffset or 0)
 	end
 	local portraitEnabled, portraitSide, portraitSquareBackground = getPortraitConfig(cfg, unit)
-	local portraitInnerHeight = healthHeight + powerHeight + barGap
+	local portraitInnerHeight = stackHeight
 	local portraitSize = portraitEnabled and max(1, portraitInnerHeight) or 0
 	local separatorEnabled, separatorSize = getPortraitSeparatorConfig(cfg, unit, portraitEnabled)
 	local separatorSpace = separatorEnabled and separatorSize or 0
@@ -2664,8 +2680,14 @@ local function layoutFrame(cfg, unit)
 	end
 	st.status:SetHeight(statusHeight)
 	st.health:SetSize(width, healthHeight)
-	st.power:SetSize(width, powerHeight)
+	local powerWidth = width
+	if powerDetached and pcfg.width and pcfg.width > 0 then powerWidth = pcfg.width end
+	st.power:SetSize(powerWidth, powerHeight)
 	st.power:SetShown(powerEnabled)
+	if st.power.SetFrameStrata then
+		local baseStrata = (st.barGroup and st.barGroup.GetFrameStrata and st.barGroup:GetFrameStrata()) or (st.frame and st.frame.GetFrameStrata and st.frame:GetFrameStrata()) or "MEDIUM"
+		st.power:SetFrameStrata(powerDetached and elevateStrata(baseStrata) or baseStrata)
+	end
 
 	st.status:ClearAllPoints()
 	if st.barGroup then st.barGroup:ClearAllPoints() end
@@ -2693,7 +2715,7 @@ local function layoutFrame(cfg, unit)
 		st.status:SetPoint("TOPRIGHT", st.frame, "TOPRIGHT", statusOffsetRight, 0)
 	end
 	-- Bars container sits below status; border applied here, not on status
-	local barsHeight = healthHeight + powerHeight + barGap + borderOffset * 2
+	local barsHeight = stackHeight + borderOffset * 2
 	if st.barGroup then
 		st.barGroup:SetWidth(width + borderOffset * 2 + portraitSpace)
 		st.barGroup:SetHeight(barsHeight)
@@ -2705,8 +2727,15 @@ local function layoutFrame(cfg, unit)
 	local barInsetRight = borderOffset + barAreaOffsetRight
 	st.health:SetPoint("TOPLEFT", st.barGroup or st.frame, "TOPLEFT", barInsetLeft, -borderOffset)
 	st.health:SetPoint("TOPRIGHT", st.barGroup or st.frame, "TOPRIGHT", -barInsetRight, -borderOffset)
-	st.power:SetPoint("TOPLEFT", st.health, "BOTTOMLEFT", 0, -barGap)
-	st.power:SetPoint("TOPRIGHT", st.health, "BOTTOMRIGHT", 0, -barGap)
+	if powerDetached then
+		local off = pcfg.offset or {}
+		local ox = off.x or 0
+		local oy = off.y or 0
+		st.power:SetPoint("TOPLEFT", st.health, "BOTTOMLEFT", ox, -barGap + oy)
+	else
+		st.power:SetPoint("TOPLEFT", st.health, "BOTTOMLEFT", 0, -barGap)
+		st.power:SetPoint("TOPRIGHT", st.health, "BOTTOMRIGHT", 0, -barGap)
+	end
 
 	st._portraitSide = portraitSide
 	st._portraitSize = portraitSize

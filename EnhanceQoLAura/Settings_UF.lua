@@ -508,6 +508,8 @@ local function calcLayout(unit, frame)
 	local def = defaultsFor(unit)
 	local anchor = cfg.anchor or def.anchor or {}
 	local powerEnabled = getValue(unit, { "power", "enabled" }, (def.power and def.power.enabled) ~= false)
+	local pcfg = cfg.power or {}
+	local powerDetached = powerEnabled and pcfg.detached == true
 	local statusDef = def.status or {}
 	local showName = getValue(unit, { "status", "enabled" }, statusDef.enabled ~= false) ~= false
 	local showLevel = getValue(unit, { "status", "levelEnabled" }, statusDef.levelEnabled ~= false) ~= false
@@ -530,10 +532,11 @@ local function calcLayout(unit, frame)
 	if portraitEnabled == nil then portraitEnabled = portraitDef.enabled end
 	portraitEnabled = portraitEnabled == true
 
-	local barGap = powerEnabled and (cfg.barGap or def.barGap or 0) or 0
 	local healthHeight = cfg.healthHeight or def.healthHeight or 24
 	local powerHeight = powerEnabled and (cfg.powerHeight or def.powerHeight or 16) or 0
-	local portraitInnerHeight = healthHeight + powerHeight + barGap
+	local barGap = powerEnabled and (cfg.barGap or def.barGap or 0) or 0
+	local stackHeight = healthHeight + (powerDetached and 0 or (powerHeight + barGap))
+	local portraitInnerHeight = stackHeight
 	local portraitSize = portraitEnabled and math.max(1, portraitInnerHeight) or 0
 
 	local separatorEnabled = false
@@ -558,7 +561,7 @@ local function calcLayout(unit, frame)
 
 	local portraitSpace = portraitEnabled and (portraitSize + (separatorEnabled and separatorSize or 0)) or 0
 	local width = (cfg.width or def.width or frame:GetWidth() or 200) + borderOffset * 2 + portraitSpace
-	local height = statusHeight + healthHeight + powerHeight + barGap + borderOffset * 2
+	local height = statusHeight + stackHeight + borderOffset * 2
 	return {
 		point = anchor.point or "CENTER",
 		relativePoint = anchor.relativePoint or anchor.point or "CENTER",
@@ -1175,6 +1178,47 @@ local function buildUnitSettings(unit)
 	end, def.powerHeight or 16, "power", true)
 	powerHeightSetting.isEnabled = isPowerEnabled
 	list[#list + 1] = powerHeightSetting
+
+	local function isPowerDetached() return getValue(unit, { "power", "detached" }, powerDef.detached == true) == true end
+
+	local powerDetachedSetting = checkbox(L["UFPowerDetached"] or "Detach power bar", isPowerDetached, function(val)
+		setValue(unit, { "power", "detached" }, val and true or false)
+		refresh()
+		refreshSettingsUI()
+	end, powerDef.detached == true, "power", isPowerEnabled)
+	list[#list + 1] = powerDetachedSetting
+
+	local function isPowerDetachedEnabled() return isPowerEnabled() and isPowerDetached() end
+
+	local powerWidthSetting = slider(L["UFPowerWidth"] or "Power width", MIN_WIDTH, 800, 1, function()
+		local fallback = getValue(unit, { "width" }, def.width or MIN_WIDTH)
+		return getValue(unit, { "power", "width" }, fallback)
+	end, function(val)
+		debounced(unit .. "_powerWidth", function()
+			setValue(unit, { "power", "width" }, math.max(MIN_WIDTH, val or MIN_WIDTH))
+			refresh()
+		end)
+	end, def.width or MIN_WIDTH, "power", true)
+	powerWidthSetting.isEnabled = isPowerDetachedEnabled
+	list[#list + 1] = powerWidthSetting
+
+	local powerOffsetX = slider(L["Offset X"] or "Offset X", -200, 200, 1, function() return getValue(unit, { "power", "offset", "x" }, 0) end, function(val)
+		debounced(unit .. "_powerOffsetX", function()
+			setValue(unit, { "power", "offset", "x" }, val or 0)
+			refresh()
+		end)
+	end, 0, "power", true)
+	powerOffsetX.isEnabled = isPowerDetachedEnabled
+	list[#list + 1] = powerOffsetX
+
+	local powerOffsetY = slider(L["Offset Y"] or "Offset Y", -200, 200, 1, function() return getValue(unit, { "power", "offset", "y" }, 0) end, function(val)
+		debounced(unit .. "_powerOffsetY", function()
+			setValue(unit, { "power", "offset", "y" }, val or 0)
+			refresh()
+		end)
+	end, 0, "power", true)
+	powerOffsetY.isEnabled = isPowerDetachedEnabled
+	list[#list + 1] = powerOffsetY
 
 	local powerTextLeft = radioDropdown(
 		L["TextLeft"] or "Left text",
