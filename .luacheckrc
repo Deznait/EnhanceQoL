@@ -526,7 +526,7 @@ globals = {
 	"SettingsPanel",
 	"MainStatusTrackingBarContainer",
 	"SecondaryStatusTrackingBarContainer",
-
+	"MinimapBackdrop",
 	"SettingsSliderControlMixin",
 	"EQOL_ColorOverridesMixin",
 	"SettingsListElementMixin",

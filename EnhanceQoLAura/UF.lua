@@ -295,10 +295,12 @@ local defaults = {
 		},
 		portrait = {
 			enabled = false,
-			size = 32,
 			side = "LEFT",
-			offset = { x = 0, y = 0 },
 			squareBackground = true,
+			separator = {
+				enabled = true,
+				texture = "SOLID",
+			},
 		},
 	},
 	target = {
@@ -342,10 +344,12 @@ local defaults = {
 		},
 		portrait = {
 			enabled = false,
-			size = 32,
 			side = "LEFT",
-			offset = { x = 0, y = 0 },
 			squareBackground = false,
+			separator = {
+				enabled = true,
+				texture = "SOLID",
+			},
 		},
 	},
 	targettarget = {
@@ -358,10 +362,12 @@ local defaults = {
 		anchor = { point = "CENTER", relativeTo = "UIParent", relativePoint = "CENTER", x = 520, y = -200 },
 		portrait = {
 			enabled = false,
-			size = 32,
 			side = "LEFT",
-			offset = { x = 0, y = 0 },
 			squareBackground = false,
+			separator = {
+				enabled = true,
+				texture = "SOLID",
+			},
 		},
 	},
 }
@@ -491,9 +497,10 @@ local function applyRaidIconLayout(unit, cfg)
 	local size = clamp(rcfg.size or sizeDef or 18, 10, 30)
 	local ox = (rcfg.offset and rcfg.offset.x) or offsetDef.x or 0
 	local oy = (rcfg.offset and rcfg.offset.y) or offsetDef.y or -2
+	local centerOffset = (st and st._portraitCenterOffset) or 0
 	st.raidIcon:ClearAllPoints()
 	st.raidIcon:SetSize(size, size)
-	st.raidIcon:SetPoint("TOP", st.frame, "TOP", ox, oy)
+	st.raidIcon:SetPoint("TOP", st.frame, "TOP", (ox or 0) + centerOffset, oy)
 	if not enabled then st.raidIcon:Hide() end
 end
 
@@ -1558,6 +1565,16 @@ local function resolveTexture(key)
 	return key
 end
 
+local function resolveSeparatorTexture(key)
+	if not key or key == "" or key == "SOLID" then return "Interface\\Buttons\\WHITE8x8" end
+	if key == "DEFAULT" then return BLIZZARD_TEX end
+	if LSM then
+		local tex = LSM:Fetch("statusbar", key)
+		if tex then return tex end
+	end
+	return key
+end
+
 local function resolveCastTexture(key)
 	if key == "SOLID" then return "Interface\\Buttons\\WHITE8x8" end
 	if not key or key == "DEFAULT" then
@@ -1723,12 +1740,13 @@ local function applyCastLayout(cfg, unit)
 	st.castBar:SetSize(width, height)
 	local anchor = (ccfg.anchor or defc.anchor or "BOTTOM")
 	local off = ccfg.offset or defc.offset or { x = 0, y = -4 }
+	local centerOffset = (st and st._portraitCenterOffset) or 0
 	local anchorFrame = st.barGroup or st.frame
 	st.castBar:ClearAllPoints()
 	if anchor == "TOP" then
-		st.castBar:SetPoint("BOTTOM", anchorFrame, "TOP", off.x or 0, off.y or 0)
+		st.castBar:SetPoint("BOTTOM", anchorFrame, "TOP", (off.x or 0) + centerOffset, off.y or 0)
 	else
-		st.castBar:SetPoint("TOP", anchorFrame, "BOTTOM", off.x or 0, off.y or 0)
+		st.castBar:SetPoint("TOP", anchorFrame, "BOTTOM", (off.x or 0) + centerOffset, off.y or 0)
 	end
 	if st.castName then
 		local nameOff = ccfg.nameOffset or defc.nameOffset or { x = 6, y = 0 }
@@ -2324,7 +2342,8 @@ local function applyRestLoopLayout(cfg)
 	local oy = (rcfg.offset and rcfg.offset.y) or (rdef.offset and rdef.offset.y) or 0
 	local texSize = max(1, size * 1.5)
 	st.restLoop:ClearAllPoints()
-	st.restLoop:SetPoint("CENTER", st.barGroup or st.frame, "CENTER", ox, oy)
+	local centerOffset = (st and st._portraitCenterOffset) or 0
+	st.restLoop:SetPoint("CENTER", st.barGroup or st.frame, "CENTER", (ox or 0) + centerOffset, oy)
 	st.restLoop:SetSize(size, size)
 	if st.restLoop.restTexture then st.restLoop.restTexture:SetSize(texSize, texSize) end
 	if st.statusTextLayer then setFrameLevelAbove(st.restLoop, st.statusTextLayer, 3) end
@@ -2358,35 +2377,98 @@ local function getPortraitConfig(cfg, unit)
 	local pcfg = (cfg and cfg.portrait) or {}
 	local enabled = pcfg.enabled
 	if enabled == nil then enabled = pdef.enabled end
-	local size = pcfg.size or pdef.size or 32
 	local side = (pcfg.side or pdef.side or "LEFT"):upper()
 	if side ~= "RIGHT" then side = "LEFT" end
-	local offx = (pcfg.offset and pcfg.offset.x) or (pdef.offset and pdef.offset.x) or 0
-	local offy = (pcfg.offset and pcfg.offset.y) or (pdef.offset and pdef.offset.y) or 0
 	local squareBackground = pcfg.squareBackground
 	if squareBackground == nil then squareBackground = pdef.squareBackground end
-	return enabled == true, max(1, size or 1), side, offx, offy, squareBackground == true
+	return enabled == true, side, squareBackground == true
+end
+
+local function getPortraitSeparatorConfig(cfg, unit, portraitEnabled)
+	if not portraitEnabled or not cfg or cfg.enabled == false then return false, 0, "SOLID" end
+	local borderCfg = cfg.border or {}
+	if borderCfg.enabled ~= true then return false, 0, "SOLID" end
+	local def = defaultsFor(unit)
+	local borderDef = def and def.border or {}
+	local pdef = def and def.portrait or {}
+	local pcfg = (cfg and cfg.portrait) or {}
+	local sdef = pdef.separator or {}
+	local scfg = pcfg.separator or {}
+	local enabled = scfg.enabled
+	if enabled == nil then enabled = sdef.enabled end
+	if enabled == nil then enabled = true end
+	if enabled ~= true then return false, 0, "SOLID" end
+	local size = scfg.size
+	if size == nil then size = sdef.size end
+	if not size or size <= 0 then size = borderCfg.edgeSize or 1 end
+	size = max(1, size or 1)
+	local texture = scfg.texture
+	if not texture or texture == "" then texture = sdef.texture end
+	if not texture or texture == "" then texture = "SOLID" end
+	local useCustomColor = scfg.useCustomColor
+	if useCustomColor == nil then useCustomColor = sdef.useCustomColor end
+	local color
+	if useCustomColor == true then
+		color = scfg.color
+		if color == nil then color = sdef.color end
+	end
+	if not color then color = borderCfg.color or borderDef.color or { 0, 0, 0, 0.8 } end
+	return true, size, texture, color
+end
+
+local function applyPortraitSeparator(cfg, unit, st, portraitEnabled)
+	if not st or not st.portraitSeparator or not st.portraitHolder then return end
+	if UnitExists and not UnitExists(unit) then
+		st.portraitSeparator:Hide()
+		return
+	end
+	local separatorEnabled, separatorSize, separatorTexture, separatorColor = getPortraitSeparatorConfig(cfg, unit, portraitEnabled)
+	if not separatorEnabled or not separatorSize or separatorSize <= 0 then
+		st.portraitSeparator:Hide()
+		return
+	end
+	local color = separatorColor or { 0, 0, 0, 0.8 }
+	st.portraitSeparator:SetTexture(resolveSeparatorTexture(separatorTexture))
+	st.portraitSeparator:SetVertexColor(color[1] or 0, color[2] or 0, color[3] or 0, color[4] or 1)
+	st.portraitSeparator:ClearAllPoints()
+	local side = st._portraitSide or "LEFT"
+	if side == "RIGHT" then
+		st.portraitSeparator:SetPoint("TOP", st.portraitHolder, "TOP", 0, 0)
+		st.portraitSeparator:SetPoint("BOTTOM", st.portraitHolder, "BOTTOM", 0, 0)
+		st.portraitSeparator:SetPoint("RIGHT", st.portraitHolder, "LEFT", 0, 0)
+	else
+		st.portraitSeparator:SetPoint("TOP", st.portraitHolder, "TOP", 0, 0)
+		st.portraitSeparator:SetPoint("BOTTOM", st.portraitHolder, "BOTTOM", 0, 0)
+		st.portraitSeparator:SetPoint("LEFT", st.portraitHolder, "RIGHT", 0, 0)
+	end
+	st.portraitSeparator:SetWidth(separatorSize)
+	st.portraitSeparator:Show()
 end
 
 local function updatePortrait(cfg, unit)
 	cfg = cfg or (states[unit] and states[unit].cfg) or ensureDB(unit)
 	local st = states[unit]
 	if not st or not st.portrait then return end
-	local enabled, _, _, _, _, squareBackground = getPortraitConfig(cfg, unit)
+	local enabled, _, squareBackground = getPortraitConfig(cfg, unit)
 	if not enabled or cfg.enabled == false then
 		st.portrait:Hide()
 		st.portrait:SetTexture(nil)
 		if st.portraitBg then st.portraitBg:Hide() end
+		if st.portraitHolder then st.portraitHolder:Hide() end
+		applyPortraitSeparator(cfg, unit, st, false)
 		return
 	end
 	if UnitExists and not UnitExists(unit) then
 		st.portrait:Hide()
 		st.portrait:SetTexture(nil)
 		if st.portraitBg then st.portraitBg:Hide() end
+		if st.portraitHolder then st.portraitHolder:Hide() end
+		applyPortraitSeparator(cfg, unit, st, false)
 		return
 	end
 	SetPortraitTexture(st.portrait, unit)
 	st.portrait:Show()
+	if st.portraitHolder then st.portraitHolder:Show() end
 	if st.portraitBg then
 		if squareBackground == true then
 			st.portraitBg:Show()
@@ -2394,6 +2476,7 @@ local function updatePortrait(cfg, unit)
 			st.portraitBg:Hide()
 		end
 	end
+	applyPortraitSeparator(cfg, unit, st, true)
 end
 
 local function layoutFrame(cfg, unit)
@@ -2422,11 +2505,21 @@ local function layoutFrame(cfg, unit)
 		if borderOffset == nil then borderOffset = cfg.border.edgeSize or 1 end
 		borderOffset = max(0, borderOffset or 0)
 	end
-	local portraitEnabled, portraitSize, portraitSide, portraitOffsetX, portraitOffsetY, portraitSquareBackground = getPortraitConfig(cfg, unit)
-	local portraitWidth = portraitEnabled and portraitSize or 0
-	local barOffsetLeft = (portraitEnabled and portraitSide == "LEFT") and portraitWidth or 0
-	local barOffsetRight = (portraitEnabled and portraitSide == "RIGHT") and -portraitWidth or 0
-	st.frame:SetWidth(width + borderOffset * 2 + portraitWidth)
+	local portraitEnabled, portraitSide, portraitSquareBackground = getPortraitConfig(cfg, unit)
+	local portraitInnerHeight = healthHeight + powerHeight + barGap
+	local portraitSize = portraitEnabled and max(1, portraitInnerHeight) or 0
+	local separatorEnabled, separatorSize = getPortraitSeparatorConfig(cfg, unit, portraitEnabled)
+	local separatorSpace = separatorEnabled and separatorSize or 0
+	local portraitSpace = portraitEnabled and (portraitSize + separatorSpace) or 0
+	local barAreaOffsetLeft = (portraitEnabled and portraitSide == "LEFT") and portraitSpace or 0
+	local barAreaOffsetRight = (portraitEnabled and portraitSide == "RIGHT") and portraitSpace or 0
+	local barCenterOffset = 0
+	if portraitEnabled and portraitSpace > 0 then barCenterOffset = (portraitSide == "LEFT") and (portraitSpace / 2) or -(portraitSpace / 2) end
+	local statusOffsetLeft = barAreaOffsetLeft
+	local statusOffsetRight = -barAreaOffsetRight
+	st._portraitSpace = portraitSpace
+	st._portraitCenterOffset = barCenterOffset
+	st.frame:SetWidth(width + borderOffset * 2 + portraitSpace)
 	if cfg.strata then
 		st.frame:SetFrameStrata(cfg.strata)
 	else
@@ -2462,35 +2555,50 @@ local function layoutFrame(cfg, unit)
 
 	local y = 0
 	if statusHeight > 0 then
-		st.status:SetPoint("TOPLEFT", st.frame, "TOPLEFT", barOffsetLeft, 0)
-		st.status:SetPoint("TOPRIGHT", st.frame, "TOPRIGHT", barOffsetRight, 0)
+		st.status:SetPoint("TOPLEFT", st.frame, "TOPLEFT", statusOffsetLeft, 0)
+		st.status:SetPoint("TOPRIGHT", st.frame, "TOPRIGHT", statusOffsetRight, 0)
 		y = -statusHeight
 	else
-		st.status:SetPoint("TOPLEFT", st.frame, "TOPLEFT", barOffsetLeft, 0)
-		st.status:SetPoint("TOPRIGHT", st.frame, "TOPRIGHT", barOffsetRight, 0)
+		st.status:SetPoint("TOPLEFT", st.frame, "TOPLEFT", statusOffsetLeft, 0)
+		st.status:SetPoint("TOPRIGHT", st.frame, "TOPRIGHT", statusOffsetRight, 0)
 	end
 	-- Bars container sits below status; border applied here, not on status
 	local barsHeight = healthHeight + powerHeight + barGap + borderOffset * 2
 	if st.barGroup then
-		st.barGroup:SetWidth(width + borderOffset * 2)
+		st.barGroup:SetWidth(width + borderOffset * 2 + portraitSpace)
 		st.barGroup:SetHeight(barsHeight)
-		st.barGroup:SetPoint("TOPLEFT", st.frame, "TOPLEFT", barOffsetLeft, y)
-		st.barGroup:SetPoint("TOPRIGHT", st.frame, "TOPRIGHT", barOffsetRight, y)
+		st.barGroup:SetPoint("TOPLEFT", st.frame, "TOPLEFT", 0, y)
+		st.barGroup:SetPoint("TOPRIGHT", st.frame, "TOPRIGHT", 0, y)
 	end
 
-	st.health:SetPoint("TOPLEFT", st.barGroup or st.frame, "TOPLEFT", borderOffset, -borderOffset)
-	st.health:SetPoint("TOPRIGHT", st.barGroup or st.frame, "TOPRIGHT", -borderOffset, -borderOffset)
+	local barInsetLeft = borderOffset + barAreaOffsetLeft
+	local barInsetRight = borderOffset + barAreaOffsetRight
+	st.health:SetPoint("TOPLEFT", st.barGroup or st.frame, "TOPLEFT", barInsetLeft, -borderOffset)
+	st.health:SetPoint("TOPRIGHT", st.barGroup or st.frame, "TOPRIGHT", -barInsetRight, -borderOffset)
 	st.power:SetPoint("TOPLEFT", st.health, "BOTTOMLEFT", 0, -barGap)
 	st.power:SetPoint("TOPRIGHT", st.health, "BOTTOMRIGHT", 0, -barGap)
 
-	if st.portrait then
+	st._portraitSide = portraitSide
+	st._portraitSize = portraitSize
+	if st.portraitHolder then
 		if portraitEnabled then
-			st.portrait:SetSize(portraitSize, portraitSize)
-			st.portrait:ClearAllPoints()
+			local holderParent = st.barGroup or st.frame
+			local holderOffset = borderOffset + (portraitSize / 2)
+			st.portraitHolder:SetSize(portraitSize, portraitSize)
+			st.portraitHolder:ClearAllPoints()
 			if portraitSide == "RIGHT" then
-				st.portrait:SetPoint("CENTER", st.barGroup or st.frame, "RIGHT", (portraitSize / 2) + portraitOffsetX, portraitOffsetY)
+				st.portraitHolder:SetPoint("CENTER", holderParent, "RIGHT", -holderOffset, 0)
 			else
-				st.portrait:SetPoint("CENTER", st.barGroup or st.frame, "LEFT", -(portraitSize / 2) + portraitOffsetX, portraitOffsetY)
+				st.portraitHolder:SetPoint("CENTER", holderParent, "LEFT", holderOffset, 0)
+			end
+			if holderParent and holderParent.GetFrameStrata then
+				st.portraitHolder:SetFrameStrata(holderParent:GetFrameStrata())
+				st.portraitHolder:SetFrameLevel((holderParent:GetFrameLevel() or 0) + 1)
+			end
+			if st.portrait then
+				st.portrait:SetSize(portraitSize, portraitSize)
+				st.portrait:ClearAllPoints()
+				st.portrait:SetPoint("CENTER", st.portraitHolder, "CENTER", 0, 0)
 			end
 			if st.portraitBg then
 				if portraitSquareBackground == true then
@@ -2502,16 +2610,18 @@ local function layoutFrame(cfg, unit)
 				end
 			end
 		else
-			st.portrait:Hide()
+			if st.portrait then st.portrait:Hide() end
 			if st.portraitBg then st.portraitBg:Hide() end
+			st.portraitHolder:Hide()
 		end
 	end
+	applyPortraitSeparator(cfg, unit, st, portraitEnabled)
 
 	local totalHeight = statusHeight + barsHeight
 	st.frame:SetHeight(totalHeight)
 	if st.raidIcon then
 		st.raidIcon:ClearAllPoints()
-		st.raidIcon:SetPoint("TOP", st.barGroup or st.frame, "TOP", 0, -2)
+		st.raidIcon:SetPoint("TOP", st.barGroup or st.frame, "TOP", barCenterOffset or 0, -2)
 	end
 
 	layoutTexts(st.health, st.healthTextLeft, st.healthTextRight, cfg.health, width)
@@ -2524,7 +2634,8 @@ local function layoutFrame(cfg, unit)
 	if unit == "target" and st.auraContainer then
 		st.auraContainer:ClearAllPoints()
 		local acfg = cfg.auraIcons or def.auraIcons or defaults.target.auraIcons or {}
-		local ax = (acfg.offset and acfg.offset.x) or 0
+		local baseAx = (acfg.offset and acfg.offset.x) or 0
+		local ax = baseAx + barAreaOffsetLeft
 		local ay = (acfg.offset and acfg.offset.y) or (acfg.anchor == "TOP" and 5 or -5)
 		local anchor = acfg.anchor or "BOTTOM"
 		if anchor == "TOP" then
@@ -2537,7 +2648,8 @@ local function layoutFrame(cfg, unit)
 		if st.debuffContainer then
 			st.debuffContainer:ClearAllPoints()
 			local useSeparateDebuffs = acfg.separateDebuffAnchor == true
-			local dax = (acfg.debuffOffset and acfg.debuffOffset.x) or ax
+			local baseDax = (acfg.debuffOffset and acfg.debuffOffset.x) or baseAx
+			local dax = baseDax + barAreaOffsetLeft
 			local day = (acfg.debuffOffset and acfg.debuffOffset.y)
 			local danchor = acfg.debuffAnchor or anchor
 			if day == nil then day = (danchor == "TOP" and 5 or -5) end
@@ -2603,16 +2715,30 @@ local function ensureFrames(unit)
 	st.power = _G[info.powerName] or CreateFrame("StatusBar", info.powerName, st.barGroup, "BackdropTemplate")
 	local _, powerToken = getMainPower(unit)
 	if st.power.SetStatusBarDesaturated then st.power:SetStatusBarDesaturated(isPowerDesaturated(powerToken)) end
+	if not st.portraitHolder then
+		st.portraitHolder = CreateFrame("Frame", nil, st.barGroup or st.frame, "BackdropTemplate")
+		st.portraitHolder:EnableMouse(false)
+		st.portraitHolder:Hide()
+	end
 	if not st.portrait then
-		st.portrait = st.frame:CreateTexture(nil, "ARTWORK")
+		st.portrait = st.portraitHolder:CreateTexture(nil, "ARTWORK")
 		st.portrait:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 		st.portrait:Hide()
 	end
 	if not st.portraitBg then
-		st.portraitBg = st.frame:CreateTexture(nil, "BACKGROUND")
+		st.portraitBg = st.portraitHolder:CreateTexture(nil, "BACKGROUND")
 		st.portraitBg:SetColorTexture(0, 0, 0, 1)
 		st.portraitBg:Hide()
 	end
+	if not st.portraitSeparator then
+		st.portraitSeparator = (st.barGroup or st.frame):CreateTexture(nil, "ARTWORK")
+		st.portraitSeparator:SetColorTexture(0, 0, 0, 1)
+		st.portraitSeparator:Hide()
+	end
+	if st.portrait and st.portrait:GetParent() ~= st.portraitHolder then st.portrait:SetParent(st.portraitHolder) end
+	if st.portraitBg and st.portraitBg:GetParent() ~= st.portraitHolder then st.portraitBg:SetParent(st.portraitHolder) end
+	if st.portraitHolder and st.barGroup and st.portraitHolder:GetParent() ~= st.barGroup then st.portraitHolder:SetParent(st.barGroup) end
+	if st.portraitSeparator and st.barGroup and st.portraitSeparator:GetParent() ~= st.barGroup then st.portraitSeparator:SetParent(st.barGroup) end
 
 	local allowAbsorb = not (info and info.disableAbsorb)
 	if allowAbsorb then
@@ -2806,6 +2932,8 @@ local function applyConfig(unit)
 			if st.barGroup then st.barGroup:Hide() end
 			if st.status then st.status:Hide() end
 			if st.portrait then st.portrait:Hide() end
+			if st.portraitHolder then st.portraitHolder:Hide() end
+			if st.portraitSeparator then st.portraitSeparator:Hide() end
 		end
 		applyVisibilityDriver(unit, false)
 		if unit == UNIT.PLAYER then applyFrameRuleOverride(BLIZZ_FRAME_NAMES.player, false) end
@@ -3862,36 +3990,36 @@ if not addon.Aura.UFInitialized then
 	addon.Aura.UFInitialized = true
 	local cfg = ensureDB("player")
 	if cfg.enabled then After(0.1, function() UF.Enable() end) end
-	local tc = ensureDB("target")
-	if tc.enabled then
+	cfg = ensureDB("target")
+	if cfg.enabled then
 		ensureEventHandling()
 		applyConfig("target")
 		-- hideBlizzardTargetFrame()
 	end
-	local ttc = ensureDB(UNIT.TARGET_TARGET)
-	if ttc.enabled then
+	cfg = ensureDB(UNIT.TARGET_TARGET)
+	if cfg.enabled then
 		ensureEventHandling()
-		updateTargetTargetFrame(ttc, true)
+		updateTargetTargetFrame(cfg, true)
 		ensureToTTicker()
 	end
-	local pcfg = ensureDB(UNIT.PET)
-	if pcfg.enabled then
+	cfg = ensureDB(UNIT.PET)
+	if cfg.enabled then
 		ensureEventHandling()
 		applyConfig(UNIT.PET)
 	elseif applyFrameRuleOverride then
 		applyFrameRuleOverride(BLIZZ_FRAME_NAMES.pet, false)
 	end
-	local fcfg = ensureDB(UNIT.FOCUS)
-	if fcfg.enabled then
+	cfg = ensureDB(UNIT.FOCUS)
+	if cfg.enabled then
 		ensureEventHandling()
-		updateFocusFrame(fcfg, true)
+		updateFocusFrame(cfg, true)
 	elseif applyFrameRuleOverride then
 		applyFrameRuleOverride(BLIZZ_FRAME_NAMES.focus, false)
 	end
-	local bcfg = ensureDB("boss")
-	if bcfg.enabled then
+	cfg = ensureDB("boss")
+	if cfg.enabled then
 		ensureEventHandling()
-		ensureBossFramesReady(bcfg)
+		ensureBossFramesReady(cfg)
 		updateBossFrames(true)
 	end
 end

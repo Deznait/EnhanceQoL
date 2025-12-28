@@ -519,16 +519,48 @@ local function calcLayout(unit, frame)
 	local showUnitStatus = getValue(unit, { "status", "unitStatus", "enabled" }, usDef.enabled == true) == true
 	local showStatus = showName or showLevel or showCombat or showUnitStatus
 	local statusHeight = showStatus and (cfg.statusHeight or def.statusHeight or 18) or 0
+	local borderOffset = 0
+	if cfg.border and cfg.border.enabled then
+		borderOffset = cfg.border.offset
+		if borderOffset == nil then borderOffset = cfg.border.edgeSize or 1 end
+		borderOffset = math.max(0, borderOffset or 0)
+	end
+
 	local portraitDef = def.portrait or {}
 	local portraitCfg = cfg.portrait or {}
 	local portraitEnabled = portraitCfg.enabled
 	if portraitEnabled == nil then portraitEnabled = portraitDef.enabled end
-	local portraitSize = portraitCfg.size or portraitDef.size or 32
-	local portraitWidth = portraitEnabled and portraitSize or 0
-	local width = (cfg.width or def.width or frame:GetWidth() or 200) + portraitWidth
+	portraitEnabled = portraitEnabled == true
+
 	local barGap = powerEnabled and (cfg.barGap or def.barGap or 0) or 0
+	local healthHeight = cfg.healthHeight or def.healthHeight or 24
 	local powerHeight = powerEnabled and (cfg.powerHeight or def.powerHeight or 16) or 0
-	local height = statusHeight + (cfg.healthHeight or def.healthHeight or 24) + powerHeight + barGap
+	local portraitInnerHeight = healthHeight + powerHeight + barGap
+	local portraitSize = portraitEnabled and math.max(1, portraitInnerHeight) or 0
+
+	local separatorEnabled = false
+	local separatorSize = 0
+	if portraitEnabled and cfg.enabled ~= false then
+		local borderCfg = cfg.border or {}
+		if borderCfg.enabled == true then
+			local sdef = portraitDef.separator or {}
+			local scfg = portraitCfg.separator or {}
+			local enabled = scfg.enabled
+			if enabled == nil then enabled = sdef.enabled end
+			if enabled == nil then enabled = true end
+			if enabled == true then
+				local size = scfg.size
+				if size == nil then size = sdef.size end
+				if not size or size <= 0 then size = borderCfg.edgeSize or 1 end
+				separatorEnabled = true
+				separatorSize = math.max(1, size or 1)
+			end
+		end
+	end
+
+	local portraitSpace = portraitEnabled and (portraitSize + (separatorEnabled and separatorSize or 0)) or 0
+	local width = (cfg.width or def.width or frame:GetWidth() or 200) + borderOffset * 2 + portraitSpace
+	local height = statusHeight + healthHeight + powerHeight + barGap + borderOffset * 2
 	return {
 		point = anchor.point or "CENTER",
 		relativePoint = anchor.relativePoint or anchor.point or "CENTER",
@@ -728,13 +760,6 @@ local function buildUnitSettings(unit)
 		refreshSettingsUI()
 	end, portraitDef.enabled == true, "portrait")
 
-	local portraitSize = slider(L["UFPortraitSize"] or "Portrait size", 8, 128, 1, function() return getValue(unit, { "portrait", "size" }, portraitDef.size or 32) end, function(val)
-		setValue(unit, { "portrait", "size" }, val or portraitDef.size or 32)
-		refreshSelf()
-	end, portraitDef.size or 32, "portrait", true)
-	portraitSize.isEnabled = isPortraitEnabled
-	list[#list + 1] = portraitSize
-
 	local portraitSideOptions = {
 		{ value = "LEFT", label = HUD_EDIT_MODE_SETTING_AURA_FRAME_ICON_DIRECTION_LEFT or "Left" },
 		{ value = "RIGHT", label = HUD_EDIT_MODE_SETTING_AURA_FRAME_ICON_DIRECTION_RIGHT or "Right" },
@@ -766,39 +791,79 @@ local function buildUnitSettings(unit)
 	portraitSquareBackground.isEnabled = isPortraitEnabled
 	list[#list + 1] = portraitSquareBackground
 
-	local portraitOffsetX = slider(
-		L["Offset X"] or "Offset X",
-		-200,
-		200,
-		1,
-		function() return getValue(unit, { "portrait", "offset", "x" }, (portraitDef.offset and portraitDef.offset.x) or 0) end,
-		function(val)
-			setValue(unit, { "portrait", "offset", "x" }, val or 0)
-			refreshSelf()
-		end,
-		(portraitDef.offset and portraitDef.offset.x) or 0,
-		"portrait",
-		true
-	)
-	portraitOffsetX.isEnabled = isPortraitEnabled
-	list[#list + 1] = portraitOffsetX
+	local portraitSeparatorDef = portraitDef.separator or {}
+	local function isPortraitSeparatorEnabled()
+		local enabled = getValue(unit, { "portrait", "separator", "enabled" }, portraitSeparatorDef.enabled)
+		if enabled == nil then enabled = true end
+		return enabled == true
+	end
 
-	local portraitOffsetY = slider(
-		L["Offset Y"] or "Offset Y",
-		-200,
-		200,
-		1,
-		function() return getValue(unit, { "portrait", "offset", "y" }, (portraitDef.offset and portraitDef.offset.y) or 0) end,
+	list[#list + 1] = checkbox(L["UFPortraitSeparatorEnable"] or "Show portrait separator", isPortraitSeparatorEnabled, function(val)
+		setValue(unit, { "portrait", "separator", "enabled" }, val and true or false)
+		refreshSelf()
+	end, portraitSeparatorDef.enabled ~= false, "portrait")
+
+	local portraitSeparatorSize = slider(L["UFPortraitSeparatorSize"] or "Separator size", 1, 64, 1, function()
+		local size = getValue(unit, { "portrait", "separator", "size" }, portraitSeparatorDef.size)
+		if not size or size <= 0 then
+			local border = getValue(unit, { "border" }, def.border or {})
+			size = border.edgeSize or 1
+		end
+		return size
+	end, function(val)
+		setValue(unit, { "portrait", "separator", "size" }, val or 1)
+		refreshSelf()
+	end, portraitSeparatorDef.size or (def.border and def.border.edgeSize) or 1, "portrait", true)
+	portraitSeparatorSize.isEnabled = function() return isPortraitEnabled() and isPortraitSeparatorEnabled() end
+	list[#list + 1] = portraitSeparatorSize
+
+	local portraitSeparatorTexture = radioDropdown(
+		L["UFPortraitSeparatorTexture"] or "Separator texture",
+		textureOptions,
+		function() return getValue(unit, { "portrait", "separator", "texture" }, portraitSeparatorDef.texture or "SOLID") or "SOLID" end,
 		function(val)
-			setValue(unit, { "portrait", "offset", "y" }, val or 0)
+			setValue(unit, { "portrait", "separator", "texture" }, val or "SOLID")
 			refreshSelf()
 		end,
-		(portraitDef.offset and portraitDef.offset.y) or 0,
-		"portrait",
-		true
+		portraitSeparatorDef.texture or "SOLID",
+		"portrait"
 	)
-	portraitOffsetY.isEnabled = isPortraitEnabled
-	list[#list + 1] = portraitOffsetY
+	portraitSeparatorTexture.isEnabled = function() return isPortraitEnabled() and isPortraitSeparatorEnabled() end
+	list[#list + 1] = portraitSeparatorTexture
+
+	local portraitSeparatorColor = checkboxColor({
+		name = L["UFPortraitSeparatorColor"] or "Separator color",
+		parentId = "portrait",
+		defaultChecked = portraitSeparatorDef.useCustomColor == true,
+		isChecked = function() return getValue(unit, { "portrait", "separator", "useCustomColor" }, portraitSeparatorDef.useCustomColor == true) == true end,
+		onChecked = function(val)
+			setValue(unit, { "portrait", "separator", "useCustomColor" }, val and true or false)
+			if val and not getValue(unit, { "portrait", "separator", "color" }) then
+				local border = getValue(unit, { "border" }, def.border or {})
+				local fallback = border.color or (def.border and def.border.color) or { 0, 0, 0, 0.8 }
+				setValue(unit, { "portrait", "separator", "color" }, { fallback[1] or 0, fallback[2] or 0, fallback[3] or 0, fallback[4] or 0.8 })
+			end
+			refreshSelf()
+		end,
+		getColor = function()
+			local border = getValue(unit, { "border" }, def.border or {})
+			local fallback = border.color or (def.border and def.border.color) or { 0, 0, 0, 0.8 }
+			return toRGBA(getValue(unit, { "portrait", "separator", "color" }, portraitSeparatorDef.color or fallback), portraitSeparatorDef.color or fallback)
+		end,
+		onColor = function(color)
+			setColor(unit, { "portrait", "separator", "color" }, color.r, color.g, color.b, color.a)
+			setValue(unit, { "portrait", "separator", "useCustomColor" }, true)
+			refreshSelf()
+		end,
+		colorDefault = {
+			r = (portraitSeparatorDef.color and portraitSeparatorDef.color[1]) or (def.border and def.border.color and def.border.color[1]) or 0,
+			g = (portraitSeparatorDef.color and portraitSeparatorDef.color[2]) or (def.border and def.border.color and def.border.color[2]) or 0,
+			b = (portraitSeparatorDef.color and portraitSeparatorDef.color[3]) or (def.border and def.border.color and def.border.color[3]) or 0,
+			a = (portraitSeparatorDef.color and portraitSeparatorDef.color[4]) or (def.border and def.border.color and def.border.color[4]) or 0.8,
+		},
+	})
+	portraitSeparatorColor.isEnabled = function() return isPortraitEnabled() and isPortraitSeparatorEnabled() end
+	list[#list + 1] = portraitSeparatorColor
 
 	list[#list + 1] = { name = L["HealthBar"] or "Health Bar", kind = settingType.Collapsible, id = "health", defaultCollapsed = true }
 
