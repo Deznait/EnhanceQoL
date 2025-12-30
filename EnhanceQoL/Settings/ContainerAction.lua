@@ -12,6 +12,11 @@ local function openItems(items)
 			return
 		end
 
+		if UnitIsDeadOrGhost and UnitIsDeadOrGhost("player") then
+			wOpen = false
+			return
+		end
+
 		if not MerchantFrame:IsShown() then
 			local item = table.remove(items, 1)
 			local iLoc = ItemLocation:CreateFromBagAndSlot(item.bag, item.slot)
@@ -97,9 +102,7 @@ data = {
 
 		StaticPopupDialogs[dialogKey].OnAccept = function()
 			local ok, reason = addon.ContainerActions:RemoveItemFromBlacklist(itemID)
-			if not ok then
-				addon.ContainerActions:HandleBlacklistError(reason, itemID)
-			end
+			if not ok then addon.ContainerActions:HandleBlacklistError(reason, itemID) end
 		end
 
 		StaticPopup_Show(dialogKey, itemName or ("item:" .. itemID), itemID)

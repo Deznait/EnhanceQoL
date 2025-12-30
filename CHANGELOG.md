@@ -82,6 +82,7 @@
   - Upgrade arrow color in inventory changed to green.
   - Upgrade arrow size increased.
   - Moved the “Hide Minimap Button” setting to Map Navigation.
+  - `/eqol` now opens the new settings menu; `/eqol combat` and `/eqol legacy` open the legacy options window.
 
 ### 🐛 Fixed
 
@@ -110,6 +111,7 @@
 - **Tooltips / Misc**
   - Macro-ID on tooltip was wrong.
   - Aura tooltip was hidden in restricted combat (secret) on party/raid when _Hide friendly tooltip_ was active
+  - Auto container opening now skips while dead to avoid "You can't do that when you're dead" spam.
 
 ---
 

@@ -3730,6 +3730,23 @@ local function RestorePosition(frame)
 	end
 end
 
+local function OpenSettingsRoot()
+	if not (Settings and Settings.OpenToCategory) then return end
+	if not (addon.SettingsLayout and addon.SettingsLayout.rootCategory) then return end
+
+	if InCombatLockdown and InCombatLockdown() then
+		addon.variables = addon.variables or {}
+		addon.variables.pendingSettingsOpen = true
+		return
+	end
+
+	addon.variables = addon.variables or {}
+	addon.variables.pendingSettingsOpen = nil
+	Settings.OpenToCategory(addon.SettingsLayout.rootCategory:GetID())
+end
+
+addon.functions.OpenSettingsRoot = OpenSettingsRoot
+
 function addon.functions.checkReloadFrame()
 	if addon.variables.requireReload == false then return end
 	if _G["ReloadUIPopup"] and _G["ReloadUIPopup"]:IsShown() then return end
@@ -3906,7 +3923,7 @@ local function CreateUI()
 		icon = "Interface\\AddOns\\" .. addonName .. "\\Icons\\Icon.tga", -- Hier kannst du dein eigenes Icon verwenden
 		OnClick = function(_, msg)
 			if msg == "LeftButton" then
-				Settings.OpenToCategory(addon.SettingsLayout.rootCategory:GetID())
+				OpenSettingsRoot()
 			else
 				MenuUtil.CreateContextMenu(UIParent, QuickMenuGenerator)
 			end
@@ -3924,13 +3941,7 @@ local function CreateUI()
 		text = "Enhance QoL",
 		icon = "Interface\\AddOns\\EnhanceQoL\\Icons\\Icon.tga",
 		notCheckable = true,
-		func = function(button, menuInputData, menu)
-			if frame:IsShown() then
-				frame:Hide()
-			else
-				frame:Show()
-			end
-		end,
+		func = function(button, menuInputData, menu) OpenSettingsRoot() end,
 		funcOnEnter = function(button)
 			MenuUtil.ShowTooltip(button, function(tooltip) tooltip:SetText(L["Left-Click to show options"]) end)
 		end,
@@ -4270,12 +4281,14 @@ function loadMain()
 			end
 		elseif msg == "rq" then
 			if addon.Query and addon.Query.frame then addon.Query.frame:Show() end
-		else
+		elseif msg == "combat" or msg == "legacy" then
 			if addon.aceFrame:IsShown() then
 				addon.aceFrame:Hide()
 			else
 				addon.aceFrame:Show()
 			end
+		else
+			OpenSettingsRoot()
 		end
 	end
 
@@ -4663,6 +4676,7 @@ local eventHandlers = {
 				addon.variables.pendingExtraActionArtwork = nil
 				if addon.functions.ApplyExtraActionArtworkSetting then addon.functions.ApplyExtraActionArtworkSetting() end
 			end
+			if addon.variables.pendingSettingsOpen then OpenSettingsRoot() end
 		end
 	end,
 	["QUEST_COMPLETE"] = function()
