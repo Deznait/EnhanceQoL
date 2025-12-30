@@ -114,6 +114,7 @@
   - Aura tooltip was hidden in restricted combat (secret) on party/raid when _Hide friendly tooltip_ was active
   - Auto container opening now skips while dead to avoid "You can't do that when you're dead" spam.
   - Mouse ring/trail now share a single runner and lazily allocate trail elements to reduce hot-path work.
+  - Upgrade Arrow in inventory didn't check for "recommended for specialization"
 
 ---
 

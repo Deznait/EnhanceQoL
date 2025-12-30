@@ -618,6 +618,44 @@ local function getEquipSlotsFor(equipLoc)
 	return nil
 end
 
+local cachedUnitClass, cachedUnitSpec, cachedSpecFilters
+local function getCurrentSpecFilters()
+	local unitClass = addon.variables.unitClass
+	local unitSpec = addon.variables.unitSpec
+	if not unitClass or not unitSpec then
+		cachedUnitClass, cachedUnitSpec, cachedSpecFilters = nil, nil, nil
+		return nil
+	end
+	if unitClass ~= cachedUnitClass or unitSpec ~= cachedUnitSpec then
+		cachedUnitClass, cachedUnitSpec = unitClass, unitSpec
+		local classFilters = addon.itemBagFilterTypes and addon.itemBagFilterTypes[unitClass]
+		cachedSpecFilters = classFilters and classFilters[unitSpec] or nil
+	end
+	return cachedSpecFilters
+end
+
+local function isItemRecommendedForSpec(itemLink, itemEquipLoc, classID, subclassID)
+	if not itemLink then return false end
+	if not IsEquippableItem(itemLink) then return false end
+
+	if itemEquipLoc == nil or classID == nil or subclassID == nil then
+		local _, _, _, equipLoc, _, instantClassID, instantSubclassID = GetItemInfoInstant(itemLink)
+		itemEquipLoc = itemEquipLoc or equipLoc
+		if classID == nil then classID = instantClassID end
+		if subclassID == nil then subclassID = instantSubclassID end
+	end
+
+	if not itemEquipLoc or classID == nil or subclassID == nil then return false end
+	if itemEquipLoc == "INVTYPE_TABARD" then return false end
+	if itemEquipLoc == "INVTYPE_CLOAK" then return true end
+
+	local specFilters = getCurrentSpecFilters()
+	if not specFilters then return false end
+	local classEntry = specFilters[classID]
+	local value = classEntry and classEntry[subclassID]
+	return value ~= nil and value ~= false
+end
+
 local function isBagItemUpgrade(itemLink, itemEquipLoc, itemLevel)
 	if not itemLink or not itemEquipLoc then return false end
 	local slots = getEquipSlotsFor(itemEquipLoc)
@@ -762,8 +800,9 @@ local function updateButtonInfo(itemButton, bag, slot, frameName)
 
 				-- Upgrade arrow (bag): indicate if this item is higher ilvl than equipped
 				if addon.db["showUpgradeArrowOnBagItems"] then
-					if isUpgrade == nil then isUpgrade = isBagItemUpgrade(itemLink, itemEquipLoc, itemLevelText) end
-					if isUpgrade then
+					local isRecommended = isItemRecommendedForSpec(itemLink, itemEquipLoc, classID, subclassID)
+					if isRecommended and isUpgrade == nil then isUpgrade = isBagItemUpgrade(itemLink, itemEquipLoc, itemLevelText) end
+					if isRecommended and isUpgrade then
 						addon.functions.EnsureBagUpgradeIcon(itemButton)
 						local posUp = addon.db["bagUpgradeIconPosition"] or "BOTTOMRIGHT"
 						addon.functions.ApplyBagUpgradeIconPosition(itemButton.ItemUpgradeIcon, itemButton, posUp)
