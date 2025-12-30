@@ -109,6 +109,7 @@
 
 - **Tooltips / Misc**
   - Macro-ID on tooltip was wrong.
+  - Aura tooltip was hidden in restricted combat (secret) on party/raid when _Hide friendly tooltip_ was active
 
 ---
 

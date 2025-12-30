@@ -915,12 +915,19 @@ if TooltipDataProcessor then
 		local id, name, _, timeLimit, kind
 
 		if issecretvalue and issecretvalue(data.type) then
-			-- check for mouseover
-			if UnitIsEnemy("mouseover", "player") or UnitIsFriend("mouseover", "player") then
-				kind = "unit"
-			else
-				-- assume it's a aura?
-				kind = "aura"
+			-- check for owner
+			local owner = tooltip.GetOwner and tooltip:GetOwner()
+			if owner then
+				if owner.auraInstanceID then kind = "aura" end
+			end
+			if not kind then
+				-- check for mouseover
+				if UnitIsEnemy("mouseover", "player") or UnitIsFriend("mouseover", "player") then
+					kind = "unit"
+				else
+					-- assume it's an aura?
+					kind = "aura"
+				end
 			end
 		else
 			kind = addon.Tooltip.variables.kindsByID[tonumber(data.type)]
