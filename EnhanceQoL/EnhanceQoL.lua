@@ -2304,6 +2304,7 @@ local function initParty()
 	addon.functions.InitDBValue("autoAcceptGroupInvite", false)
 	addon.functions.InitDBValue("autoAcceptGroupInviteFriendOnly", false)
 	addon.functions.InitDBValue("autoAcceptGroupInviteGuildOnly", false)
+	addon.functions.InitDBValue("autoAcceptSummon", false)
 	addon.functions.InitDBValue("showLeaderIconRaidFrame", false)
 
 	if CompactUnitFrame_SetUnit then
@@ -2359,6 +2360,97 @@ local function setupQuickSkipCinematic()
 	addon.variables.quickSkipCinematicHooked = true
 end
 
+local AUTO_RELEASE_PVP_WORLD_MAPS = {
+	[123] = true, -- Wintergrasp
+	[244] = true, -- Tol Barad (PvP)
+	[588] = true, -- Ashran
+	[622] = true, -- Stormshield
+	[624] = true, -- Warspear
+}
+
+local AUTO_RELEASE_PVP_EXCLUDE_ALTERAC = {
+	[91] = true, -- Alterac Valley
+	[1537] = true, -- Alterac Valley (legacy)
+}
+
+local AUTO_RELEASE_PVP_EXCLUDE_WINTERGRASP = {
+	[123] = true, -- Wintergrasp
+	[1334] = true, -- Wintergrasp (instanced)
+}
+
+local AUTO_RELEASE_PVP_EXCLUDE_TOLBARAD = {
+	[244] = true, -- Tol Barad (PvP)
+}
+
+local AUTO_RELEASE_PVP_EXCLUDE_ASHRAN = {
+	[588] = true, -- Ashran
+	[622] = true, -- Stormshield
+	[624] = true, -- Warspear
+	[1478] = true, -- Ashran (instanced)
+}
+
+local function hasUsableSelfResurrection()
+	local options = C_DeathInfo and C_DeathInfo.GetSelfResurrectOptions and C_DeathInfo.GetSelfResurrectOptions()
+	if not options then return false end
+	for _, option in ipairs(options) do
+		if option and option.canUse then return true end
+	end
+	return false
+end
+
+local function isAutoReleasePvPExcluded(mapID)
+	if not mapID then return false end
+	if addon.db["autoReleasePvPExcludeAlterac"] and AUTO_RELEASE_PVP_EXCLUDE_ALTERAC[mapID] then return true end
+	if addon.db["autoReleasePvPExcludeWintergrasp"] and AUTO_RELEASE_PVP_EXCLUDE_WINTERGRASP[mapID] then return true end
+	if addon.db["autoReleasePvPExcludeTolBarad"] and AUTO_RELEASE_PVP_EXCLUDE_TOLBARAD[mapID] then return true end
+	if addon.db["autoReleasePvPExcludeAshran"] and AUTO_RELEASE_PVP_EXCLUDE_ASHRAN[mapID] then return true end
+	return false
+end
+
+local function shouldAutoReleasePvP(mapID, inInstance, instanceType)
+	if not addon.db or not addon.db["autoReleasePvP"] then return false end
+	if hasUsableSelfResurrection() then return false end
+	if inInstance and instanceType == "pvp" then return not isAutoReleasePvPExcluded(mapID) end
+	if mapID and AUTO_RELEASE_PVP_WORLD_MAPS[mapID] then return not isAutoReleasePvPExcluded(mapID) end
+	return false
+end
+
+local function scheduleAutoReleasePvP(popup)
+	if not popup or not popup.GetButton then return end
+	if not addon.db or not addon.db["autoReleasePvP"] then return end
+
+	local mapID = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+	local inInstance, instanceType = IsInInstance()
+	if not shouldAutoReleasePvP(mapID, inInstance, instanceType) then return end
+
+	local delayMs = tonumber(addon.db["autoReleasePvPDelay"] or 0) or 0
+	if delayMs < 0 then delayMs = 0 end
+	local delay = delayMs / 1000
+
+	if popup._eqolAutoReleaseTimer then
+		popup._eqolAutoReleaseTimer:Cancel()
+		popup._eqolAutoReleaseTimer = nil
+	end
+
+	local function tryRelease()
+		if not popup:IsShown() or popup.which ~= "DEATH" then return end
+		local currentMapID = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+		local inInstanceNow, instanceTypeNow = IsInInstance()
+		if not shouldAutoReleasePvP(currentMapID, inInstanceNow, instanceTypeNow) then return end
+		local button = popup:GetButton(1)
+		if button then button:Click() end
+	end
+
+	if delay <= 0 then
+		C_Timer.After(0, tryRelease)
+	else
+		popup._eqolAutoReleaseTimer = C_Timer.NewTimer(delay, function()
+			popup._eqolAutoReleaseTimer = nil
+			tryRelease()
+		end)
+	end
+end
+
 local function initMisc()
 	addon.functions.InitDBValue("confirmTimerRemovalTrade", false)
 	addon.functions.InitDBValue("confirmPatronOrderDialog", false)
@@ -2369,6 +2461,12 @@ local function initMisc()
 	addon.functions.InitDBValue("confirmPurchaseTokenItem", false)
 	addon.functions.InitDBValue("timeoutRelease", false)
 	addon.functions.InitDBValue("timeoutReleaseModifier", "SHIFT")
+	addon.functions.InitDBValue("autoReleasePvP", false)
+	addon.functions.InitDBValue("autoReleasePvPDelay", 0)
+	addon.functions.InitDBValue("autoReleasePvPExcludeAlterac", false)
+	addon.functions.InitDBValue("autoReleasePvPExcludeWintergrasp", false)
+	addon.functions.InitDBValue("autoReleasePvPExcludeTolBarad", false)
+	addon.functions.InitDBValue("autoReleasePvPExcludeAshran", false)
 	addon.functions.InitDBValue("hideRaidTools", false)
 	addon.functions.InitDBValue("autoRepair", false)
 	addon.functions.InitDBValue("autoRepairGuildBank", false)
@@ -2422,6 +2520,8 @@ local function initMisc()
 							if releaseButton then releaseButton:SetAlpha(1) end
 							addon.functions.hideTimeoutReleaseHint(self)
 						end
+
+						scheduleAutoReleasePvP(self)
 					else
 						addon.functions.hideTimeoutReleaseHint(self)
 					end
@@ -4742,6 +4842,23 @@ local eventHandlers = {
 				if _G.BankPanel and _G.BankPanel:IsShown() then addon.functions.updateBags(_G.BankPanel) end
 			end)
 		end
+	end,
+	["CONFIRM_SUMMON"] = function()
+		if not addon.db["autoAcceptSummon"] then return end
+		if UnitAffectingCombat("player") then return end
+		if not C_SummonInfo or not C_SummonInfo.ConfirmSummon then return end
+
+		C_Timer.After(0, function()
+			if not addon.db or not addon.db["autoAcceptSummon"] then return end
+			if UnitAffectingCombat("player") then return end
+			if not C_SummonInfo.GetSummonConfirmTimeLeft or C_SummonInfo.GetSummonConfirmTimeLeft() <= 0 then return end
+			if not C_SummonInfo.GetSummonConfirmSummoner or not C_SummonInfo.GetSummonConfirmSummoner() then return end
+
+			C_SummonInfo.ConfirmSummon()
+			StaticPopup_Hide("CONFIRM_SUMMON")
+			StaticPopup_Hide("CONFIRM_SUMMON_SCENARIO")
+			StaticPopup_Hide("CONFIRM_SUMMON_STARTING_AREA")
+		end)
 	end,
 	["PARTY_INVITE_REQUEST"] = function(unitName, arg2, arg3, arg4, arg5, arg6, unitID, arg8)
 		if addon.db["autoAcceptGroupInvite"] then

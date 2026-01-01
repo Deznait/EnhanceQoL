@@ -501,6 +501,74 @@ addon.functions.SettingsCreateMultiDropdown(cChar, {
 	parentSection = sectionGeneral,
 })
 
+local function isAutoReleasePvPEnabled()
+	return addon.SettingsLayout.elements["autoReleasePvP"] and addon.SettingsLayout.elements["autoReleasePvP"].setting and addon.SettingsLayout.elements["autoReleasePvP"].setting:GetValue() == true
+end
+
+addon.functions.SettingsCreateCheckbox(cChar, {
+	var = "autoReleasePvP",
+	text = L["autoReleasePvP"],
+	desc = L["autoReleasePvPDesc"],
+	func = function(value) addon.db["autoReleasePvP"] = value end,
+	parentSection = sectionGeneral,
+	children = {
+		{
+			var = "autoReleasePvPDelay",
+			text = L["autoReleasePvPDelay"],
+			desc = L["autoReleasePvPDelayDesc"],
+			get = function() return addon.db and addon.db.autoReleasePvPDelay or 0 end,
+			set = function(value) addon.db["autoReleasePvPDelay"] = value end,
+			min = 0,
+			max = 3000,
+			step = 100,
+			parentCheck = isAutoReleasePvPEnabled,
+			parent = true,
+			default = 0,
+			sType = "slider",
+		},
+		{
+			var = "autoReleasePvPExcludeAlterac",
+			text = L["autoReleasePvPExcludeAlterac"],
+			func = function(v) addon.db["autoReleasePvPExcludeAlterac"] = v end,
+			parentCheck = isAutoReleasePvPEnabled,
+			parent = true,
+			default = false,
+			type = Settings.VarType.Boolean,
+			sType = "checkbox",
+		},
+		{
+			var = "autoReleasePvPExcludeWintergrasp",
+			text = L["autoReleasePvPExcludeWintergrasp"],
+			func = function(v) addon.db["autoReleasePvPExcludeWintergrasp"] = v end,
+			parentCheck = isAutoReleasePvPEnabled,
+			parent = true,
+			default = false,
+			type = Settings.VarType.Boolean,
+			sType = "checkbox",
+		},
+		{
+			var = "autoReleasePvPExcludeTolBarad",
+			text = L["autoReleasePvPExcludeTolBarad"],
+			func = function(v) addon.db["autoReleasePvPExcludeTolBarad"] = v end,
+			parentCheck = isAutoReleasePvPEnabled,
+			parent = true,
+			default = false,
+			type = Settings.VarType.Boolean,
+			sType = "checkbox",
+		},
+		{
+			var = "autoReleasePvPExcludeAshran",
+			text = L["autoReleasePvPExcludeAshran"],
+			func = function(v) addon.db["autoReleasePvPExcludeAshran"] = v end,
+			parentCheck = isAutoReleasePvPEnabled,
+			parent = true,
+			default = false,
+			type = Settings.VarType.Boolean,
+			sType = "checkbox",
+		},
+	},
+})
+
 ---- REGION END
 
 local eventHandlers = {

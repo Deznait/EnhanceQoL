@@ -166,6 +166,13 @@ local data = {
 		},
 	},
 	{
+		var = "autoAcceptSummon",
+		text = L["autoAcceptSummon"],
+		desc = L["autoAcceptSummonDesc"],
+		type = "CheckBox",
+		func = function(value) addon.db["autoAcceptSummon"] = value end,
+	},
+	{
 		var = "friendsListDecorEnabled",
 		text = L["friendsListDecorEnabledLabel"],
 		type = "CheckBox",
@@ -242,12 +249,8 @@ local data = {
 		func = function(value)
 			addon.db["communityChatPrivacyEnabled"] = value
 			if addon.CommunityChatPrivacy then
-				if addon.CommunityChatPrivacy.SetMode then
-					addon.CommunityChatPrivacy:SetMode(addon.db["communityChatPrivacyMode"])
-				end
-				if addon.CommunityChatPrivacy.SetEnabled then
-					addon.CommunityChatPrivacy:SetEnabled(value)
-				end
+				if addon.CommunityChatPrivacy.SetMode then addon.CommunityChatPrivacy:SetMode(addon.db["communityChatPrivacyMode"]) end
+				if addon.CommunityChatPrivacy.SetEnabled then addon.CommunityChatPrivacy:SetEnabled(value) end
 			end
 		end,
 		children = {
@@ -267,9 +270,7 @@ local data = {
 				get = function() return addon.db and addon.db.communityChatPrivacyMode or 1 end,
 				set = function(value)
 					addon.db["communityChatPrivacyMode"] = value
-					if addon.CommunityChatPrivacy and addon.CommunityChatPrivacy.SetMode then
-						addon.CommunityChatPrivacy:SetMode(value)
-					end
+					if addon.CommunityChatPrivacy and addon.CommunityChatPrivacy.SetMode then addon.CommunityChatPrivacy:SetMode(value) end
 				end,
 				parentCheck = function()
 					return addon.SettingsLayout.elements["communityChatPrivacyEnabled"]
