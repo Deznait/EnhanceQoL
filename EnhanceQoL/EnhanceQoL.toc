@@ -73,3 +73,7 @@ Settings\SettingsUI.xml
 # Aura
 Modules\Aura\locales\[TextLocale].lua
 Modules\Aura\Aura.xml
+
+# Food
+Modules\Food\locales\[TextLocale].lua
+Modules\Food\Food.xml
