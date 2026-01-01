@@ -69,3 +69,7 @@ Submodules\HealthText.lua
 Submodules\Mailbox.lua
 Submodules\Mailbox.xml
 Settings\SettingsUI.xml
+
+# Aura
+Modules\Aura\locales\[TextLocale].lua
+Modules\Aura\Aura.xml

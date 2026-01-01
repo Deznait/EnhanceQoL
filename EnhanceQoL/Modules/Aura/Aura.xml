@@ -1,0 +1,13 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+	<Script file="Init.lua" />
+	<Script file="widgets\DragTreeGroup.lua" />
+	<Script file="ResourceBars.lua" />
+	<Script file="Settings_Ressourcebars.lua" />
+	<Script file="Aura.lua" />
+	<Script file="BuffTracker.lua" />
+	<Script file="CastTracker.lua" />
+	<Script file="CooldownNotify.lua" />
+	<Script file="UF_Helper.lua" />
+	<Script file="UF.lua" />
+	<Script file="Settings_UF.lua" />
+</Ui>
