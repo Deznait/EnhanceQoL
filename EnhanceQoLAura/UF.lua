@@ -114,10 +114,12 @@ local classResourceManagedFrames = {}
 local classResourceHooks = {}
 local applyClassResourceLayout
 
-local function isBossUnit(unit)
-	if type(unit) ~= "string" then return false end
-	return unit == "boss" or (unit and unit:match("^boss%d+$"))
+local bossUnitLookup = { boss = true }
+for i = 1, maxBossFrames do
+	bossUnitLookup["boss" .. i] = true
 end
+
+local function isBossUnit(unit) return type(unit) == "string" and bossUnitLookup[unit] == true end
 
 local UNITS = {
 	player = {
@@ -282,6 +284,7 @@ local defaults = {
 		enabled = false,
 		showTooltip = false,
 		auraIcons = {
+			enabled = true,
 			size = 24,
 			padding = 2,
 			max = 16,
@@ -359,9 +362,13 @@ local states = {}
 local targetAuras = {}
 local targetAuraOrder = {}
 local targetAuraIndexById = {}
+local playerAuras = {}
+local playerAuraOrder = {}
+local playerAuraIndexById = {}
+local bossAuraStates = {}
 local AURA_FILTER_HELPFUL = "HELPFUL|INCLUDE_NAME_PLATE_ONLY"
 local AURA_FILTER_HARMFUL = "HARMFUL|PLAYER|INCLUDE_NAME_PLATE_ONLY"
-local auraList = {}
+local AURA_FILTER_HARMFUL_ALL = "HARMFUL|INCLUDE_NAME_PLATE_ONLY"
 local blizzardPlayerHooked = false
 local blizzardTargetHooked = false
 local castOnUpdateHandlers = {}
@@ -396,15 +403,35 @@ local function defaultsFor(unit)
 	return defaults[unit] or defaults.player or {}
 end
 
-local function resetTargetAuras()
-	for k in pairs(targetAuras) do
-		targetAuras[k] = nil
+local function getAuraFilters(unit)
+	if unit == UNIT.PLAYER or unit == "player" then return AURA_FILTER_HELPFUL, AURA_FILTER_HARMFUL_ALL end
+	return AURA_FILTER_HELPFUL, AURA_FILTER_HARMFUL
+end
+
+local function getAuraTables(unit)
+	unit = unit or "target"
+	if unit == UNIT.PLAYER or unit == "player" then return playerAuras, playerAuraOrder, playerAuraIndexById end
+	if unit == UNIT.TARGET or unit == "target" then return targetAuras, targetAuraOrder, targetAuraIndexById end
+	if not isBossUnit(unit) or unit == "boss" then return nil end
+	local state = bossAuraStates[unit]
+	if not state then
+		state = { auras = {}, order = {}, indexById = {} }
+		bossAuraStates[unit] = state
 	end
-	for i = #targetAuraOrder, 1, -1 do
-		targetAuraOrder[i] = nil
+	return state.auras, state.order, state.indexById
+end
+
+local function resetTargetAuras(unit)
+	local auras, order, indexById = getAuraTables(unit)
+	if not auras then return end
+	for k in pairs(auras) do
+		auras[k] = nil
 	end
-	for k in pairs(targetAuraIndexById) do
-		targetAuraIndexById[k] = nil
+	for i = #order, 1, -1 do
+		order[i] = nil
+	end
+	for k in pairs(indexById) do
+		indexById[k] = nil
 	end
 end
 
@@ -749,13 +776,15 @@ local function ensureBossContainer()
 	return bossContainer
 end
 
-local function cacheTargetAura(aura)
+local function cacheTargetAura(aura, unit)
 	if not aura or not aura.auraInstanceID then return end
 	local id = aura.auraInstanceID
-	local t = targetAuras[id]
+	local auras = getAuraTables(unit)
+	if not auras then return end
+	local t = auras[id]
 	if not t then
 		t = {}
-		targetAuras[id] = t
+		auras[id] = t
 	end
 	t.auraInstanceID = id
 	t.spellId = aura.spellId
@@ -769,26 +798,32 @@ local function cacheTargetAura(aura)
 	t.sourceUnit = aura.sourceUnit
 end
 
-local function addTargetAuraToOrder(auraInstanceID)
-	if not auraInstanceID or targetAuraIndexById[auraInstanceID] then return end
-	local idx = #targetAuraOrder + 1
-	targetAuraOrder[idx] = auraInstanceID
-	targetAuraIndexById[auraInstanceID] = idx
+local function addTargetAuraToOrder(auraInstanceID, unit)
+	local _, order, indexById = getAuraTables(unit)
+	if not order or not indexById then return end
+	if not auraInstanceID or indexById[auraInstanceID] then return end
+	local idx = #order + 1
+	order[idx] = auraInstanceID
+	indexById[auraInstanceID] = idx
 	return idx
 end
 
-local function reindexTargetAuraOrder(startIndex)
-	for i = startIndex or 1, #targetAuraOrder do
-		targetAuraIndexById[targetAuraOrder[i]] = i
+local function reindexTargetAuraOrder(startIndex, unit)
+	local _, order, indexById = getAuraTables(unit)
+	if not order or not indexById then return end
+	for i = startIndex or 1, #order do
+		indexById[order[i]] = i
 	end
 end
 
-local function removeTargetAuraFromOrder(auraInstanceID)
-	local idx = targetAuraIndexById[auraInstanceID]
+local function removeTargetAuraFromOrder(auraInstanceID, unit)
+	local _, order, indexById = getAuraTables(unit)
+	if not order or not indexById then return nil end
+	local idx = indexById[auraInstanceID]
 	if not idx then return nil end
-	table.remove(targetAuraOrder, idx)
-	targetAuraIndexById[auraInstanceID] = nil
-	reindexTargetAuraOrder(idx)
+	table.remove(order, idx)
+	indexById[auraInstanceID] = nil
+	reindexTargetAuraOrder(idx, unit)
 	return idx
 end
 
@@ -890,12 +925,13 @@ end
 
 local function applyAuraToButton(btn, aura, ac, isDebuff, unitToken)
 	if not btn or not aura then return end
+	unitToken = unitToken or "target"
 	local issecretAura = false
 	if issecretvalue and issecretvalue(isDebuff) then
 		issecretAura = true
-		isDebuff = not C_UnitAuras.IsAuraFilteredOutByInstanceID("target", aura.auraInstanceID, AURA_FILTER_HARMFUL)
+		local _, harmfulFilter = getAuraFilters(unitToken)
+		isDebuff = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unitToken, aura.auraInstanceID, harmfulFilter)
 	end
-	unitToken = unitToken or "target"
 	btn.spellId = aura.spellId
 	btn._showTooltip = ac.showTooltip ~= false
 	btn.icon:SetTexture(aura.icon or "")
@@ -1063,16 +1099,50 @@ function UF._auraLayout.calcPerRow(st, ac, width, primary)
 	return math.max(1, math.floor((available + (ac.padding or 0)) / size))
 end
 
-local function updateTargetAuraIcons(startIndex)
-	local st = states.target
+local function hideAuraContainers(st)
+	st = st or states.target
+	if not st then return end
+	if st.auraButtons then
+		for i = 1, #st.auraButtons do
+			local btn = st.auraButtons[i]
+			if btn then btn:Hide() end
+		end
+	end
+	if st.debuffButtons then
+		for i = 1, #st.debuffButtons do
+			local btn = st.debuffButtons[i]
+			if btn then btn:Hide() end
+		end
+	end
+	if st.auraContainer then
+		st.auraContainer:SetHeight(0.001)
+		st.auraContainer:SetShown(false)
+	end
+	if st.debuffContainer then
+		st.debuffContainer:SetHeight(0.001)
+		st.debuffContainer:SetShown(false)
+	end
+end
+
+local function updateTargetAuraIcons(startIndex, unit)
+	unit = unit or "target"
+	local st = states[unit]
 	if not st or not st.auraContainer or not st.frame then return end
-	local cfg = st.cfg or ensureDB("target")
-	local ac = cfg.auraIcons or defaults.target.auraIcons or { size = 24, padding = 2, max = 16, showCooldown = true }
+	local cfg = st.cfg or ensureDB(unit)
+	local def = defaultsFor(unit)
+	local ac = cfg.auraIcons or (def and def.auraIcons) or defaults.target.auraIcons or { size = 24, padding = 2, max = 16, showCooldown = true }
+	if ac.enabled == false then
+		hideAuraContainers(st)
+		return
+	end
 	ac.size = ac.size or 24
 	ac.padding = ac.padding or 0
 	ac.max = ac.max or 16
 	if ac.showTooltip == nil then ac.showTooltip = true end
 	if ac.max < 1 then ac.max = 1 end
+	local auras, order, indexById = getAuraTables(unit)
+	if not auras or not order or not indexById then return end
+	local _, harmfulFilter = getAuraFilters(unit)
 
 	local width = (st.auraContainer and st.auraContainer:GetWidth()) or (st.barGroup and st.barGroup:GetWidth()) or (st.frame and st.frame:GetWidth()) or 0
 	local useSeparateDebuffs = ac.separateDebuffAnchor == true
@@ -1085,24 +1155,24 @@ local function updateTargetAuraIcons(startIndex)
 	if not useSeparateDebuffs then
 		local icons = st.auraButtons or {}
 		st.auraButtons = icons
-		local shown = math.min(#targetAuraOrder, ac.max)
+		local shown = math.min(#order, ac.max)
 		local startIdx = startIndex or 1
 		if startIdx < 1 then startIdx = 1 end
 		local i = startIdx
 		while i <= shown do
-			local auraId = targetAuraOrder[i]
-			local aura = auraId and targetAuras[auraId]
+			local auraId = order[i]
+			local aura = auraId and auras[auraId]
 			if not aura then
-				table.remove(targetAuraOrder, i)
-				targetAuraIndexById[auraId] = nil
-				reindexTargetAuraOrder(i)
-				shown = math.min(#targetAuraOrder, ac.max)
+				table.remove(order, i)
+				indexById[auraId] = nil
+				reindexTargetAuraOrder(i, unit)
+				shown = math.min(#order, ac.max)
 			else
 				local btn
 				btn, st.auraButtons = ensureAuraButton(st.auraContainer, st.auraButtons, i, ac)
-				applyAuraToButton(btn, aura, ac, aura.isHarmful, "target")
+				applyAuraToButton(btn, aura, ac, aura.isHarmful, unit)
 				anchorAuraButton(btn, st.auraContainer, i, ac, perRow, buffPrimary, buffSecondary)
-				targetAuraIndexById[auraId] = i
+				indexById[auraId] = i
 				i = i + 1
 			end
 		end
@@ -1132,18 +1202,18 @@ local function updateTargetAuraIcons(startIndex)
 	local debPrimary, debSecondary = auraLayout.resolveGrowth(ac, debAnchor, ac.debuffGrowth)
 	local perRowDebuff = auraLayout.calcPerRow(st, ac, width, debPrimary)
 	local i = 1
-	while i <= #targetAuraOrder do
-		local auraId = targetAuraOrder[i]
-		local aura = auraId and targetAuras[auraId]
+	while i <= #order do
+		local auraId = order[i]
+		local aura = auraId and auras[auraId]
 		if not aura then
-			table.remove(targetAuraOrder, i)
-			targetAuraIndexById[auraId] = nil
-			reindexTargetAuraOrder(i)
+			table.remove(order, i)
+			indexById[auraId] = nil
+			reindexTargetAuraOrder(i, unit)
 		else
 			if shownTotal < ac.max then
 				local isDebuff
 				if issecretvalue and issecretvalue(aura.isHarmful) then
-					isDebuff = not C_UnitAuras.IsAuraFilteredOutByInstanceID("target", aura.auraInstanceID, AURA_FILTER_HARMFUL)
+					isDebuff = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, aura.auraInstanceID, harmfulFilter)
 				else
 					isDebuff = aura.isHarmful == true
 				end
@@ -1152,17 +1222,17 @@ local function updateTargetAuraIcons(startIndex)
 					debuffCount = debuffCount + 1
 					local btn
 					btn, debuffButtons = ensureAuraButton(st.debuffContainer, debuffButtons, debuffCount, ac)
-					applyAuraToButton(btn, aura, ac, true, "target")
+					applyAuraToButton(btn, aura, ac, true, unit)
 					anchorAuraButton(btn, st.debuffContainer, debuffCount, ac, perRowDebuff, debPrimary, debSecondary)
 				else
 					buffCount = buffCount + 1
 					local btn
 					btn, buffButtons = ensureAuraButton(st.auraContainer, buffButtons, buffCount, ac)
-					applyAuraToButton(btn, aura, ac, false, "target")
+					applyAuraToButton(btn, aura, ac, false, unit)
 					anchorAuraButton(btn, st.auraContainer, buffCount, ac, perRow, buffPrimary, buffSecondary)
 				end
 			end
-			targetAuraIndexById[auraId] = i
+			indexById[auraId] = i
 			i = i + 1
 		end
 	end
@@ -1181,51 +1251,61 @@ local function updateTargetAuraIcons(startIndex)
 	updateAuraContainerSize(st.debuffContainer, math.min(debuffCount, ac.max), ac, perRowDebuff, debPrimary)
 end
 
-local function fullScanTargetAuras()
-	resetTargetAuras()
-	if not UnitExists or not UnitExists("target") then return end
-	local st = states.target
-	local cfg = (st and st.cfg) or ensureDB("target")
-	local ac = cfg.auraIcons or defaults.target.auraIcons or {}
+local function fullScanTargetAuras(unit)
+	unit = unit or "target"
+	resetTargetAuras(unit)
+	local st = states[unit]
+	local cfg = (st and st.cfg) or ensureDB(unit)
+	local def = defaultsFor(unit)
+	local ac = cfg.auraIcons or (def and def.auraIcons) or defaults.target.auraIcons or {}
+	if ac.enabled == false then
+		updateTargetAuraIcons(nil, unit)
+		return
+	end
+	if not UnitExists or not UnitExists(unit) then
+		updateTargetAuraIcons(nil, unit)
+		return
+	end
+	local helpfulFilter, harmfulFilter = getAuraFilters(unit)
 	local hidePermanent = ac.hidePermanentAuras == true or ac.hidePermanent == true
 	if C_UnitAuras and C_UnitAuras.GetUnitAuras then
-		local helpful = C_UnitAuras.GetUnitAuras("target", AURA_FILTER_HELPFUL)
+		local helpful = C_UnitAuras.GetUnitAuras(unit, helpfulFilter)
 		for i = 1, #helpful do
 			local aura = helpful[i]
-			if aura and (not hidePermanent or not isPermanentAura(aura, "target")) then
-				cacheTargetAura(aura)
-				addTargetAuraToOrder(aura.auraInstanceID)
+			if aura and (not hidePermanent or not isPermanentAura(aura, unit)) then
+				cacheTargetAura(aura, unit)
+				addTargetAuraToOrder(aura.auraInstanceID, unit)
 			end
 		end
-		local harmful = C_UnitAuras.GetUnitAuras("target", AURA_FILTER_HARMFUL)
+		local harmful = C_UnitAuras.GetUnitAuras(unit, harmfulFilter)
 		for i = 1, #harmful do
 			local aura = harmful[i]
-			if aura and (not hidePermanent or not isPermanentAura(aura, "target")) then
-				cacheTargetAura(aura)
-				addTargetAuraToOrder(aura.auraInstanceID)
+			if aura and (not hidePermanent or not isPermanentAura(aura, unit)) then
+				cacheTargetAura(aura, unit)
+				addTargetAuraToOrder(aura.auraInstanceID, unit)
 			end
 		end
 	elseif C_UnitAuras and C_UnitAuras.GetAuraSlots then
-		local helpful = { C_UnitAuras.GetAuraSlots("target", AURA_FILTER_HELPFUL) }
+		local helpful = { C_UnitAuras.GetAuraSlots(unit, helpfulFilter) }
 		for i = 2, #helpful do
 			local slot = helpful[i]
-			local aura = C_UnitAuras.GetAuraDataBySlot("target", slot)
-			if aura and (not hidePermanent or not isPermanentAura(aura, "target")) then
-				cacheTargetAura(aura)
-				addTargetAuraToOrder(aura.auraInstanceID)
+			local aura = C_UnitAuras.GetAuraDataBySlot(unit, slot)
+			if aura and (not hidePermanent or not isPermanentAura(aura, unit)) then
+				cacheTargetAura(aura, unit)
+				addTargetAuraToOrder(aura.auraInstanceID, unit)
 			end
 		end
-		local harmful = { C_UnitAuras.GetAuraSlots("target", AURA_FILTER_HARMFUL) }
+		local harmful = { C_UnitAuras.GetAuraSlots(unit, harmfulFilter) }
 		for i = 2, #harmful do
 			local slot = harmful[i]
-			local aura = C_UnitAuras.GetAuraDataBySlot("target", slot)
-			if aura and (not hidePermanent or not isPermanentAura(aura, "target")) then
-				cacheTargetAura(aura)
-				addTargetAuraToOrder(aura.auraInstanceID)
+			local aura = C_UnitAuras.GetAuraDataBySlot(unit, slot)
+			if aura and (not hidePermanent or not isPermanentAura(aura, unit)) then
+				cacheTargetAura(aura, unit)
+				addTargetAuraToOrder(aura.auraInstanceID, unit)
 			end
 		end
 	end
-	updateTargetAuraIcons()
+	updateTargetAuraIcons(nil, unit)
 end
 
 local function refreshMainPower(unit)
@@ -1475,6 +1555,7 @@ do
 	targetDefaults.anchor = targetDefaults.anchor and CopyTable(targetDefaults.anchor) or { point = "CENTER", relativeTo = "UIParent", relativePoint = "CENTER", x = 0, y = -200 }
 	targetDefaults.anchor.x = (targetDefaults.anchor.x or 0) + 260
 	targetDefaults.auraIcons = {
+		enabled = true,
 		size = 24,
 		padding = 2,
 		max = 16,
@@ -1542,8 +1623,14 @@ do
 	bossDefaults.health.useAbsorbGlow = false
 	bossDefaults.health.showSampleAbsorb = false
 	bossDefaults.health.absorbUseCustomColor = false
+	if bossDefaults.auraIcons then bossDefaults.auraIcons.enabled = false end
 	if bossDefaults.status then bossDefaults.status.nameColorMode = "CUSTOM" end
 	defaults.boss = bossDefaults
+end
+
+if not defaults.player.auraIcons and defaults.target and defaults.target.auraIcons then
+	defaults.player.auraIcons = CopyTable(defaults.target.auraIcons)
+	defaults.player.auraIcons.enabled = false
 end
 
 local function ensureBorderFrame(frame)
@@ -1828,6 +1915,10 @@ local function setCastInfoFromUnit(unit)
 	local st = states[unit]
 	if not st or not st.castBar then return end
 	local cfg = (st and st.cfg) or ensureDB(key or unit)
+	if cfg and cfg.enabled == false then
+		stopCast(unit)
+		return
+	end
 	local ccfg = (cfg or {}).cast or {}
 	local defc = (defaultsFor(unit) and defaultsFor(unit).cast) or {}
 	if ccfg.enabled == false then
@@ -2632,7 +2723,7 @@ local function layoutFrame(cfg, unit)
 	-- Apply border only around the bar region wrapper
 	if st.barGroup then setBackdrop(st.barGroup, cfg.border) end
 
-	if unit == "target" and st.auraContainer then
+	if (unit == UNIT.PLAYER or unit == "target" or isBossUnit(unit)) and st.auraContainer then
 		st.auraContainer:ClearAllPoints()
 		local acfg = cfg.auraIcons or def.auraIcons or defaults.target.auraIcons or {}
 		local anchor = acfg.anchor or "BOTTOM"
@@ -2793,7 +2884,7 @@ local function ensureFrames(unit)
 		ensureRestLoop(st)
 	end
 
-	if unit == "target" then
+	if unit == UNIT.PLAYER or unit == "target" or isBossUnit(unit) then
 		st.auraContainer = CreateFrame("Frame", nil, st.frame)
 		st.debuffContainer = CreateFrame("Frame", nil, st.frame)
 		st.auraButtons = {}
@@ -2872,9 +2963,10 @@ local function applyBars(cfg, unit)
 end
 
 local function updateNameAndLevel(cfg, unit)
-	cfg = cfg or (states[unit] and states[unit].cfg) or ensureDB(unit)
 	local st = states[unit]
 	if not st then return end
+	cfg = cfg or st.cfg or ensureDB(unit)
+	if cfg and cfg.enabled == false then return end
 	if st.nameText then
 		local scfg = cfg.status or {}
 		local class = select(2, UnitClass(unit))
@@ -2932,6 +3024,7 @@ local function applyConfig(unit)
 			if st.portrait then st.portrait:Hide() end
 			if st.portraitHolder then st.portraitHolder:Hide() end
 			if st.portraitSeparator then st.portraitSeparator:Hide() end
+			if st.auraContainer then hideAuraContainers(st) end
 		end
 		applyVisibilityDriver(unit, false)
 		if unit == UNIT.PLAYER then applyFrameRuleOverride(BLIZZ_FRAME_NAMES.player, false) end
@@ -2940,7 +3033,7 @@ local function applyConfig(unit)
 		if unit == UNIT.FOCUS then applyFrameRuleOverride(BLIZZ_FRAME_NAMES.focus, false) end
 		if unit == UNIT.PET then applyFrameRuleOverride(BLIZZ_FRAME_NAMES.pet, false) end
 		if unit == UNIT.PLAYER then restoreClassResourceFrames() end
-		if unit == "target" then resetTargetAuras() end
+		if unit == UNIT.PLAYER or unit == "target" or isBossUnit(unit) then resetTargetAuras(unit) end
 		if unit == UNIT.PLAYER then updateRestingIndicator(cfg) end
 		if not isBossUnit(unit) then applyVisibilityRules(unit) end
 		return
@@ -2987,7 +3080,13 @@ local function applyConfig(unit)
 			st.castBar:Hide()
 		end
 	end
-	if unit == UNIT.TARGET and states[unit] and states[unit].auraContainer then updateTargetAuraIcons(1) end
+	if unit == UNIT.TARGET and states[unit] and states[unit].auraContainer then
+		updateTargetAuraIcons(1, unit)
+	elseif unit == UNIT.PLAYER and states[unit] and states[unit].auraContainer then
+		fullScanTargetAuras(unit)
+	elseif isBossUnit(unit) and states[unit] and states[unit].auraContainer then
+		fullScanTargetAuras(unit)
+	end
 	if not isBossUnit(unit) then applyVisibilityRules(unit) end
 end
 
@@ -3151,6 +3250,7 @@ local function updateBossFrames(force)
 				if st.barGroup then st.barGroup:Show() end
 				if st.status then st.status:Show() end
 				applyBossEditSample(i, cfg)
+				if st.auraContainer then fullScanTargetAuras(unit) end
 			else
 				local exists = UnitExists and UnitExists(unit)
 				if not InCombatLockdown() then
@@ -3172,6 +3272,7 @@ local function updateBossFrames(force)
 					updateHealth(cfg, unit)
 					updatePower(cfg, unit)
 					checkRaidTargetIcon(unit, st)
+					fullScanTargetAuras(unit)
 					if st.castBar and cfg.cast and cfg.cast.enabled ~= false then
 						setCastInfoFromUnit(unit)
 						if shouldShowSampleCast(unit) and (not st.castInfo or not UnitCastingInfo or (UnitCastingInfo and not UnitCastingInfo(unit))) then setSampleCast(unit) end
@@ -3182,6 +3283,8 @@ local function updateBossFrames(force)
 				else
 					if st.barGroup then st.barGroup:Hide() end
 					if st.status then st.status:Hide() end
+					if st.auraContainer then hideAuraContainers(st) end
+					resetTargetAuras(unit)
 					if st.castBar then
 						stopCast(unit)
 						st.castBar:Hide()
@@ -3339,15 +3442,33 @@ local function isBossFrameSettingEnabled()
 	return cfg and cfg.enabled == true
 end
 
-local allowedEventUnit = {
-	["target"] = true,
-	["player"] = true,
-	["targettarget"] = true,
-	["focus"] = true,
-	["pet"] = true,
-}
-for i = 1, maxBossFrames do
-	allowedEventUnit["boss" .. i] = true
+local allowedEventUnit = {}
+
+local function rebuildAllowedEventUnits()
+	if wipe then
+		wipe(allowedEventUnit)
+	else
+		for k in pairs(allowedEventUnit) do
+			allowedEventUnit[k] = nil
+		end
+	end
+	local playerCfg = ensureDB(UNIT.PLAYER)
+	local targetCfg = ensureDB(UNIT.TARGET)
+	local totCfg = ensureDB(UNIT.TARGET_TARGET)
+	local focusCfg = ensureDB(UNIT.FOCUS)
+	local petCfg = ensureDB(UNIT.PET)
+	local bossCfg = ensureDB("boss")
+
+	if playerCfg.enabled then allowedEventUnit[UNIT.PLAYER] = true end
+	if targetCfg.enabled or totCfg.enabled then allowedEventUnit[UNIT.TARGET] = true end
+	if totCfg.enabled then allowedEventUnit[UNIT.TARGET_TARGET] = true end
+	if focusCfg.enabled then allowedEventUnit[UNIT.FOCUS] = true end
+	if petCfg.enabled then allowedEventUnit[UNIT.PET] = true end
+	if bossCfg.enabled then
+		for i = 1, maxBossFrames do
+			allowedEventUnit["boss" .. i] = true
+		end
+	end
 end
 
 local function stopToTTicker()
@@ -3490,6 +3611,7 @@ end
 
 local function onEvent(self, event, unit, arg1)
 	if (unitEventsMap[event] or portraitEventsMap[event]) and unit and not allowedEventUnit[unit] then return end
+	if (unitEventsMap[event] or portraitEventsMap[event]) and unit and isBossUnit(unit) and not isBossFrameSettingEnabled() then return end
 	if event == "PLAYER_ENTERING_WORLD" then
 		local playerCfg = getCfg(UNIT.PLAYER)
 		local targetCfg = getCfg(UNIT.TARGET)
@@ -3587,47 +3709,52 @@ local function onEvent(self, event, unit, arg1)
 		if focusCfg.enabled then updateFocusFrame(focusCfg) end
 		updateUnitStatusIndicator(targetCfg, UNIT.TARGET)
 		updateUnitStatusIndicator(totCfg, UNIT.TARGET_TARGET)
-	elseif event == "UNIT_AURA" and unit == "target" then
-		local targetCfg = getCfg(UNIT.TARGET)
+	elseif event == "UNIT_AURA" and (unit == "target" or unit == UNIT.PLAYER or isBossUnit(unit)) then
+		local cfg = getCfg(unit)
+		if not cfg or cfg.enabled == false then return end
+		local def = defaultsFor(unit)
+		local ac = cfg.auraIcons or (def and def.auraIcons) or defaults.target.auraIcons or { size = 24, padding = 2, max = 16, showCooldown = true }
+		if ac.enabled == false then return end
+		local helpfulFilter, harmfulFilter = getAuraFilters(unit)
 		local eventInfo = arg1
-		if not UnitExists("target") then
-			resetTargetAuras()
-			updateTargetAuraIcons()
+		if not UnitExists(unit) then
+			resetTargetAuras(unit)
+			updateTargetAuraIcons(nil, unit)
 			return
 		end
 		if not eventInfo or eventInfo.isFullUpdate then
-			fullScanTargetAuras()
+			fullScanTargetAuras(unit)
 			return
 		end
-		local cfg = targetCfg
-		local ac = cfg.auraIcons or defaults.target.auraIcons or { size = 24, padding = 2, max = 16, showCooldown = true }
 		ac.size = ac.size or 24
 		ac.padding = ac.padding or 0
 		ac.max = ac.max or 16
 		if ac.max < 1 then ac.max = 1 end
 		local hidePermanent = ac.hidePermanentAuras == true or ac.hidePermanent == true
-		local st = states.target
+		local st = states[unit]
 		if not st or not st.auraContainer then return end
+		local auras, order, indexById = getAuraTables(unit)
+		if not auras or not order or not indexById then return end
 		local firstChanged
 		if eventInfo.addedAuras then
 			for _, aura in ipairs(eventInfo.addedAuras) do
 				if aura and hidePermanent and isPermanentAura(aura, unit) then
-					if targetAuras[aura.auraInstanceID] then
-						targetAuras[aura.auraInstanceID] = nil
-						local idx = removeTargetAuraFromOrder(aura.auraInstanceID)
+					if auras[aura.auraInstanceID] then
+						auras[aura.auraInstanceID] = nil
+						local idx = removeTargetAuraFromOrder(aura.auraInstanceID, unit)
 						if idx and idx <= (ac.max + 1) then
 							if not firstChanged or idx < firstChanged then firstChanged = idx end
 						end
 					end
-				elseif aura and not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, aura.auraInstanceID, AURA_FILTER_HARMFUL) then
-					cacheTargetAura(aura)
-					local idx = addTargetAuraToOrder(aura.auraInstanceID)
+				elseif aura and not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, aura.auraInstanceID, harmfulFilter) then
+					cacheTargetAura(aura, unit)
+					local idx = addTargetAuraToOrder(aura.auraInstanceID, unit)
 					if idx and idx <= ac.max then
 						if not firstChanged or idx < firstChanged then firstChanged = idx end
 					end
-				elseif aura and not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, aura.auraInstanceID, AURA_FILTER_HELPFUL) then
-					cacheTargetAura(aura)
-					local idx = addTargetAuraToOrder(aura.auraInstanceID)
+				elseif aura and not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, aura.auraInstanceID, helpfulFilter) then
+					cacheTargetAura(aura, unit)
+					local idx = addTargetAuraToOrder(aura.auraInstanceID, unit)
 					if idx and idx <= ac.max then
 						if not firstChanged or idx < firstChanged then firstChanged = idx end
 					end
@@ -3636,11 +3763,11 @@ local function onEvent(self, event, unit, arg1)
 		end
 		if eventInfo.updatedAuraInstanceIDs and C_UnitAuras and C_UnitAuras.GetAuraDataByAuraInstanceID then
 			for _, inst in ipairs(eventInfo.updatedAuraInstanceIDs) do
-				if targetAuras[inst] then
-					local data = C_UnitAuras.GetAuraDataByAuraInstanceID("target", inst)
-					if data then cacheTargetAura(data) end
+				if auras[inst] then
+					local data = C_UnitAuras.GetAuraDataByAuraInstanceID(unit, inst)
+					if data then cacheTargetAura(data, unit) end
 				end
-				local idx = targetAuraIndexById[inst]
+				local idx = indexById[inst]
 				if idx and idx <= ac.max then
 					if not firstChanged or idx < firstChanged then firstChanged = idx end
 				end
@@ -3648,14 +3775,14 @@ local function onEvent(self, event, unit, arg1)
 		end
 		if eventInfo.removedAuraInstanceIDs then
 			for _, inst in ipairs(eventInfo.removedAuraInstanceIDs) do
-				targetAuras[inst] = nil
-				local idx = removeTargetAuraFromOrder(inst)
+				auras[inst] = nil
+				local idx = removeTargetAuraFromOrder(inst, unit)
 				if idx and idx <= (ac.max + 1) then -- +1 to relayout if we pulled a hidden aura into view
 					if not firstChanged or idx < firstChanged then firstChanged = idx end
 				end
 			end
 		end
-		if firstChanged then updateTargetAuraIcons(firstChanged) end
+		if firstChanged then updateTargetAuraIcons(firstChanged, unit) end
 	elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_ABSORB_AMOUNT_CHANGED" then
 		if unit == UNIT.PLAYER then updateHealth(getCfg(UNIT.PLAYER), UNIT.PLAYER) end
 		if unit == UNIT.TARGET then updateHealth(getCfg(UNIT.TARGET), UNIT.TARGET) end
@@ -3677,6 +3804,7 @@ local function onEvent(self, event, unit, arg1)
 	elseif event == "UNIT_DISPLAYPOWER" then
 		if unit == UNIT.PLAYER then
 			local playerCfg = getCfg(UNIT.PLAYER)
+			if playerCfg.enabled == false then return end
 			refreshMainPower(unit)
 			local st = states[unit]
 			local pcfg = playerCfg.power or {}
@@ -3689,6 +3817,7 @@ local function onEvent(self, event, unit, arg1)
 			updatePower(playerCfg, UNIT.PLAYER)
 		elseif unit == UNIT.TARGET then
 			local targetCfg = getCfg(UNIT.TARGET)
+			if targetCfg.enabled == false then return end
 			local st = states[unit]
 			local pcfg = targetCfg.power or {}
 			if st and st.power and pcfg.enabled ~= false then
@@ -3700,6 +3829,7 @@ local function onEvent(self, event, unit, arg1)
 			updatePower(targetCfg, UNIT.TARGET)
 		elseif unit == UNIT.FOCUS then
 			local focusCfg = getCfg(UNIT.FOCUS)
+			if focusCfg.enabled == false then return end
 			local st = states[unit]
 			local pcfg = focusCfg.power or {}
 			if st and st.power and pcfg.enabled ~= false then
@@ -3711,6 +3841,7 @@ local function onEvent(self, event, unit, arg1)
 			updatePower(focusCfg, UNIT.FOCUS)
 		elseif unit == UNIT.PET then
 			local petCfg = getCfg(UNIT.PET)
+			if petCfg.enabled == false then return end
 			local st = states[unit]
 			local pcfg = petCfg.power or {}
 			if st and st.power and pcfg.enabled ~= false then
@@ -3832,6 +3963,7 @@ local function onEvent(self, event, unit, arg1)
 end
 
 local function ensureEventHandling()
+	rebuildAllowedEventUnits()
 	if not anyUFEnabled() then
 		hideBossFrames()
 		if eventFrame and eventFrame.UnregisterAllEvents then eventFrame:UnregisterAllEvents() end

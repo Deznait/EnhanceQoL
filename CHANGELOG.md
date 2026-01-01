@@ -2,6 +2,13 @@
 
 ## [6.6.2] – 2025-12-31
 
+### ✨ Added
+
+- **UF Plus**
+  - Per-frame aura toggle for Player/Target/Boss frames
+  - Boss frames can optionally show auras.
+  - Player frame can optionally show auras (default off).
+
 ### 🐛 Fixed
 
 - Empty currecy streams in datapanels set all others streams hidden

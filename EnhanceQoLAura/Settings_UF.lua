@@ -91,7 +91,11 @@ local classResourceClasses = {
 	WARLOCK = true,
 }
 
-local function isBossUnit(unit) return unit == "boss" or (unit and unit:match("^boss%d+$")) end
+local bossUnitLookup = { boss = true }
+for i = 1, (MAX_BOSS_FRAMES or 5) do
+	bossUnitLookup["boss" .. i] = true
+end
+local function isBossUnit(unit) return type(unit) == "string" and bossUnitLookup[unit] == true end
 
 local function defaultsFor(unit)
 	if UF.GetDefaults then
@@ -2345,9 +2349,9 @@ local function buildUnitSettings(unit)
 		list[#list + 1] = combatIndicatorOffsetY
 	end
 
-	if unit == "target" then
+	if unit == "player" or unit == "target" or isBossUnit(unit) then
 		list[#list + 1] = { name = L["Auras"] or "Auras", kind = settingType.Collapsible, id = "auras", defaultCollapsed = true }
-		local auraDef = def.auraIcons or { size = 24, padding = 2, max = 16, showCooldown = true }
+		local auraDef = def.auraIcons or { enabled = true, size = 24, padding = 2, max = 16, showCooldown = true }
 		local function debuffAnchorValue() return getValue(unit, { "auraIcons", "debuffAnchor" }, getValue(unit, { "auraIcons", "anchor" }, auraDef.debuffAnchor or auraDef.anchor or "BOTTOM")) end
 		local function defaultAuraOffset(anchor)
 			if anchor == "TOP" then return 0, 5 end
@@ -2364,21 +2368,44 @@ local function buildUnitSettings(unit)
 			return y
 		end
 		local function debuffOffsetYDefault() return defaultAuraOffsetY(debuffAnchorValue()) end
+		local function isAuraEnabled()
+			return getValue(unit, { "auraIcons", "enabled" }, auraDef.enabled ~= false) ~= false
+		end
+		local function refreshAuras()
+			if not (UF and UF.FullScanTargetAuras) then return end
+			if unit == "boss" then
+				for i = 1, (MAX_BOSS_FRAMES or 5) do
+					UF.FullScanTargetAuras("boss" .. i)
+				end
+			else
+				UF.FullScanTargetAuras(unit)
+			end
+		end
+
+		list[#list + 1] = checkbox(L["UFAurasEnabled"] or "Enable auras", isAuraEnabled, function(val)
+			setValue(unit, { "auraIcons", "enabled" }, val and true or false)
+			refresh()
+			refreshSettingsUI()
+			refreshAuras()
+		end, auraDef.enabled ~= false, "auras")
 
 		list[#list + 1] = slider(L["Aura size"] or "Aura size", 12, 48, 1, function() return getValue(unit, { "auraIcons", "size" }, auraDef.size or 24) end, function(val)
 			setValue(unit, { "auraIcons", "size" }, val or auraDef.size or 24)
 			refresh()
 		end, auraDef.size or 24, "auras", true)
+		list[#list].isEnabled = isAuraEnabled
 
 		list[#list + 1] = slider(L["Aura spacing"] or "Aura spacing", 0, 10, 1, function() return getValue(unit, { "auraIcons", "padding" }, auraDef.padding or 2) end, function(val)
 			setValue(unit, { "auraIcons", "padding" }, val or 0)
 			refresh()
 		end, auraDef.padding or 2, "auras", true)
+		list[#list].isEnabled = isAuraEnabled
 
 		list[#list + 1] = slider(L["UFMaxAuras"] or "Max auras", 4, 40, 1, function() return getValue(unit, { "auraIcons", "max" }, auraDef.max or 16) end, function(val)
 			setValue(unit, { "auraIcons", "max" }, val or auraDef.max or 16)
 			refresh()
 		end, auraDef.max or 16, "auras", true)
+		list[#list].isEnabled = isAuraEnabled
 
 		list[#list + 1] = slider(
 			L["Aura per row"] or "Auras per row",
@@ -2401,16 +2428,19 @@ local function buildUnitSettings(unit)
 				return tostring(math.floor(value + 0.5))
 			end
 		)
+		list[#list].isEnabled = isAuraEnabled
 
 		list[#list + 1] = checkbox(L["Show cooldown text"] or "Show cooldown text", function() return getValue(unit, { "auraIcons", "showCooldown" }, auraDef.showCooldown ~= false) end, function(val)
 			setValue(unit, { "auraIcons", "showCooldown" }, val and true or false)
 			refresh()
 		end, auraDef.showCooldown ~= false, "auras")
+		list[#list].isEnabled = isAuraEnabled
 
 		list[#list + 1] = slider(L["Aura stack size"] or "Aura stack size", 8, 32, 1, function() return getValue(unit, { "auraIcons", "countFontSize" }, auraDef.countFontSize or 14) end, function(val)
 			setValue(unit, { "auraIcons", "countFontSize" }, val or 14)
 			refresh()
 		end, auraDef.countFontSize or 14, "auras", true)
+		list[#list].isEnabled = isAuraEnabled
 
 		local stackOutlineOptions = {
 			{ value = "NONE", label = L["None"] or "None" },
@@ -2429,6 +2459,7 @@ local function buildUnitSettings(unit)
 			auraDef.countFontOutline or "OUTLINE",
 			"auras"
 		)
+		list[#list].isEnabled = isAuraEnabled
 
 		local stackAnchorOptions = {
 			{ value = "TOPLEFT", label = L["Top left"] or "Top left" },
@@ -2448,6 +2479,7 @@ local function buildUnitSettings(unit)
 			auraDef.countAnchor or "BOTTOMRIGHT",
 			"auras"
 		)
+		list[#list].isEnabled = isAuraEnabled
 
 		list[#list + 1] = slider(
 			L["Aura stack offset X"] or "Aura stack offset X",
@@ -2463,6 +2495,7 @@ local function buildUnitSettings(unit)
 			"auras",
 			true
 		)
+		list[#list].isEnabled = isAuraEnabled
 
 		list[#list + 1] = slider(
 			L["Aura stack offset Y"] or "Aura stack offset Y",
@@ -2478,6 +2511,7 @@ local function buildUnitSettings(unit)
 			"auras",
 			true
 		)
+		list[#list].isEnabled = isAuraEnabled
 
 		list[#list + 1] = checkbox(L["UFHidePermanentAuras"] or "Hide permanent auras", function()
 			local val = getValue(unit, { "auraIcons", "hidePermanentAuras" })
@@ -2489,8 +2523,9 @@ local function buildUnitSettings(unit)
 			setValue(unit, { "auraIcons", "hidePermanentAuras" }, val and true or false)
 			setValue(unit, { "auraIcons", "hidePermanent" }, nil)
 			refresh()
-			if UF and UF.FullScanTargetAuras then UF.FullScanTargetAuras() end
+			refreshAuras()
 		end, (auraDef.hidePermanentAuras or auraDef.hidePermanent) == true, "auras")
+		list[#list].isEnabled = isAuraEnabled
 
 		local leftLabel = HUD_EDIT_MODE_SETTING_BAGS_DIRECTION_LEFT or L["Left"] or "Left"
 		local rightLabel = HUD_EDIT_MODE_SETTING_BAGS_DIRECTION_RIGHT or L["Right"] or "Right"
@@ -2504,6 +2539,7 @@ local function buildUnitSettings(unit)
 			setValue(unit, { "auraIcons", "anchor" }, val or "BOTTOM")
 			refresh()
 		end, auraDef.anchor or "BOTTOM", "auras")
+		list[#list].isEnabled = isAuraEnabled
 
 		local upLabel = HUD_EDIT_MODE_SETTING_BAGS_DIRECTION_UP or L["Up"] or "Up"
 		local downLabel = HUD_EDIT_MODE_SETTING_BAGS_DIRECTION_DOWN or L["Down"] or "Down"
@@ -2535,6 +2571,7 @@ local function buildUnitSettings(unit)
 			defaultAuraGrowth(),
 			"auras"
 		)
+		list[#list].isEnabled = isAuraEnabled
 
 		list[#list + 1] = slider(L["Aura Offset X"] or "Aura Offset X", -OFFSET_RANGE, OFFSET_RANGE, 1, function()
 			local anchor = getValue(unit, { "auraIcons", "anchor" }, auraDef.anchor or "BOTTOM")
@@ -2543,6 +2580,7 @@ local function buildUnitSettings(unit)
 			setValue(unit, { "auraIcons", "offset", "x" }, val or 0)
 			refresh()
 		end, (auraDef.offset and auraDef.offset.x) or defaultAuraOffsetX(auraDef.anchor or "BOTTOM"), "auras", true)
+		list[#list].isEnabled = isAuraEnabled
 
 		list[#list + 1] = slider(L["Aura Offset Y"] or "Aura Offset Y", -OFFSET_RANGE, OFFSET_RANGE, 1, function()
 			local anchor = getValue(unit, { "auraIcons", "anchor" }, auraDef.anchor or "BOTTOM")
@@ -2551,6 +2589,7 @@ local function buildUnitSettings(unit)
 			setValue(unit, { "auraIcons", "offset", "y" }, val or 0)
 			refresh()
 		end, (auraDef.offset and auraDef.offset.y) or defaultAuraOffsetY(auraDef.anchor or "BOTTOM"), "auras", true)
+		list[#list].isEnabled = isAuraEnabled
 
 		list[#list + 1] = checkbox(
 			L["UFSeparateDebuffAnchor"] or "Separate debuff anchor",
@@ -2563,8 +2602,11 @@ local function buildUnitSettings(unit)
 			auraDef.separateDebuffAnchor == true,
 			"auras"
 		)
+		list[#list].isEnabled = isAuraEnabled
 
-		local function isSeparateDebuffEnabled() return getValue(unit, { "auraIcons", "separateDebuffAnchor" }, auraDef.separateDebuffAnchor == true) == true end
+		local function isSeparateDebuffEnabled()
+			return isAuraEnabled() and getValue(unit, { "auraIcons", "separateDebuffAnchor" }, auraDef.separateDebuffAnchor == true) == true
+		end
 
 		local debuffAnchorSetting = radioDropdown(L["UFDebuffAnchor"] or "Debuff anchor", anchorOpts, function() return debuffAnchorValue() end, function(val)
 			setValue(unit, { "auraIcons", "debuffAnchor" }, val or nil)

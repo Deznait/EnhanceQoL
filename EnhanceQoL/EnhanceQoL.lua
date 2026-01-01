@@ -702,6 +702,56 @@ local function RestoreUnitFrameVisibility(frame, cbData)
 	end
 end
 
+local BOSS_FRAME_CONTAINER_NAME = "BossTargetFrameContainer"
+local bossFrameForceHidden
+local bossFramePrevSelectionAlpha
+local bossFrameAlphaHooked
+
+local function IsBossFrameContainer(frame)
+	if not frame then return false end
+	if frame == _G[BOSS_FRAME_CONTAINER_NAME] then return true end
+	if frame.GetName and frame:GetName() == BOSS_FRAME_CONTAINER_NAME then return true end
+	return false
+end
+
+local function EnsureBossFrameHideHook(container)
+	if bossFrameAlphaHooked or not container or not hooksecurefunc then return end
+	bossFrameAlphaHooked = true
+	hooksecurefunc(container, "SetAlpha", function(self)
+		if bossFrameForceHidden and self.GetAlpha and self:GetAlpha() ~= 0 then self:SetAlpha(0) end
+	end)
+end
+
+local function SetBossFrameHidden(shouldHide)
+	local container = _G[BOSS_FRAME_CONTAINER_NAME]
+	if not container or not container.SetAlpha then return end
+
+	EnsureBossFrameHideHook(container)
+
+	local selection = container.Selection
+	local hide = shouldHide and true or false
+
+	if hide then
+		if not bossFrameForceHidden then
+			if selection and selection.GetAlpha then bossFramePrevSelectionAlpha = selection:GetAlpha() end
+		end
+		bossFrameForceHidden = true
+		if container.GetAlpha and container:GetAlpha() ~= 0 then container:SetAlpha(0) end
+		if selection and selection.SetAlpha then selection:SetAlpha(0) end
+		return
+	end
+
+	if container.GetAlpha and container:GetAlpha() ~= 1 then container:SetAlpha(1) end
+	if bossFrameForceHidden and selection and selection.SetAlpha then
+		local selectionAlpha = bossFramePrevSelectionAlpha
+		if selectionAlpha == nil then selectionAlpha = 1 end
+		selection:SetAlpha(selectionAlpha)
+	end
+
+	bossFrameForceHidden = false
+	bossFramePrevSelectionAlpha = nil
+end
+
 local UpdateUnitFrameMouseover -- forward declaration
 
 local frameVisibilityContext = {
@@ -963,6 +1013,23 @@ local function genericHoverOutCheck(state)
 end
 
 ApplyFrameVisibilityState = function(state)
+	if state.isBossFrame then
+		local cfg = state.config
+		if not cfg or not next(cfg) then
+			if state.visible ~= nil then SetBossFrameHidden(false) end
+			frameVisibilityStates[state.frame] = nil
+			UpdateFrameVisibilityHealthRegistration()
+			return
+		end
+
+		EnsureFrameVisibilityWatcher()
+		local shouldShow = EvaluateFrameVisibility(state)
+		SetBossFrameHidden(not shouldShow)
+		state.visible = shouldShow
+		UpdateFrameVisibilityHealthRegistration()
+		return
+	end
+
 	local cfg = state.config
 	if not cfg or not next(cfg) then
 		if state.visible ~= nil then RestoreUnitFrameVisibility(state.frame, state.cbData) end
@@ -1068,6 +1135,12 @@ end
 
 local function ClearUnitFrameState(frame, cbData, opts)
 	if not frame then return end
+	if IsBossFrameContainer(frame) then
+		ApplyUnitFrameStateDriver(frame, nil)
+		SetBossFrameHidden(false)
+		frameVisibilityStates[frame] = nil
+		return
+	end
 	if not (opts and opts.noStateDriver) then ApplyUnitFrameStateDriver(frame, nil) end
 	RestoreUnitFrameVisibility(frame, cbData)
 	frameVisibilityStates[frame] = nil
@@ -1085,6 +1158,7 @@ local function ApplyVisibilityToUnitFrame(frameName, cbData, config, opts)
 
 	local state = EnsureFrameState(frame, cbData)
 	state.config = config
+	state.isBossFrame = frameName == BOSS_FRAME_CONTAINER_NAME
 	local isPlayerUnit = (cbData.unitToken == "player")
 	state.supportsPlayerHealthRule = isPlayerUnit
 	state.supportsPlayerTargetRule = isPlayerUnit
@@ -1092,7 +1166,7 @@ local function ApplyVisibilityToUnitFrame(frameName, cbData, config, opts)
 
 	local driverExpression = BuildUnitFrameDriverExpression(config)
 	local needsHealth = config and config.PLAYER_HEALTH_NOT_FULL and state.supportsPlayerHealthRule
-	local useDriver = driverExpression and not config.MOUSEOVER and not needsHealth and not (opts and opts.noStateDriver)
+	local useDriver = driverExpression and not config.MOUSEOVER and not needsHealth and not (opts and opts.noStateDriver) and not state.isBossFrame
 
 	if useDriver then
 		state.driverActive = true
@@ -1102,7 +1176,7 @@ local function ApplyVisibilityToUnitFrame(frameName, cbData, config, opts)
 	end
 
 	state.driverActive = false
-	if not (opts and opts.noStateDriver) then ApplyUnitFrameStateDriver(frame, nil) end
+	if not (opts and opts.noStateDriver) or state.isBossFrame then ApplyUnitFrameStateDriver(frame, nil) end
 
 	if config.MOUSEOVER then
 		state.isMouseOver = MouseIsOver(frame)
@@ -1118,6 +1192,44 @@ UpdateUnitFrameMouseover = function(barName, cbData)
 
 	local config = NormalizeUnitFrameVisibilityConfig(cbData.var)
 	-- local handled = false
+
+	if barName == BOSS_FRAME_CONTAINER_NAME then
+		local onlyChildren = cbData.onlyChildren
+		local children = {}
+		if type(onlyChildren) == "table" then
+			local seen = {}
+			for _, child in ipairs(onlyChildren) do
+				if type(child) == "string" and child ~= "" and not seen[child] then
+					local frame = _G[child]
+					if frame then
+						table.insert(children, frame)
+						seen[child] = true
+					end
+				end
+			end
+			for _, child in pairs(onlyChildren) do
+				if type(child) == "string" and child ~= "" and not seen[child] then
+					local frame = _G[child]
+					if frame then
+						table.insert(children, frame)
+						seen[child] = true
+					end
+				end
+			end
+		end
+
+		if #children > 0 then
+			cbData.children = children
+			cbData.revealAllChilds = true
+		else
+			cbData.children = nil
+			cbData.revealAllChilds = nil
+		end
+
+		ApplyVisibilityToUnitFrame(barName, cbData, config)
+		UpdateFrameVisibilityHealthRegistration()
+		return
+	end
 
 	local function processTarget(name)
 		if ApplyVisibilityToUnitFrame(name, cbData, config) then
@@ -1495,36 +1607,60 @@ local function ShouldFadeActionBar(skipFade)
 	return not IsActionBarMouseoverGroupEnabled()
 end
 
-local function IsAnyActionBarHovered()
-	for _, info in ipairs(addon.variables.actionBarNames or {}) do
-		local bar = _G[info.name]
-		if bar and bar:IsShown() and MouseIsOver(bar) then return true end
-	end
-	return false
-end
-
 local function IsActionBarGroupHoverActive()
-	if EQOL_ShouldKeepVisibleByFlyout() then return true end
-	return IsAnyActionBarHovered()
+	local vars = addon.variables
+	return vars and vars._eqolActionBarGroupHoverActive == true
 end
 
-local function UpdateActionBarGroupHoverState()
+local function UpdateActionBarGroupHoverState(frame, isEnter)
 	if not IsActionBarMouseoverGroupEnabled() then return end
 	addon.variables = addon.variables or {}
 	local vars = addon.variables
-	local active = IsActionBarGroupHoverActive()
-	if vars._eqolActionBarGroupHoverActive == active then return end
-	vars._eqolActionBarGroupHoverActive = active
-	if addon.functions and addon.functions.RefreshAllActionBarVisibilityAlpha then addon.functions.RefreshAllActionBarVisibilityAlpha() end
+	local hovered = vars._eqolActionBarHoverFrames
+	if not hovered then
+		hovered = {}
+		vars._eqolActionBarHoverFrames = hovered
+	end
+
+	if isEnter then
+		if frame then hovered[frame] = true end
+		if vars._eqolActionBarGroupHoverActive == true then return end
+		vars._eqolActionBarGroupHoverActive = true
+		if addon.functions and addon.functions.RefreshAllActionBarVisibilityAlpha then addon.functions.RefreshAllActionBarVisibilityAlpha() end
+		return
+	end
+
+	if frame then hovered[frame] = nil end
+	if vars._eqolActionBarHoverUpdatePending then return end
+	vars._eqolActionBarHoverUpdatePending = true
+	C_Timer.After(0, function()
+		local state = addon.variables
+		if not state then return end
+		state._eqolActionBarHoverUpdatePending = nil
+
+		local active = EQOL_ShouldKeepVisibleByFlyout()
+		local set = state._eqolActionBarHoverFrames
+		if set then
+			for target in pairs(set) do
+				if target and target.IsShown and target:IsShown() and MouseIsOver(target) then
+					active = true
+					break
+				else
+					set[target] = nil
+				end
+			end
+		end
+
+		if state._eqolActionBarGroupHoverActive == active then return end
+		state._eqolActionBarGroupHoverActive = active
+		if addon.functions and addon.functions.RefreshAllActionBarVisibilityAlpha then addon.functions.RefreshAllActionBarVisibilityAlpha() end
+	end)
 end
 
 local function ShouldShowActionBarOnMouseover(bar)
 	if MouseIsOver(bar) or EQOL_ShouldKeepVisibleByFlyout() then return true end
 	if IsActionBarMouseoverGroupEnabled() then
-		local vars = addon.variables
-		local cached = vars and vars._eqolActionBarGroupHoverActive
-		if cached ~= nil then return cached end
-		if IsAnyActionBarHovered() then return true end
+		return IsActionBarGroupHoverActive()
 	end
 	return false
 end
@@ -1634,14 +1770,10 @@ local function ApplyActionBarAlpha(bar, variable, config, combatOverride, skipFa
 	end
 end
 
-local function EQOL_HideBarIfNotHovered(bar, variable)
-	local cfg = GetActionBarVisibilityConfig(variable)
-	if not cfg then return end
-	if IsActionBarMouseoverGroupEnabled() then
-		UpdateActionBarGroupHoverState()
-		return
-	end
-	C_Timer.After(0, function()
+	local function EQOL_HideBarIfNotHovered(bar, variable)
+		local cfg = GetActionBarVisibilityConfig(variable)
+		if not cfg then return end
+		C_Timer.After(0, function()
 		local current = GetActionBarVisibilityConfig(variable)
 		if not current then return end
 		local useFade = ShouldFadeActionBar()
@@ -1667,7 +1799,7 @@ local function EQOL_HookSpellFlyout()
 
 	flyout:HookScript("OnEnter", function()
 		if IsActionBarMouseoverGroupEnabled() then
-			UpdateActionBarGroupHoverState()
+			UpdateActionBarGroupHoverState(flyout, true)
 			return
 		end
 		if EQOL_LastMouseoverBar and IsActionBarMouseoverEnabled(EQOL_LastMouseoverVar) then EQOL_LastMouseoverBar:SetAlpha(1) end
@@ -1675,7 +1807,7 @@ local function EQOL_HookSpellFlyout()
 
 	flyout:HookScript("OnLeave", function()
 		if IsActionBarMouseoverGroupEnabled() then
-			UpdateActionBarGroupHoverState()
+			UpdateActionBarGroupHoverState(flyout, false)
 			return
 		end
 		if EQOL_LastMouseoverBar and IsActionBarMouseoverEnabled(EQOL_LastMouseoverVar) then EQOL_HideBarIfNotHovered(EQOL_LastMouseoverBar, EQOL_LastMouseoverVar) end
@@ -1683,7 +1815,7 @@ local function EQOL_HookSpellFlyout()
 
 	flyout:HookScript("OnHide", function()
 		if IsActionBarMouseoverGroupEnabled() then
-			UpdateActionBarGroupHoverState()
+			UpdateActionBarGroupHoverState(flyout, false)
 			return
 		end
 		if EQOL_LastMouseoverBar and IsActionBarMouseoverEnabled(EQOL_LastMouseoverVar) then EQOL_HideBarIfNotHovered(EQOL_LastMouseoverBar, EQOL_LastMouseoverVar) end
@@ -1692,11 +1824,11 @@ local function EQOL_HookSpellFlyout()
 	flyout.EQOL_MouseoverHooked = true
 end
 -- Action Bars
-local function UpdateActionBarMouseover(barName, config, variable)
-	local bar = _G[barName]
-	if not bar then return end
+	local function UpdateActionBarMouseover(barName, config, variable)
+		local bar = _G[barName]
+		if not bar then return end
 
-	local btnPrefix
+		local btnPrefix
 	if barName == "MainMenuBar" or barName == "MainActionBar" then
 		-- we have to change the Vehice Leave Button behaviour
 		local leave = _G.MainMenuBarVehicleLeaveButton
@@ -1731,25 +1863,31 @@ local function UpdateActionBarMouseover(barName, config, variable)
 			local current = GetActionBarVisibilityConfig(variable)
 			if not current or not current.MOUSEOVER then return end
 			if IsActionBarMouseoverGroupEnabled() then
-				UpdateActionBarGroupHoverState()
+				UpdateActionBarGroupHoverState(bar, true)
 			else
 				bar:SetAlpha(1)
 			end
 			EQOL_LastMouseoverBar = bar
 			EQOL_LastMouseoverVar = variable
 		end)
-		bar:SetScript("OnLeave", function() EQOL_HideBarIfNotHovered(bar, variable) end)
+		bar:SetScript("OnLeave", function()
+			if IsActionBarMouseoverGroupEnabled() then
+				UpdateActionBarGroupHoverState(bar, false)
+			else
+				EQOL_HideBarIfNotHovered(bar, variable)
+			end
+		end)
 	else
 		bar:SetScript("OnEnter", nil)
 		bar:SetScript("OnLeave", nil)
 	end
 
-	local function handleButtonEnter()
+	local function handleButtonEnter(self)
 		local current = GetActionBarVisibilityConfig(variable)
 		if not current then return end
 		if current.MOUSEOVER then
 			if IsActionBarMouseoverGroupEnabled() then
-				UpdateActionBarGroupHoverState()
+				UpdateActionBarGroupHoverState(self, true)
 			else
 				bar:SetAlpha(1)
 			end
@@ -1760,7 +1898,13 @@ local function UpdateActionBarMouseover(barName, config, variable)
 		end
 	end
 
-	local function handleButtonLeave() EQOL_HideBarIfNotHovered(bar, variable) end
+	local function handleButtonLeave(self)
+		if IsActionBarMouseoverGroupEnabled() then
+			UpdateActionBarGroupHoverState(self, false)
+		else
+			EQOL_HideBarIfNotHovered(bar, variable)
+		end
+	end
 
 	for i = 1, 12 do
 		local button = _G[btnPrefix .. i]
@@ -1775,8 +1919,8 @@ local function UpdateActionBarMouseover(barName, config, variable)
 				button:HookScript("OnLeave", handleButtonLeave)
 			else
 				button:EnableMouse(true)
-				button:SetScript("OnLeave", function()
-					handleButtonLeave()
+				button:SetScript("OnLeave", function(self)
+					handleButtonLeave(self)
 					GameTooltip:Hide()
 				end)
 			end
@@ -1880,14 +2024,16 @@ local function ApplyExtraActionArtworkSetting()
 end
 addon.functions.ApplyExtraActionArtworkSetting = ApplyExtraActionArtworkSetting
 
-local function ApplyActionBarVisibilityAlpha(skipFade, event)
-	if addon.variables then
-		if IsActionBarMouseoverGroupEnabled() then
-			addon.variables._eqolActionBarGroupHoverActive = IsActionBarGroupHoverActive()
-		else
-			addon.variables._eqolActionBarGroupHoverActive = nil
+	local function ApplyActionBarVisibilityAlpha(skipFade, event)
+		if addon.variables then
+			if not IsActionBarMouseoverGroupEnabled() then
+				addon.variables._eqolActionBarGroupHoverActive = nil
+				addon.variables._eqolActionBarHoverFrames = nil
+				addon.variables._eqolActionBarHoverUpdatePending = nil
+			elseif addon.variables._eqolActionBarGroupHoverActive == nil then
+				addon.variables._eqolActionBarGroupHoverActive = EQOL_ShouldKeepVisibleByFlyout() and true or false
+			end
 		end
-	end
 	local combatOverride
 	if event == "PLAYER_REGEN_DISABLED" then
 		combatOverride = true
