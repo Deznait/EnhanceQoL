@@ -9,9 +9,15 @@ end
 
 local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_Mouse")
 
-local cMouse = addon.functions.SettingsCreateCategory(nil, MOUSE_LABEL, nil, "MOUSE_LABEL")
-addon.SettingsLayout.mouseCategory = cMouse
-addon.functions.SettingsCreateHeadline(cMouse, L["mouseRing"])
+local cMouse = addon.SettingsLayout.rootUI
+
+local expandable = addon.functions.SettingsCreateExpandableSection(cMouse, {
+	name = MOUSE_LABEL,
+	expanded = false,
+	colorizeTitle = false,
+})
+
+addon.functions.SettingsCreateHeadline(cMouse, L["mouseRing"], { parentSection = expandable })
 
 local data = {
 	{
@@ -25,6 +31,7 @@ local data = {
 				addon.Mouse.functions.removeMouseRing()
 			end
 		end,
+		parentSection = expandable,
 		children = {
 			{
 				var = "mouseRingSize",
@@ -45,6 +52,7 @@ local data = {
 				parent = true,
 				default = 70,
 				sType = "slider",
+				parentSection = expandable,
 			},
 			{
 
@@ -75,6 +83,7 @@ local data = {
 				default = false,
 				type = Settings.VarType.Boolean,
 				sType = "checkbox",
+				parentSection = expandable,
 			},
 			{
 
@@ -99,6 +108,7 @@ local data = {
 				default = false,
 				type = Settings.VarType.Boolean,
 				sType = "checkbox",
+				parentSection = expandable,
 			},
 			{
 
@@ -127,6 +137,7 @@ local data = {
 				type = Settings.VarType.Boolean,
 				sType = "checkbox",
 				notify = "mouseRingEnabled",
+				parentSection = expandable,
 			},
 			{
 				var = "mouseRingColor",
@@ -146,6 +157,7 @@ local data = {
 				default = false,
 				headerText = "Test",
 				sType = "colorpicker",
+				parentSection = expandable,
 			},
 		},
 	},
@@ -153,14 +165,15 @@ local data = {
 table.sort(data[1].children, function(a, b) return a.text < b.text end)
 addon.functions.SettingsCreateCheckboxes(cMouse, data)
 
-addon.functions.SettingsCreateHeadline(cMouse, L["mouseTrail"])
-addon.functions.SettingsCreateText(cMouse, "|cff99e599" .. L["Trailinfo"] .. "|r")
+addon.functions.SettingsCreateHeadline(cMouse, L["mouseTrail"], { parentSection = expandable })
+addon.functions.SettingsCreateText(cMouse, "|cff99e599" .. L["Trailinfo"] .. "|r", { parentSection = expandable })
 
 data = {
 	{
 		var = "mouseTrailEnabled",
 		text = L["mouseTrailEnabled"],
 		func = function(v) addon.db["mouseTrailEnabled"] = v end,
+		parentSection = expandable,
 		children = {
 			{
 
@@ -176,6 +189,7 @@ data = {
 				default = false,
 				type = Settings.VarType.Boolean,
 				sType = "checkbox",
+				parentSection = expandable,
 			},
 			{
 
@@ -192,6 +206,7 @@ data = {
 				type = Settings.VarType.Boolean,
 				sType = "checkbox",
 				notify = "mouseTrailEnabled",
+				parentSection = expandable,
 			},
 			{
 				var = "mouseTrailColor",
@@ -207,6 +222,7 @@ data = {
 				parent = true,
 				default = false,
 				sType = "colorpicker",
+				parentSection = expandable,
 			},
 			{
 				list = { [1] = VIDEO_OPTIONS_LOW, [2] = VIDEO_OPTIONS_MEDIUM, [3] = VIDEO_OPTIONS_HIGH, [4] = VIDEO_OPTIONS_ULTRA, [5] = VIDEO_OPTIONS_ULTRA_HIGH },
@@ -227,6 +243,7 @@ data = {
 				var = "mouseTrailDensity",
 				type = Settings.VarType.Number,
 				sType = "dropdown",
+				parentSection = expandable,
 			},
 		},
 	},
