@@ -2,8 +2,21 @@ local addonName, addon = ...
 
 local L = LibStub("AceLocale-3.0"):GetLocale(addonName)
 
-local cQuest = addon.functions.SettingsCreateCategory(nil, L["Quest"], nil, "Quest")
+local function applyParentSection(entries, section)
+	for _, entry in ipairs(entries or {}) do
+		entry.parentSection = section
+		if entry.children then applyParentSection(entry.children, section) end
+	end
+end
+
+local cQuest = addon.SettingsLayout.rootGAMEPLAY
 addon.SettingsLayout.questCategory = cQuest
+
+local questingExpandable = addon.functions.SettingsCreateExpandableSection(cQuest, {
+	name = L["Questing"] or "Questing",
+	expanded = false,
+	colorizeTitle = false,
+})
 
 local REMOVE_IGNORED_QUEST_NPC_DIALOG = addonName .. "QuestIgnoredNPCRemove"
 
@@ -312,6 +325,7 @@ local data = {
 	},
 }
 
+applyParentSection(data, questingExpandable)
 table.sort(data, function(a, b) return a.text < b.text end)
 addon.functions.SettingsCreateCheckboxes(cQuest, data)
 

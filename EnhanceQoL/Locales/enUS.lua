@@ -316,6 +316,7 @@ L["confirmHighCostItemDesc"] = "Skips the confirmation dialog when buying expens
 L["XP_Rep"] = "XP and Reputation bar"
 L["modifyXPRepBar"] = "Modify XP and Reputation bar"
 L["Quest"] = "Quest"
+L["Questing"] = "Questing"
 L["Loot"] = "Loot"
 L["ignoreNPCTipp"] = "Add a NPC to the exclude list by right clicking the target frame and choose Ignore"
 L["LootPopups"] = "Loot popups"
