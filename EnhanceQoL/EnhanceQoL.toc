@@ -76,10 +76,6 @@ Settings\SettingsUI.xml
 Modules\Aura\Locales\[TextLocale].lua
 Modules\Aura\Aura.xml
 
-# Food
-Modules\Food\Locales\[TextLocale].lua
-Modules\Food\Food.xml
-
 # Mouse
 Modules\Mouse\Locales\[TextLocale].lua
 Modules\Mouse\Mouse.xml
@@ -102,3 +98,7 @@ Modules\MythicPlus\MythicPlus.xml
 # Vendor
 Modules\Vendor\Locales\[TextLocale].lua
 Modules\Vendor\Vendor.xml
+
+# Food
+Modules\Food\Locales\[TextLocale].lua
+Modules\Food\Food.xml

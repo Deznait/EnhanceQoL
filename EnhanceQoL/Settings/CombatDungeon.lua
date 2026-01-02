@@ -231,11 +231,16 @@ function addon.functions.initDungeonFrame()
 	]=]
 	)
 
-	local expandable = addon.functions.SettingsCreateExpandableSection(addon.SettingsLayout.characterInspectCategory, {
-		name = L["Convenience"],
-		expanded = false,
-		colorizeTitle = false,
-	})
+	local expandable = addon.SettingsLayout.gameplayConvenienceSection
+	if not expandable then
+		expandable = addon.functions.SettingsCreateExpandableSection(addon.SettingsLayout.characterInspectCategory, {
+			name = L["Convenience"],
+			expanded = false,
+			colorizeTitle = false,
+		})
+		addon.SettingsLayout.gameplayConvenienceSection = expandable
+	end
+	if addon.functions.initDrinkMacro then addon.functions.initDrinkMacro() end
 
 	local classTag = (addon.variables and addon.variables.unitClass) or select(2, UnitClass("player"))
 	if classTag == "DRUID" then

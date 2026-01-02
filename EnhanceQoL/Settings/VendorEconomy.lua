@@ -5,33 +5,23 @@ local wipe = wipe
 local mailboxContactsOrder = {}
 local moneyTrackerOrder = {}
 
-local cVendorEconomy = addon.functions.SettingsCreateCategory(nil, L["VendorsEconomy"], nil, "VendorsEconomy")
+local function applyParentSection(entries, section)
+	for _, entry in ipairs(entries or {}) do
+		entry.parentSection = section
+		if entry.children then applyParentSection(entry.children, section) end
+	end
+end
+
+local cVendorEconomy = addon.SettingsLayout.rootECONOMY
 addon.SettingsLayout.vendorEconomyCategory = cVendorEconomy
 
-addon.functions.SettingsCreateHeadline(cVendorEconomy, BUTTON_LAG_AUCTIONHOUSE)
+local vendorsExpandable = addon.functions.SettingsCreateExpandableSection(cVendorEconomy, {
+	name = L["VendorsServices"],
+	expanded = false,
+	colorizeTitle = false,
+})
 
 local data = {
-	{
-		text = L["persistAuctionHouseFilter"],
-		var = "persistAuctionHouseFilter",
-		func = function(value) addon.db["persistAuctionHouseFilter"] = value end,
-	},
-	{
-		text = (function()
-			local label = _G["AUCTION_HOUSE_FILTER_CURRENTEXPANSION_ONLY"]
-			return L["alwaysUserCurExpAuctionHouse"]:format(label)
-		end)(),
-		var = "alwaysUserCurExpAuctionHouse",
-		func = function(value) addon.db["alwaysUserCurExpAuctionHouse"] = value end,
-	},
-}
-
-table.sort(data, function(a, b) return a.text < b.text end)
-addon.functions.SettingsCreateCheckboxes(cVendorEconomy, data)
-
-addon.functions.SettingsCreateHeadline(cVendorEconomy, L["Convenience"])
-
-data = {
 	{
 		var = "autoRepair",
 		text = L["autoRepair"],
@@ -67,10 +57,15 @@ data = {
 	},
 }
 
+applyParentSection(data, vendorsExpandable)
 table.sort(data, function(a, b) return a.text < b.text end)
 addon.functions.SettingsCreateCheckboxes(cVendorEconomy, data)
 
-addon.functions.SettingsCreateHeadline(cVendorEconomy, MERCHANT)
+local merchantExpandable = addon.functions.SettingsCreateExpandableSection(cVendorEconomy, {
+	name = L["MerchantUI"],
+	expanded = false,
+	colorizeTitle = false,
+})
 
 data = {
 	{
@@ -122,10 +117,41 @@ data = {
 	},
 }
 
+applyParentSection(data, merchantExpandable)
 table.sort(data, function(a, b) return a.text < b.text end)
 addon.functions.SettingsCreateCheckboxes(cVendorEconomy, data)
 
-addon.functions.SettingsCreateHeadline(cVendorEconomy, MINIMAP_TRACKING_MAILBOX)
+local auctionHouseExpandable = addon.functions.SettingsCreateExpandableSection(cVendorEconomy, {
+	name = BUTTON_LAG_AUCTIONHOUSE,
+	expanded = false,
+	colorizeTitle = false,
+})
+
+data = {
+	{
+		text = L["persistAuctionHouseFilter"],
+		var = "persistAuctionHouseFilter",
+		func = function(value) addon.db["persistAuctionHouseFilter"] = value end,
+	},
+	{
+		text = (function()
+			local label = _G["AUCTION_HOUSE_FILTER_CURRENTEXPANSION_ONLY"]
+			return L["alwaysUserCurExpAuctionHouse"]:format(label)
+		end)(),
+		var = "alwaysUserCurExpAuctionHouse",
+		func = function(value) addon.db["alwaysUserCurExpAuctionHouse"] = value end,
+	},
+}
+
+applyParentSection(data, auctionHouseExpandable)
+table.sort(data, function(a, b) return a.text < b.text end)
+addon.functions.SettingsCreateCheckboxes(cVendorEconomy, data)
+
+local mailboxExpandable = addon.functions.SettingsCreateExpandableSection(cVendorEconomy, {
+	name = MINIMAP_TRACKING_MAILBOX,
+	expanded = false,
+	colorizeTitle = false,
+})
 
 data = {
 	{
@@ -210,10 +236,15 @@ data = {
 	},
 }
 
+applyParentSection(data, mailboxExpandable)
 table.sort(data, function(a, b) return a.text < b.text end)
 addon.functions.SettingsCreateCheckboxes(cVendorEconomy, data)
 
-addon.functions.SettingsCreateHeadline(cVendorEconomy, MONEY)
+local goldExpandable = addon.functions.SettingsCreateExpandableSection(cVendorEconomy, {
+	name = L["GoldTracking"],
+	expanded = false,
+	colorizeTitle = false,
+})
 
 data = {
 	{
@@ -311,6 +342,7 @@ data = {
 	},
 }
 
+applyParentSection(data, goldExpandable)
 table.sort(data, function(a, b) return a.text < b.text end)
 addon.functions.SettingsCreateCheckboxes(cVendorEconomy, data)
 ----- REGION END
