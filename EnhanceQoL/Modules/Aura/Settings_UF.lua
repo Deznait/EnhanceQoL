@@ -1225,9 +1225,8 @@ local function buildUnitSettings(unit)
 		end)
 	end, healthDef.fontSize or 14, "health", true)
 
-	local fontOpts = fontOptions()
-	if #fontOpts > 0 then
-		list[#list + 1] = checkboxDropdown(L["Font"] or "Font", fontOpts, function() return getValue(unit, { "health", "font" }, healthDef.font or defaultFontPath()) end, function(val)
+	if #fontOptions() > 0 then
+		list[#list + 1] = checkboxDropdown(L["Font"] or "Font", fontOptions, function() return getValue(unit, { "health", "font" }, healthDef.font or defaultFontPath()) end, function(val)
 			setValue(unit, { "health", "font" }, val)
 			refresh()
 		end, healthDef.font or defaultFontPath(), "health")
@@ -1543,8 +1542,8 @@ local function buildUnitSettings(unit)
 	powerFontSize.isEnabled = isPowerEnabled
 	list[#list + 1] = powerFontSize
 
-	if #fontOpts > 0 then
-		local powerFont = checkboxDropdown(L["Font"] or "Font", fontOpts, function() return getValue(unit, { "power", "font" }, powerDef.font or defaultFontPath()) end, function(val)
+	if #fontOptions() > 0 then
+		local powerFont = checkboxDropdown(L["Font"] or "Font", fontOptions, function() return getValue(unit, { "power", "font" }, powerDef.font or defaultFontPath()) end, function(val)
 			setValue(unit, { "power", "font" }, val)
 			refreshSelf()
 		end, powerDef.font or defaultFontPath(), "power")
@@ -2110,7 +2109,7 @@ local function buildUnitSettings(unit)
 		castNameY.isEnabled = isCastNameEnabled
 		list[#list + 1] = castNameY
 
-		local castNameFont = checkboxDropdown(L["Font"] or "Font", fontOptions(), function() return getValue(unit, { "cast", "font" }, castDef.font or "") end, function(val)
+		local castNameFont = checkboxDropdown(L["Font"] or "Font", fontOptions, function() return getValue(unit, { "cast", "font" }, castDef.font or "") end, function(val)
 			setValue(unit, { "cast", "font" }, val)
 			refresh()
 		end, castDef.font or "", "cast")
@@ -2334,9 +2333,8 @@ local function buildUnitSettings(unit)
 		list[#list + 1] = levelColorSetting
 	end
 
-	fontOpts = fontOptions()
-	if #fontOpts > 0 then
-		local statusFont = checkboxDropdown(L["Font"] or "Font", fontOpts, function() return getValue(unit, { "status", "font" }, statusDef.font or defaultFontPath()) end, function(val)
+	if #fontOptions() > 0 then
+		local statusFont = checkboxDropdown(L["Font"] or "Font", fontOptions, function() return getValue(unit, { "status", "font" }, statusDef.font or defaultFontPath()) end, function(val)
 			setValue(unit, { "status", "font" }, val)
 			refreshSelf()
 		end, statusDef.font or defaultFontPath(), "status")
@@ -2556,11 +2554,10 @@ local function buildUnitSettings(unit)
 	unitStatusFontSizeSetting.isEnabled = isUnitStatusEnabled
 	list[#list + 1] = unitStatusFontSizeSetting
 
-	local unitStatusFontOpts = fontOptions()
-	if #unitStatusFontOpts > 0 then
+	if #fontOptions() > 0 then
 		local unitStatusFontSetting = checkboxDropdown(
 			L["Font"] or "Font",
-			unitStatusFontOpts,
+			fontOptions,
 			function() return getValue(unit, { "status", "unitStatus", "font" }, usDef.font or statusDef.font or defaultFontPath()) end,
 			function(val)
 				setValue(unit, { "status", "unitStatus", "font" }, val)
