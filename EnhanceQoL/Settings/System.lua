@@ -13,6 +13,12 @@ local function setCVarValue(...)
 	if addon.functions and addon.functions.setCVarValue then return addon.functions.setCVarValue(...) end
 end
 
+local function getCvarCategoryLabel(key)
+	if key == "cvarCategoryDisplay" then return _G.DISPLAY end
+	if key == "cvarCategorySystem" then return _G.GENERAL end
+	return L[key] or key
+end
+
 local cSystem = addon.SettingsLayout.rootSYSTEM
 addon.SettingsLayout.systemCategory = cSystem
 
@@ -72,7 +78,7 @@ for key, optionData in pairs(addon.variables.cvarOptions) do
 end
 
 for i, v in pairs(categories) do
-	addon.functions.SettingsCreateHeadline(cSystem, L["" .. i] or i, { parentSection = cvarExpandable })
+	addon.functions.SettingsCreateHeadline(cSystem, getCvarCategoryLabel(i), { parentSection = cvarExpandable })
 	applyParentSection(v, cvarExpandable)
 	addon.functions.SettingsCreateCheckboxes(cSystem, v)
 end
