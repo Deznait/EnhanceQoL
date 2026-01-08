@@ -2216,6 +2216,13 @@ function createHealthBar()
 		local h = (cfg and cfg.height) or RB.DEFAULT_HEALTH_HEIGHT
 		healthBar:SetSize(w, h)
 	end
+	if not healthBar._rbRefreshOnShow then
+		healthBar:HookScript("OnShow", function(self)
+			self._smoothInitialized = nil
+			updateHealthBar("ON_SHOW")
+		end)
+		healthBar._rbRefreshOnShow = true
+	end
 	do
 		local cfgTex = getBarSettings("HEALTH") or {}
 		healthBar:SetStatusBarTexture(resolveTexture(cfgTex))
@@ -3522,6 +3529,24 @@ local function createPowerBar(type, anchor)
 	if not bar then bar = CreateFrame("StatusBar", "EQOL" .. type .. "Bar", UIParent, "BackdropTemplate") end
 	-- Ensure a valid parent when reusing frames after disable
 	if bar:GetParent() ~= UIParent then bar:SetParent(UIParent) end
+
+	-- Refresh bar immediately when it becomes visible (e.g. combat show via StateDriver)
+	if type ~= "RUNES" and not bar._rbRefreshOnShow then
+		bar:HookScript("OnShow", function(self)
+			-- Force re-read of max (fixes “cap changed while hidden”)
+			self._lastMax = nil
+			self._lastMaxRaw = nil
+
+			-- Optional: makes smooth bars snap correctly on first show
+			self._smoothInitialized = nil
+
+			updatePowerBar(self._rbType)
+
+			if ResourceBars.separatorEligible and ResourceBars.separatorEligible[self._rbType] then updateBarSeparators(self._rbType) end
+			updateBarThresholds(self._rbType)
+		end)
+		bar._rbRefreshOnShow = true
+	end
 
 	local settings = getBarSettings(type)
 	local w = max(RB.MIN_RESOURCE_BAR_WIDTH, (settings and settings.width) or RB.DEFAULT_POWER_WIDTH)

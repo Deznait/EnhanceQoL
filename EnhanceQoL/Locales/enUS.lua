@@ -26,6 +26,7 @@ L["DataPanelTextOutline"] = "Text outline"
 L["DataPanelTextShadow"] = "Text shadow"
 L["DataPanelOpacityInCombat"] = "Opacity in combat"
 L["DataPanelOpacityOutOfCombat"] = "Opacity out of combat"
+L["Text color"] = "Text color"
 L["DataPanelDelete"] = "Delete panel"
 L["DataPanelDeleteConfirm"] = 'Are you sure you want to delete "%s"? This cannot be undone.'
 L["Show options tooltip hint"] = 'Show "Right-click for options" tooltip hint'

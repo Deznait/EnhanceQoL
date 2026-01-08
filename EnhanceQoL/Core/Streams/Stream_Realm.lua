@@ -1,4 +1,4 @@
--- luacheck: globals EnhanceQoL GetRealmName GAMEMENU_OPTIONS FONT_SIZE UIParent
+-- luacheck: globals EnhanceQoL GetRealmName GAMEMENU_OPTIONS FONT_SIZE UIParent NORMAL_FONT_COLOR
 local addonName, addon = ...
 local L = addon.L
 
@@ -22,6 +22,13 @@ local function ensureDB()
 	addon.db.datapanel.realm = addon.db.datapanel.realm or {}
 	db = addon.db.datapanel.realm
 	db.fontSize = db.fontSize or 14
+	if not db.textColor then
+		local r, g, b = 1, 0.82, 0
+		if NORMAL_FONT_COLOR and NORMAL_FONT_COLOR.GetRGB then
+			r, g, b = NORMAL_FONT_COLOR:GetRGB()
+		end
+		db.textColor = { r = r, g = g, b = b }
+	end
 end
 
 local function RestorePosition(frame)
@@ -62,6 +69,15 @@ local function createAceWindow()
 	end)
 	frame:AddChild(fontSize)
 
+	local textColor = AceGUI:Create("ColorPicker")
+	textColor:SetLabel(L["Text color"] or "Text color")
+	textColor:SetColor(db.textColor.r, db.textColor.g, db.textColor.b)
+	textColor:SetCallback("OnValueChanged", function(_, _, r, g, b)
+		db.textColor = { r = r, g = g, b = b }
+		addon.DataHub:RequestUpdate(stream)
+	end)
+	frame:AddChild(textColor)
+
 	frame.frame:Show()
 end
 
@@ -72,11 +88,17 @@ local function getRealm()
 	return name or ""
 end
 
+local function colorize(text, color)
+	if not text or text == "" then return text end
+	if color and color.r and color.g and color.b then return ("|cff%02x%02x%02x%s|r"):format(color.r * 255, color.g * 255, color.b * 255, text) end
+	return text
+end
+
 local function updateRealm(s)
 	s = s or stream
 	if not s then return end
 	ensureDB()
-	s.snapshot.text = getRealm()
+	s.snapshot.text = colorize(getRealm(), db.textColor)
 	s.snapshot.fontSize = db.fontSize or 14
 	s.snapshot.tooltip = getOptionsHint()
 end

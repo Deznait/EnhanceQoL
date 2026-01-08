@@ -117,4 +117,600 @@
             </Button>
         </Frames>
     </Frame>
+
+    <!-- TradeFrame-style preview for logged trades (visual only) -->
+    <Frame name="EQOL_TradePreviewFrame" parent="UIParent" inherits="ButtonFrameTemplate" toplevel="true"
+        movable="true" enableMouse="true" hidden="true" clampedToScreen="true">
+        <Size x="344" y="446"/>
+        <Layers>
+            <Layer level="OVERLAY" textureSubLevel="2">
+                <Texture parentKey="RecipientBotLeftCorner" inherits="UI-Frame-BotCornerLeft">
+                    <Anchors>
+                        <Anchor point="BOTTOMLEFT" relativeTo="$parent" relativePoint="BOTTOMRIGHT" x="-178" y="-3"/>
+                    </Anchors>
+                </Texture>
+                <Texture parentKey="RecipientLeftBorder" inherits="!UI-Frame-LeftTile">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" relativeTo="$parent" relativePoint="TOPRIGHT" x="-178" y="-50"/>
+                        <Anchor point="BOTTOMLEFT" relativeKey="$parent.RecipientBotLeftCorner" relativePoint="TOPLEFT"/>
+                    </Anchors>
+                </Texture>
+            </Layer>
+            <Layer level="BACKGROUND" textureSubLevel="1">
+                <Texture parentKey="RecipientBG">
+                    <Color r="1" g="1" b="1" a=".15"/>
+                    <Anchors>
+                        <Anchor point="TOPLEFT" relativeTo="$parent" relativePoint="TOPRIGHT" x="-172" y="-20"/>
+                        <Anchor point="BOTTOMRIGHT" relativeTo="$parent"/>
+                    </Anchors>
+                </Texture>
+            </Layer>
+            <Layer level="ARTWORK">
+                <FontString parentKey="PlayerEnchantText" inherits="GameFontHighlightSmall"
+                    text="TRADEFRAME_ENCHANT_SLOT_LABEL">
+                    <Anchors>
+                        <Anchor point="TOPLEFT" relativeTo="$parent" x="15" y="-360"/>
+                    </Anchors>
+                </FontString>
+                <FontString parentKey="RecipientEnchantText" inherits="GameFontHighlightSmall"
+                    text="TRADEFRAME_ENCHANT_SLOT_LABEL">
+                    <Anchors>
+                        <Anchor point="LEFT" relativeKey="$parent.PlayerEnchantText" x="166" y="0"/>
+                    </Anchors>
+                </FontString>
+            </Layer>
+        </Layers>
+        <Frames>
+            <Frame parentKey="NameHeader" frameStrata="HIGH">
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeTo="$parent"/>
+                    <Anchor point="BOTTOMRIGHT" relativeTo="$parent"/>
+                </Anchors>
+                <Layers>
+                    <Layer level="ARTWORK">
+                        <FontString parentKey="RecipientNameText" inherits="GameFontNormal" text="Player Name">
+                            <Size x="80" y="12"/>
+                            <Anchors>
+                                <Anchor point="TOPLEFT" relativeTo="$parent" x="230" y="-5"/>
+                            </Anchors>
+                        </FontString>
+                        <FontString parentKey="PlayerNameText" inherits="GameFontNormal" text="Recipient Name">
+                            <Size x="100" y="12"/>
+                            <Anchors>
+                                <Anchor point="TOPLEFT" relativeTo="$parent" x="65" y="-5"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                </Layers>
+            </Frame>
+            <Frame parentKey="RecipientOverlay" frameLevel="550" inherits="ResizeLayoutFrame">
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativePoint="TOPRIGHT" x="-180" y="7"/>
+                </Anchors>
+                <Layers>
+                    <Layer level="ARTWORK" textureSubLevel="1">
+                        <Texture parentKey="Portrait">
+                            <Size x="60" y="60"/>
+                            <Anchors>
+                                <Anchor point="TOPLEFT" x="2"/>
+                            </Anchors>
+                        </Texture>
+                    </Layer>
+                    <Layer level="ARTWORK" textureSubLevel="2">
+                        <Texture parentKey="PortraitFrame" atlas="UI-Frame-PortraitMetal-CornerTopLeft"
+                            useAtlasSize="true">
+                            <Anchors>
+                                <Anchor point="TOPLEFT" relativeKey="$parent.Portrait" x="-8" y="9"/>
+                            </Anchors>
+                        </Texture>
+                    </Layer>
+                </Layers>
+            </Frame>
+            <Frame parentKey="RecipientItemsInset" inherits="InsetFrameTemplate" useParentLevel="true">
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="175" y="-83"/>
+                    <Anchor point="BOTTOMRIGHT" relativeTo="$parent" relativePoint="TOPLEFT" x="338" y="-352"/>
+                </Anchors>
+            </Frame>
+            <Frame parentKey="RecipientItem1">
+                <Size x="153" y="37"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="182" y="-89"/>
+                </Anchors>
+                <Layers>
+                    <Layer level="BACKGROUND">
+                        <Texture parentKey="SlotTexture" file="Interface\Buttons\UI-EmptySlot">
+                            <Size x="64" y="64"/>
+                            <Anchors>
+                                <Anchor point="TOPLEFT" x="-13" y="13"/>
+                            </Anchors>
+                        </Texture>
+                        <Texture parentKey="NameFrame" file="Interface\QuestFrame\UI-QuestItemNameFrame">
+                            <Size x="124" y="64"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.SlotTexture" relativePoint="RIGHT" x="-20"
+                                    y="0"/>
+                            </Anchors>
+                        </Texture>
+                        <FontString parentKey="Name" inherits="GameFontNormalSmall" text="" justifyH="LEFT">
+                            <Size x="90" y="30"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.NameFrame" x="15" y="0"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                </Layers>
+            </Frame>
+            <Frame parentKey="RecipientItem2">
+                <Size x="153" y="37"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeKey="$parent.RecipientItem1" relativePoint="BOTTOMLEFT" x="0"
+                        y="-7"/>
+                </Anchors>
+                <Layers>
+                    <Layer level="BACKGROUND">
+                        <Texture parentKey="SlotTexture" file="Interface\Buttons\UI-EmptySlot">
+                            <Size x="64" y="64"/>
+                            <Anchors>
+                                <Anchor point="TOPLEFT" x="-13" y="13"/>
+                            </Anchors>
+                        </Texture>
+                        <Texture parentKey="NameFrame" file="Interface\QuestFrame\UI-QuestItemNameFrame">
+                            <Size x="124" y="64"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.SlotTexture" relativePoint="RIGHT" x="-20"
+                                    y="0"/>
+                            </Anchors>
+                        </Texture>
+                        <FontString parentKey="Name" inherits="GameFontNormalSmall" text="" justifyH="LEFT">
+                            <Size x="90" y="30"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.NameFrame" x="15" y="0"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                </Layers>
+            </Frame>
+            <Frame parentKey="RecipientItem3">
+                <Size x="153" y="37"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeKey="$parent.RecipientItem2" relativePoint="BOTTOMLEFT" x="0"
+                        y="-7"/>
+                </Anchors>
+                <Layers>
+                    <Layer level="BACKGROUND">
+                        <Texture parentKey="SlotTexture" file="Interface\Buttons\UI-EmptySlot">
+                            <Size x="64" y="64"/>
+                            <Anchors>
+                                <Anchor point="TOPLEFT" x="-13" y="13"/>
+                            </Anchors>
+                        </Texture>
+                        <Texture parentKey="NameFrame" file="Interface\QuestFrame\UI-QuestItemNameFrame">
+                            <Size x="124" y="64"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.SlotTexture" relativePoint="RIGHT" x="-20"
+                                    y="0"/>
+                            </Anchors>
+                        </Texture>
+                        <FontString parentKey="Name" inherits="GameFontNormalSmall" text="" justifyH="LEFT">
+                            <Size x="90" y="30"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.NameFrame" x="15" y="0"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                </Layers>
+            </Frame>
+            <Frame parentKey="RecipientItem4">
+                <Size x="153" y="37"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeKey="$parent.RecipientItem3" relativePoint="BOTTOMLEFT" x="0"
+                        y="-7"/>
+                </Anchors>
+                <Layers>
+                    <Layer level="BACKGROUND">
+                        <Texture parentKey="SlotTexture" file="Interface\Buttons\UI-EmptySlot">
+                            <Size x="64" y="64"/>
+                            <Anchors>
+                                <Anchor point="TOPLEFT" x="-13" y="13"/>
+                            </Anchors>
+                        </Texture>
+                        <Texture parentKey="NameFrame" file="Interface\QuestFrame\UI-QuestItemNameFrame">
+                            <Size x="124" y="64"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.SlotTexture" relativePoint="RIGHT" x="-20"
+                                    y="0"/>
+                            </Anchors>
+                        </Texture>
+                        <FontString parentKey="Name" inherits="GameFontNormalSmall" text="" justifyH="LEFT">
+                            <Size x="90" y="30"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.NameFrame" x="15" y="0"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                </Layers>
+            </Frame>
+            <Frame parentKey="RecipientItem5">
+                <Size x="153" y="37"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeKey="$parent.RecipientItem4" relativePoint="BOTTOMLEFT" x="0"
+                        y="-7"/>
+                </Anchors>
+                <Layers>
+                    <Layer level="BACKGROUND">
+                        <Texture parentKey="SlotTexture" file="Interface\Buttons\UI-EmptySlot">
+                            <Size x="64" y="64"/>
+                            <Anchors>
+                                <Anchor point="TOPLEFT" x="-13" y="13"/>
+                            </Anchors>
+                        </Texture>
+                        <Texture parentKey="NameFrame" file="Interface\QuestFrame\UI-QuestItemNameFrame">
+                            <Size x="124" y="64"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.SlotTexture" relativePoint="RIGHT" x="-20"
+                                    y="0"/>
+                            </Anchors>
+                        </Texture>
+                        <FontString parentKey="Name" inherits="GameFontNormalSmall" text="" justifyH="LEFT">
+                            <Size x="90" y="30"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.NameFrame" x="15" y="0"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                </Layers>
+            </Frame>
+            <Frame parentKey="RecipientItem6">
+                <Size x="153" y="37"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeKey="$parent.RecipientItem5" relativePoint="BOTTOMLEFT" x="0"
+                        y="-7"/>
+                </Anchors>
+                <Layers>
+                    <Layer level="BACKGROUND">
+                        <Texture parentKey="SlotTexture" file="Interface\Buttons\UI-EmptySlot">
+                            <Size x="64" y="64"/>
+                            <Anchors>
+                                <Anchor point="TOPLEFT" x="-13" y="13"/>
+                            </Anchors>
+                        </Texture>
+                        <Texture parentKey="NameFrame" file="Interface\QuestFrame\UI-QuestItemNameFrame">
+                            <Size x="124" y="64"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.SlotTexture" relativePoint="RIGHT" x="-20"
+                                    y="0"/>
+                            </Anchors>
+                        </Texture>
+                        <FontString parentKey="Name" inherits="GameFontNormalSmall" text="" justifyH="LEFT">
+                            <Size x="90" y="30"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.NameFrame" x="15" y="0"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                </Layers>
+            </Frame>
+            <Frame parentKey="RecipientEnchantInset" inherits="InsetFrameTemplate" useParentLevel="true">
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="175" y="-354"/>
+                    <Anchor point="BOTTOMRIGHT" relativeTo="$parent" relativePoint="TOPLEFT" x="338" y="-418"/>
+                </Anchors>
+            </Frame>
+            <Frame parentKey="RecipientItem7">
+                <Size x="153" y="37"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeKey="$parent.RecipientItem6" relativePoint="BOTTOMLEFT" x="0"
+                        y="-28"/>
+                </Anchors>
+                <Layers>
+                    <Layer level="BACKGROUND">
+                        <Texture parentKey="SlotTexture" file="Interface\Buttons\UI-EmptySlot">
+                            <Size x="64" y="64"/>
+                            <Anchors>
+                                <Anchor point="TOPLEFT" x="-13" y="13"/>
+                            </Anchors>
+                        </Texture>
+                        <Texture parentKey="NameFrame" file="Interface\QuestFrame\UI-QuestItemNameFrame">
+                            <Size x="124" y="64"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.SlotTexture" relativePoint="RIGHT" x="-20"
+                                    y="0"/>
+                            </Anchors>
+                        </Texture>
+                        <FontString parentKey="Name" inherits="GameFontNormalSmall" text="" justifyH="LEFT">
+                            <Size x="90" y="30"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.NameFrame" x="15" y="0"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                    <Layer level="ARTWORK">
+                        <Texture parentKey="EnchantIcon" file="Interface\TradeFrame\UI-TradeFrame-EnchantIcon">
+                            <Size x="62" y="62"/>
+                            <Anchors>
+                                <Anchor point="TOPLEFT" x="0" y="0"/>
+                            </Anchors>
+                        </Texture>
+                    </Layer>
+                </Layers>
+            </Frame>
+            <Frame parentKey="PlayerItemsInset" inherits="InsetFrameTemplate" useParentLevel="true">
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="4" y="-83"/>
+                    <Anchor point="BOTTOMRIGHT" relativeTo="$parent" relativePoint="TOPLEFT" x="166" y="-352"/>
+                </Anchors>
+            </Frame>
+            <Frame parentKey="PlayerItem1">
+                <Size x="153" y="37"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="14" y="-89"/>
+                </Anchors>
+                <Layers>
+                    <Layer level="BACKGROUND">
+                        <Texture parentKey="SlotTexture" file="Interface\Buttons\UI-EmptySlot">
+                            <Size x="64" y="64"/>
+                            <Anchors>
+                                <Anchor point="TOPLEFT" x="-13" y="13"/>
+                            </Anchors>
+                        </Texture>
+                        <Texture parentKey="NameFrame" file="Interface\QuestFrame\UI-QuestItemNameFrame">
+                            <Size x="124" y="64"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.SlotTexture" relativePoint="RIGHT" x="-20"
+                                    y="0"/>
+                            </Anchors>
+                        </Texture>
+                        <FontString parentKey="Name" inherits="GameFontNormalSmall" text="" justifyH="LEFT">
+                            <Size x="90" y="30"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.NameFrame" x="15" y="0"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                </Layers>
+            </Frame>
+            <Frame parentKey="PlayerItem2">
+                <Size x="153" y="37"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeKey="$parent.PlayerItem1" relativePoint="BOTTOMLEFT" x="0"
+                        y="-7"/>
+                </Anchors>
+                <Layers>
+                    <Layer level="BACKGROUND">
+                        <Texture parentKey="SlotTexture" file="Interface\Buttons\UI-EmptySlot">
+                            <Size x="64" y="64"/>
+                            <Anchors>
+                                <Anchor point="TOPLEFT" x="-13" y="13"/>
+                            </Anchors>
+                        </Texture>
+                        <Texture parentKey="NameFrame" file="Interface\QuestFrame\UI-QuestItemNameFrame">
+                            <Size x="124" y="64"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.SlotTexture" relativePoint="RIGHT" x="-20"
+                                    y="0"/>
+                            </Anchors>
+                        </Texture>
+                        <FontString parentKey="Name" inherits="GameFontNormalSmall" text="" justifyH="LEFT">
+                            <Size x="90" y="30"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.NameFrame" x="15" y="0"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                </Layers>
+            </Frame>
+            <Frame parentKey="PlayerItem3">
+                <Size x="153" y="37"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeKey="$parent.PlayerItem2" relativePoint="BOTTOMLEFT" x="0"
+                        y="-7"/>
+                </Anchors>
+                <Layers>
+                    <Layer level="BACKGROUND">
+                        <Texture parentKey="SlotTexture" file="Interface\Buttons\UI-EmptySlot">
+                            <Size x="64" y="64"/>
+                            <Anchors>
+                                <Anchor point="TOPLEFT" x="-13" y="13"/>
+                            </Anchors>
+                        </Texture>
+                        <Texture parentKey="NameFrame" file="Interface\QuestFrame\UI-QuestItemNameFrame">
+                            <Size x="124" y="64"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.SlotTexture" relativePoint="RIGHT" x="-20"
+                                    y="0"/>
+                            </Anchors>
+                        </Texture>
+                        <FontString parentKey="Name" inherits="GameFontNormalSmall" text="" justifyH="LEFT">
+                            <Size x="90" y="30"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.NameFrame" x="15" y="0"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                </Layers>
+            </Frame>
+            <Frame parentKey="PlayerItem4">
+                <Size x="153" y="37"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeKey="$parent.PlayerItem3" relativePoint="BOTTOMLEFT" x="0"
+                        y="-7"/>
+                </Anchors>
+                <Layers>
+                    <Layer level="BACKGROUND">
+                        <Texture parentKey="SlotTexture" file="Interface\Buttons\UI-EmptySlot">
+                            <Size x="64" y="64"/>
+                            <Anchors>
+                                <Anchor point="TOPLEFT" x="-13" y="13"/>
+                            </Anchors>
+                        </Texture>
+                        <Texture parentKey="NameFrame" file="Interface\QuestFrame\UI-QuestItemNameFrame">
+                            <Size x="124" y="64"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.SlotTexture" relativePoint="RIGHT" x="-20"
+                                    y="0"/>
+                            </Anchors>
+                        </Texture>
+                        <FontString parentKey="Name" inherits="GameFontNormalSmall" text="" justifyH="LEFT">
+                            <Size x="90" y="30"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.NameFrame" x="15" y="0"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                </Layers>
+            </Frame>
+            <Frame parentKey="PlayerItem5">
+                <Size x="153" y="37"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeKey="$parent.PlayerItem4" relativePoint="BOTTOMLEFT" x="0"
+                        y="-7"/>
+                </Anchors>
+                <Layers>
+                    <Layer level="BACKGROUND">
+                        <Texture parentKey="SlotTexture" file="Interface\Buttons\UI-EmptySlot">
+                            <Size x="64" y="64"/>
+                            <Anchors>
+                                <Anchor point="TOPLEFT" x="-13" y="13"/>
+                            </Anchors>
+                        </Texture>
+                        <Texture parentKey="NameFrame" file="Interface\QuestFrame\UI-QuestItemNameFrame">
+                            <Size x="124" y="64"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.SlotTexture" relativePoint="RIGHT" x="-20"
+                                    y="0"/>
+                            </Anchors>
+                        </Texture>
+                        <FontString parentKey="Name" inherits="GameFontNormalSmall" text="" justifyH="LEFT">
+                            <Size x="90" y="30"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.NameFrame" x="15" y="0"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                </Layers>
+            </Frame>
+            <Frame parentKey="PlayerItem6">
+                <Size x="153" y="37"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeKey="$parent.PlayerItem5" relativePoint="BOTTOMLEFT" x="0"
+                        y="-7"/>
+                </Anchors>
+                <Layers>
+                    <Layer level="BACKGROUND">
+                        <Texture parentKey="SlotTexture" file="Interface\Buttons\UI-EmptySlot">
+                            <Size x="64" y="64"/>
+                            <Anchors>
+                                <Anchor point="TOPLEFT" x="-13" y="13"/>
+                            </Anchors>
+                        </Texture>
+                        <Texture parentKey="NameFrame" file="Interface\QuestFrame\UI-QuestItemNameFrame">
+                            <Size x="124" y="64"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.SlotTexture" relativePoint="RIGHT" x="-20"
+                                    y="0"/>
+                            </Anchors>
+                        </Texture>
+                        <FontString parentKey="Name" inherits="GameFontNormalSmall" text="" justifyH="LEFT">
+                            <Size x="90" y="30"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.NameFrame" x="15" y="0"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                </Layers>
+            </Frame>
+            <Frame parentKey="PlayerEnchantInset" inherits="InsetFrameTemplate" useParentLevel="true">
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="4" y="-354"/>
+                    <Anchor point="BOTTOMRIGHT" relativeTo="$parent" relativePoint="TOPLEFT" x="166" y="-418"/>
+                </Anchors>
+            </Frame>
+            <Frame parentKey="PlayerItem7">
+                <Size x="153" y="37"/>
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeKey="$parent.PlayerItem6" relativePoint="BOTTOMLEFT" x="0"
+                        y="-28"/>
+                </Anchors>
+                <Layers>
+                    <Layer level="BACKGROUND">
+                        <Texture parentKey="SlotTexture" file="Interface\Buttons\UI-EmptySlot">
+                            <Size x="64" y="64"/>
+                            <Anchors>
+                                <Anchor point="TOPLEFT" x="-13" y="13"/>
+                            </Anchors>
+                        </Texture>
+                        <Texture parentKey="NameFrame" file="Interface\QuestFrame\UI-QuestItemNameFrame">
+                            <Size x="124" y="64"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.SlotTexture" relativePoint="RIGHT" x="-20"
+                                    y="0"/>
+                            </Anchors>
+                        </Texture>
+                        <FontString parentKey="Name" inherits="GameFontNormalSmall" text="" justifyH="LEFT">
+                            <Size x="90" y="30"/>
+                            <Anchors>
+                                <Anchor point="LEFT" relativeKey="$parent.NameFrame" x="15" y="0"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                    <Layer level="ARTWORK">
+                        <Texture parentKey="EnchantIcon" file="Interface\TradeFrame\UI-TradeFrame-EnchantIcon">
+                            <Size x="62" y="62"/>
+                            <Anchors>
+                                <Anchor point="TOPLEFT" x="0" y="0"/>
+                            </Anchors>
+                        </Texture>
+                    </Layer>
+                </Layers>
+            </Frame>
+            <Frame parentKey="PlayerInputMoneyInset" inherits="InsetFrameTemplate" useParentLevel="true">
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="4" y="-58"/>
+                    <Anchor point="BOTTOMRIGHT" relativeTo="$parent" relativePoint="TOPLEFT" x="166" y="-82"/>
+                </Anchors>
+            </Frame>
+            <Frame parentKey="RecipientMoneyInset" inherits="InsetFrameTemplate" useParentLevel="true">
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="175" y="-58"/>
+                    <Anchor point="BOTTOMRIGHT" relativeTo="$parent" relativePoint="TOPLEFT" x="338" y="-81"/>
+                </Anchors>
+            </Frame>
+            <Frame parentKey="RecipientMoneyBg" inherits="ThinGoldEdgeTemplate">
+                <Size x="120" y="30"/>
+                <Anchors>
+                    <Anchor point="TOPRIGHT" relativeTo="$parent" relativePoint="TOPRIGHT" x="-7" y="-60"/>
+                    <Anchor point="BOTTOMLEFT" relativeTo="$parent" relativePoint="TOPRIGHT" x="-168" y="-80"/>
+                </Anchors>
+            </Frame>
+            <Frame parentKey="PlayerMoneyFrame">
+                <Anchors>
+                    <Anchor point="TOPLEFT" relativeTo="$parent" x="11" y="-61"/>
+                </Anchors>
+                <Layers>
+                    <Layer level="ARTWORK">
+                        <FontString parentKey="Text" inherits="GameFontHighlightSmall" justifyH="LEFT">
+                            <Anchors>
+                                <Anchor point="LEFT"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                </Layers>
+            </Frame>
+            <Frame parentKey="RecipientMoneyFrame">
+                <Anchors>
+                    <Anchor point="TOPRIGHT" relativeTo="$parent" x="-5" y="-64"/>
+                </Anchors>
+                <Layers>
+                    <Layer level="ARTWORK">
+                        <FontString parentKey="Text" inherits="GameFontHighlightSmall" justifyH="RIGHT">
+                            <Anchors>
+                                <Anchor point="RIGHT"/>
+                            </Anchors>
+                        </FontString>
+                    </Layer>
+                </Layers>
+            </Frame>
+        </Frames>
+    </Frame>
 </Ui>

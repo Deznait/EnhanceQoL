@@ -260,10 +260,11 @@ local function makeLink(linkType, id, text)
 end
 
 local function buildSideSummary(label, itemCount, moneyText)
-	local parts = { label }
-	if itemCount and itemCount > 0 then parts[#parts + 1] = "x" .. itemCount end
-	if moneyText and moneyText ~= "" then parts[#parts + 1] = moneyText end
-	return table.concat(parts, " ")
+	local itemLabel = (_G and _G.ITEMS) or "Items"
+	local count = itemCount or 0
+	local summary = string.format("%s x%d %s", label or "", count, itemLabel)
+	if moneyText and moneyText ~= "" then summary = summary .. " - " .. moneyText end
+	return summary
 end
 
 local function tradeStatusIcon(status)
@@ -447,6 +448,7 @@ function TradeMailLog:StartTrade()
 	self.tradeState = {
 		kind = "trade",
 		partner = partner,
+		playerName = UnitName and UnitName("player") or "",
 		zone = GetRealZoneText and GetRealZoneText() or (GetZoneText and GetZoneText()) or "",
 		time = now(),
 		playerAccepted = 0,
@@ -467,7 +469,6 @@ end
 function TradeMailLog:FinishTrade()
 	local state = self.tradeState
 	if not state then return end
-	self:UpdateTradeSnapshot()
 
 	local completed = state.playerAccepted == 1 and state.targetAccepted == 1
 	state.completed = completed
@@ -636,82 +637,59 @@ function TradeMailLog:EnsureTradePreview()
 	if self.tradePreview then return self.tradePreview end
 	ensureItemTemplates()
 
-	local frame = CreateFrame("Frame", "EQOL_TradePreviewFrame", UIParent, "ButtonFrameTemplate")
-	frame:SetSize(420, 320)
+	local frame = _G.EQOL_TradePreviewFrame
+	if not frame then return nil end
+
 	frame:ClearAllPoints()
-	if UIParent then
-		frame:SetPoint("CENTER", UIParent, "CENTER")
-	else
-		frame:SetPoint("CENTER")
-	end
+	frame:SetParent(UIParent)
+	frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+
 	frame:SetMovable(true)
 	frame:EnableMouse(true)
 	frame:RegisterForDrag("LeftButton")
 	frame:SetScript("OnDragStart", frame.StartMoving)
 	frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
 	frame:Hide()
+
+	local function hidePreview() frame:Hide() end
+	if frame.CloseButton then frame.CloseButton:SetScript("OnClick", hidePreview) end
+
 	if ButtonFrameTemplate_HidePortrait then ButtonFrameTemplate_HidePortrait(frame) end
-
+	if frame.PortraitContainer then frame.PortraitContainer:Hide() end
+	if frame.RecipientOverlay then frame.RecipientOverlay:Hide() end
 	setFrameTitle(frame, TRADE or "Trade")
-	setFramePortrait(frame, "Interface\\Icons\\INV_Misc_Coin_01")
 
-	local inset = frame.Inset or frame
-	local content = CreateFrame("Frame", nil, frame)
-	content:SetPoint("TOPLEFT", inset, "TOPLEFT", 6, -6)
-	content:SetPoint("BOTTOMRIGHT", inset, "BOTTOMRIGHT", -6, 6)
-	frame.content = content
+	frame.playerNameText = frame.NameHeader and frame.NameHeader.PlayerNameText or frame.PlayerNameText
+	frame.recipientNameText = frame.NameHeader and frame.NameHeader.RecipientNameText or frame.RecipientNameText
+	frame.playerMoneyText = frame.PlayerMoneyFrame and frame.PlayerMoneyFrame.Text or nil
+	frame.recipientMoneyText = frame.RecipientMoneyFrame and frame.RecipientMoneyFrame.Text or nil
 
-	frame.partnerText = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	frame.partnerText:SetPoint("TOPLEFT", content, "TOPLEFT", 8, -6)
-	frame.partnerText:SetJustifyH("LEFT")
-
-	frame.metaText = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	frame.metaText:SetPoint("TOPRIGHT", content, "TOPRIGHT", -8, -8)
-	frame.metaText:SetJustifyH("RIGHT")
-
-	frame.playerLabel = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	frame.playerLabel:SetPoint("TOPLEFT", content, "TOPLEFT", 8, -28)
-	frame.playerLabel:SetText(YOU or "You")
-
-	frame.targetLabel = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	frame.targetLabel:SetPoint("TOPRIGHT", content, "TOPRIGHT", -8, -28)
-	frame.targetLabel:SetText(OTHER or "Other")
-
-	local itemSize = 32
-	local spacing = 4
-	local itemsPerRow = 3
-	local startY = -46
-	local rows = math.ceil(getTradeItemSlots() / itemsPerRow)
-
+	local itemSize = 37
 	frame.playerButtons = {}
 	frame.targetButtons = {}
+	frame.playerItemFrames = {}
+	frame.targetItemFrames = {}
 	for i = 1, getTradeItemSlots() do
-		local row = math.floor((i - 1) / itemsPerRow)
-		local col = (i - 1) % itemsPerRow
+		local playerFrame = frame["PlayerItem" .. i]
+		if playerFrame then
+			frame.playerItemFrames[i] = playerFrame
+			local pBtn = createItemButton(playerFrame, itemSize)
+			pBtn:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 0, 0)
+			pBtn:SetScript("OnEnter", function(selfBtn) setItemButtonTooltip(selfBtn) end)
+			pBtn:SetScript("OnLeave", GameTooltip_Hide)
+			frame.playerButtons[i] = pBtn
+		end
 
-		local pBtn = createItemButton(content, itemSize)
-		pBtn:SetSize(itemSize, itemSize)
-		pBtn:SetPoint("TOPLEFT", content, "TOPLEFT", 8 + (col * (itemSize + spacing)), startY - (row * (itemSize + spacing)))
-		pBtn:SetScript("OnEnter", function(selfBtn) setItemButtonTooltip(selfBtn) end)
-		pBtn:SetScript("OnLeave", GameTooltip_Hide)
-		frame.playerButtons[i] = pBtn
-
-		local tBtn = createItemButton(content, itemSize)
-		tBtn:SetSize(itemSize, itemSize)
-		tBtn:SetPoint("TOPRIGHT", content, "TOPRIGHT", -8 - (col * (itemSize + spacing)), startY - (row * (itemSize + spacing)))
-		tBtn:SetScript("OnEnter", function(selfBtn) setItemButtonTooltip(selfBtn) end)
-		tBtn:SetScript("OnLeave", GameTooltip_Hide)
-		frame.targetButtons[i] = tBtn
+		local targetFrame = frame["RecipientItem" .. i]
+		if targetFrame then
+			frame.targetItemFrames[i] = targetFrame
+			local tBtn = createItemButton(targetFrame, itemSize)
+			tBtn:SetPoint("TOPLEFT", targetFrame, "TOPLEFT", 0, 0)
+			tBtn:SetScript("OnEnter", function(selfBtn) setItemButtonTooltip(selfBtn) end)
+			tBtn:SetScript("OnLeave", GameTooltip_Hide)
+			frame.targetButtons[i] = tBtn
+		end
 	end
-
-	local moneyY = startY - (rows * (itemSize + spacing)) - 6
-	frame.playerMoneyText = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	frame.playerMoneyText:SetPoint("TOPLEFT", content, "TOPLEFT", 8, moneyY)
-	frame.playerMoneyText:SetJustifyH("LEFT")
-
-	frame.targetMoneyText = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	frame.targetMoneyText:SetPoint("TOPRIGHT", content, "TOPRIGHT", -8, moneyY)
-	frame.targetMoneyText:SetJustifyH("RIGHT")
 
 	self.tradePreview = frame
 	return frame
@@ -803,24 +781,55 @@ end
 function TradeMailLog:ShowTradePreview(payload)
 	if not payload then return end
 	local frame = self:EnsureTradePreview()
-	frame.partnerText:SetText(payload.partner or "")
+	if not frame then return end
 
-	local meta = {}
-	if payload.zone and payload.zone ~= "" then meta[#meta + 1] = payload.zone end
-	if payload.time then meta[#meta + 1] = date("%Y-%m-%d %H:%M:%S", payload.time) end
-	frame.metaText:SetText(table.concat(meta, " - "))
-
-	frame.targetLabel:SetText(payload.partner or (OTHER or "Other"))
+	local playerName = (payload.playerName and payload.playerName ~= "" and payload.playerName) or (UnitName and UnitName("player")) or (YOU or "You")
+	if frame.playerNameText and frame.playerNameText.SetText then frame.playerNameText:SetText(playerName or "") end
+	if frame.recipientNameText and frame.recipientNameText.SetText then frame.recipientNameText:SetText(payload.partner or "") end
 
 	for i, button in ipairs(frame.playerButtons or {}) do
-		setItemButtonData(button, payload.playerItems and payload.playerItems[i])
+		local item = payload.playerItems and payload.playerItems[i]
+		setItemButtonData(button, item)
+		local itemFrame = frame.playerItemFrames and frame.playerItemFrames[i]
+		if itemFrame and itemFrame.Name then
+			local itemName = item and (item.name or extractLinkName(item.link)) or nil
+			if item and itemName then
+				itemFrame.Name:SetText(itemName)
+				if item.quality and GetItemQualityColor then
+					local r, g, b = GetItemQualityColor(item.quality)
+					itemFrame.Name:SetTextColor(r, g, b)
+				else
+					itemFrame.Name:SetTextColor(NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b)
+				end
+			else
+				itemFrame.Name:SetText("")
+				itemFrame.Name:SetTextColor(NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b)
+			end
+		end
 	end
 	for i, button in ipairs(frame.targetButtons or {}) do
-		setItemButtonData(button, payload.targetItems and payload.targetItems[i])
+		local item = payload.targetItems and payload.targetItems[i]
+		setItemButtonData(button, item)
+		local itemFrame = frame.targetItemFrames and frame.targetItemFrames[i]
+		if itemFrame and itemFrame.Name then
+			local itemName = item and (item.name or extractLinkName(item.link)) or nil
+			if item and itemName then
+				itemFrame.Name:SetText(itemName)
+				if item.quality and GetItemQualityColor then
+					local r, g, b = GetItemQualityColor(item.quality)
+					itemFrame.Name:SetTextColor(r, g, b)
+				else
+					itemFrame.Name:SetTextColor(NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b)
+				end
+			else
+				itemFrame.Name:SetText("")
+				itemFrame.Name:SetTextColor(NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b)
+			end
+		end
 	end
 
-	frame.playerMoneyText:SetText(formatMoney(payload.playerMoney) or "")
-	frame.targetMoneyText:SetText(formatMoney(payload.targetMoney) or "")
+	if frame.playerMoneyText and frame.playerMoneyText.SetText then frame.playerMoneyText:SetText(formatMoneyText(payload.playerMoney) or "") end
+	if frame.recipientMoneyText and frame.recipientMoneyText.SetText then frame.recipientMoneyText:SetText(formatMoneyText(payload.targetMoney) or "") end
 
 	frame:Show()
 	frame:Raise()

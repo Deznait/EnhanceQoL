@@ -1,4 +1,4 @@
--- luacheck: globals EnhanceQoL GetFramerate GetNetStats GAMEMENU_OPTIONS MAINMENUBAR_FPS_LABEL MAINMENUBAR_LATENCY_LABEL
+-- luacheck: globals EnhanceQoL GetFramerate GetNetStats GAMEMENU_OPTIONS MAINMENUBAR_FPS_LABEL MAINMENUBAR_LATENCY_LABEL NORMAL_FONT_COLOR
 local addonName, addon = ...
 local L = addon.L
 
@@ -66,6 +66,13 @@ local function ensureDB()
 
 	db.fontSize = db.fontSize or 14
 	db.displayMode = db.displayMode or "both"
+	if not db.textColor then
+		local r, g, b = 1, 0.82, 0
+		if NORMAL_FONT_COLOR and NORMAL_FONT_COLOR.GetRGB then
+			r, g, b = NORMAL_FONT_COLOR:GetRGB()
+		end
+		db.textColor = { r = r, g = g, b = b }
+	end
 	-- Cadence (seconds)
 	db.fpsInterval = db.fpsInterval or 0.25 -- 4x/s
 	db.pingInterval = db.pingInterval or 1.0 -- 1x/s
@@ -136,6 +143,19 @@ local function createAceWindow()
 		scheduleUpdate()
 	end)
 	scroll:AddChild(fontSize)
+
+	local textColor = AceGUI:Create("ColorPicker")
+	textColor:SetLabel(L["Text color"] or "Text color")
+	textColor:SetColor(db.textColor.r, db.textColor.g, db.textColor.b)
+	textColor:SetCallback("OnValueChanged", function(_, _, r, g, b)
+		db.textColor = { r = r, g = g, b = b }
+		lastDisplay = nil
+		lastFps = nil
+		lastHome, lastWorld = nil, nil
+		lastPingMode = nil
+		scheduleUpdate()
+	end)
+	scroll:AddChild(textColor)
 
 	local display = AceGUI:Create("Dropdown")
 	display:SetLabel(L["latencyPanelDisplay"] or "Panel display")
@@ -301,6 +321,8 @@ end
 local function updateLatency(s)
 	s = s or stream
 	ensureDB()
+	local baseHex = colorToHex(db and db.textColor)
+	local function base(text) return format("|cff%s%s|r", baseHex, text or "") end
 
 	local displayMode = db.displayMode or "both"
 	local showFps = displayMode ~= "ping"
@@ -343,23 +365,28 @@ local function updateLatency(s)
 			if db.pingMode == "split" then
 				local ph = pingHome or 0
 				local pw = pingWorld or 0
-				pingText = format("H |cff%s%d|r / W |cff%s%d|r ms", pingColorHex(ph), ph, pingColorHex(pw), pw)
+				pingText = base("H ") .. format("|cff%s%d|r", pingColorHex(ph), ph) .. base(" / W ") .. format("|cff%s%d|r", pingColorHex(pw), pw) .. base(" ms")
 			elseif db.pingMode == "split_vertical" then
 				local ph = pingHome or 0
 				local pw = pingWorld or 0
 				local homeLabel = _G["HOME"] or "Home"
 				local worldLabel = _G["WORLD"] or "World"
-				pingText = format("%s: |cff%s%d|rms\n%s: |cff%s%d|rms", homeLabel, pingColorHex(ph), ph, worldLabel, pingColorHex(pw), pw)
+				pingText = base(homeLabel .. ": ")
+					.. format("|cff%s%d|r", pingColorHex(ph), ph)
+					.. base(" ms\n")
+					.. base(worldLabel .. ": ")
+					.. format("|cff%s%d|r", pingColorHex(pw), pw)
+					.. base(" ms")
 			elseif db.pingMode == "home" then
 				local ph = pingHome or 0
-				pingText = format("|cff%s%d|r ms", pingColorHex(ph), ph)
+				pingText = format("|cff%s%d|r", pingColorHex(ph), ph) .. base(" ms")
 			elseif db.pingMode == "world" then
 				local pw = pingWorld or 0
-				pingText = format("|cff%s%d|r ms", pingColorHex(pw), pw)
+				pingText = format("|cff%s%d|r", pingColorHex(pw), pw) .. base(" ms")
 			else
 				local p = pingHome or 0
 				if pingWorld and pingWorld > p then p = pingWorld end
-				pingText = format("|cff%s%d|r ms", pingColorHex(p), p)
+				pingText = format("|cff%s%d|r", pingColorHex(p), p) .. base(" ms")
 			end
 		end
 
@@ -367,13 +394,13 @@ local function updateLatency(s)
 		if displayMode == "ping" then
 			text = pingText or ""
 		elseif displayMode == "fps" then
-			text = format("FPS |cff%s%d|r", fpsColorHex(fpsValue or 0), fpsValue or 0)
+			text = base("FPS ") .. format("|cff%s%d|r", fpsColorHex(fpsValue or 0), fpsValue or 0)
 		else
-			local fpsText = format("FPS |cff%s%d|r", fpsColorHex(fpsValue or 0), fpsValue or 0)
+			local fpsText = base("FPS ") .. format("|cff%s%d|r", fpsColorHex(fpsValue or 0), fpsValue or 0)
 			if pingText and pingText:find("\n", 1, true) then
 				text = fpsText .. "\n" .. pingText
 			else
-				text = format("%s | %s", fpsText, pingText or "")
+				text = fpsText .. base(" | ") .. (pingText or "")
 			end
 		end
 

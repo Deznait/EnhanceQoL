@@ -34,6 +34,7 @@
   - DataPanels: Equipment Sets stream with left-click swap menu.
   - DataPanels: Micro Bar stream with a quick-access menu.
   - DataPanels: text outline/shadow toggles + in/out-of-combat opacity sliders.
+  - DataPanels: Latency + Realm streams now support a text color picker.
   - Quick-skip cinematics option (auto-confirms the skip prompt on Esc/Space/Enter).
   - Added missing Dalaran teleport ring variants.
 - **Chat**
@@ -99,6 +100,7 @@
 
 ### 🐛 Fixed
 
+- Resource bars hidden kept a wrong health/powervalue on show
 - Unit Frame Strata set at least "High" blocks options window
 - TomTom Minimap Icons are ignored in Button Sink
 - Mover: Dragging no longer overlays the PlayerSpells/Talents UI, so buttons remain clickable.
