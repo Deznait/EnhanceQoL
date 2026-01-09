@@ -346,6 +346,68 @@ local function isEntryActive(entry)
 	return addon.Mover.functions.IsFrameEnabled(entry)
 end
 
+addon.Mover.variables.scaleTargets = addon.Mover.variables.scaleTargets or {}
+addon.Mover.variables.scaleMouseover = addon.Mover.variables.scaleMouseover or {}
+addon.Mover.variables.moveHandles = addon.Mover.variables.moveHandles or {}
+addon.Mover.variables.scaleCaptureFrame = addon.Mover.variables.scaleCaptureFrame or nil
+
+-- Determine a valid scale target without stealing wheel from scrollable/clickable frames.
+local function findScaleTargetUnderMouse()
+	if not GetMouseFoci then return nil end
+	local mouseover = addon.Mover.variables.scaleMouseover
+	if not mouseover or not next(mouseover) then return nil end
+	local scaleTargets = addon.Mover.variables.scaleTargets
+	local moveHandles = addon.Mover.variables.moveHandles
+	for _, focus in ipairs(GetMouseFoci()) do
+		local root = scaleTargets and scaleTargets[focus]
+		local entry = root and root._eqolMoverEntry or nil
+		local active = entry and isEntryActive(entry)
+		if active then return root end
+
+		local isMoveHandle = moveHandles and moveHandles[focus]
+		if not active and not isMoveHandle then
+			if focus.IsForbidden and focus:IsForbidden() then return nil end
+			local hasWheel = focus.IsMouseWheelEnabled and focus:IsMouseWheelEnabled()
+			local hasClick = focus.IsMouseClickEnabled and focus:IsMouseClickEnabled()
+			if hasWheel or hasClick then return nil end
+		end
+	end
+	return nil
+end
+
+function addon.Mover.functions.CheckScaleWheelCapture()
+	local captureFrame = addon.Mover.variables.scaleCaptureFrame
+	if not captureFrame then return end
+	captureFrame:EnableMouseWheel(false)
+	if not db or not db.enabled or not db.scaleEnabled then return end
+	if not scaleModifierPressed() then return end
+	if findScaleTargetUnderMouse() then captureFrame:EnableMouseWheel(true) end
+end
+
+function addon.Mover.functions.HandleScaleWheel(delta)
+	if not db or not db.enabled or not db.scaleEnabled then return end
+	if not scaleModifierPressed() then return end
+	local target = findScaleTargetUnderMouse()
+	if not target or not target._eqolScaleWheel then return end
+	target._eqolScaleWheel(delta)
+end
+
+-- Global capture frame used to proxy mouse wheel scaling when the modifier is held.
+function addon.Mover.functions.EnsureScaleCaptureFrame()
+	if addon.Mover.variables.scaleCaptureFrame then return end
+	local captureFrame = CreateFrame("Frame")
+	captureFrame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
+	captureFrame:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", 0, 0)
+	captureFrame:SetFrameStrata("TOOLTIP")
+	captureFrame:SetFrameLevel(9999)
+	captureFrame:EnableMouseWheel(false)
+	captureFrame:SetScript("OnUpdate", function() addon.Mover.functions.CheckScaleWheelCapture() end)
+	captureFrame:SetScript("OnEvent", function() addon.Mover.functions.CheckScaleWheelCapture() end)
+	captureFrame:RegisterEvent("MODIFIER_STATE_CHANGED")
+	captureFrame:SetScript("OnMouseWheel", function(_, delta) addon.Mover.functions.HandleScaleWheel(delta) end)
+	addon.Mover.variables.scaleCaptureFrame = captureFrame
+end
+
 local function MoveKeepTwoPointSize(frame, x, y, point, relPoint)
 	point = point or "TOPLEFT"
 	relPoint = relPoint or point
@@ -400,6 +462,50 @@ local function applyDefaultPoints(frame)
 	return true
 end
 
+local function captureDefaultState(frame)
+	if not frame or frame._eqolMoverDefaults then return end
+	local defaults = {}
+	if frame.IsMovable then defaults.movable = frame:IsMovable() end
+	if frame.IsClampedToScreen then defaults.clamped = frame:IsClampedToScreen() end
+	if frame.IsMouseEnabled then defaults.mouseEnabled = frame:IsMouseEnabled() end
+	if frame.IsMouseWheelEnabled then defaults.mouseWheelEnabled = frame:IsMouseWheelEnabled() end
+	if frame.IsUserPlaced then defaults.userPlaced = frame:IsUserPlaced() end
+	defaults.ignoreFramePositionManager = frame.ignoreFramePositionManager
+	frame._eqolMoverDefaults = defaults
+end
+
+local function applyFrameState(frame, entry, active, useOverlay)
+	local defaults = frame and frame._eqolMoverDefaults
+	if not defaults then return end
+	if InCombatLockdown() and frame.IsProtected and frame:IsProtected() then return end
+	if active then
+		if frame.SetMovable then frame:SetMovable(true) end
+		if frame.SetClampedToScreen then frame:SetClampedToScreen(true) end
+		if entry.userPlaced ~= nil and frame.SetUserPlaced then frame:SetUserPlaced(entry.userPlaced) end
+		if entry.ignoreFramePositionManager ~= nil then frame.ignoreFramePositionManager = entry.ignoreFramePositionManager end
+		if not useOverlay and frame.EnableMouse then frame:EnableMouse(true) end
+		return
+	end
+	if defaults.movable ~= nil and frame.SetMovable then frame:SetMovable(defaults.movable) end
+	if defaults.clamped ~= nil and frame.SetClampedToScreen then frame:SetClampedToScreen(defaults.clamped) end
+	if not useOverlay and defaults.mouseEnabled ~= nil and frame.EnableMouse then frame:EnableMouse(defaults.mouseEnabled) end
+	if defaults.mouseWheelEnabled ~= nil and frame.EnableMouseWheel then frame:EnableMouseWheel(defaults.mouseWheelEnabled) end
+	if entry.userPlaced ~= nil and defaults.userPlaced ~= nil and frame.SetUserPlaced then frame:SetUserPlaced(defaults.userPlaced) end
+	if entry.ignoreFramePositionManager ~= nil then frame.ignoreFramePositionManager = defaults.ignoreFramePositionManager end
+end
+
+local function applyDragTargetState(frame, active)
+	local defaults = frame and frame._eqolMoverDefaults
+	if not defaults then return end
+	if InCombatLockdown() and frame.IsProtected and frame:IsProtected() then return end
+	if active then
+		if frame.EnableMouse then frame:EnableMouse(true) end
+		return
+	end
+	if defaults.mouseEnabled ~= nil and frame.EnableMouse then frame:EnableMouse(defaults.mouseEnabled) end
+	if defaults.mouseWheelEnabled ~= nil and frame.EnableMouseWheel then frame:EnableMouseWheel(defaults.mouseWheelEnabled) end
+end
+
 local function getPositionData(entry, frameDb)
 	local mode = db.positionPersistence or "reset"
 	if mode == "lockout" then
@@ -446,8 +552,15 @@ local function clearPositionData(entry, frameDb)
 end
 
 local function isCollectionsMoveEnabled()
-	if not db.enabled then return false end
+	if not db or not db.enabled then return false end
 	local entry = addon.Mover.functions.GetEntryForFrameName("CollectionsJournal")
+	if not entry then return false end
+	return addon.Mover.functions.IsFrameEnabled(entry)
+end
+
+local function isPlayerChoiceMoveEnabled()
+	if not db or not db.enabled then return false end
+	local entry = addon.Mover.functions.GetEntryForFrameName("PlayerChoiceFrame")
 	if not entry then return false end
 	return addon.Mover.functions.IsFrameEnabled(entry)
 end
@@ -470,9 +583,11 @@ local function FixPlayerChoiceAnchor()
 	local frame = _G.PlayerChoiceFrame
 	if not frame then return false end
 	if frame._eqolFixHooks then return true end
+	if not isPlayerChoiceMoveEnabled() then return false end
 
 	frame._eqolFixHooks = true
 	frame:HookScript("OnHide", function(self)
+		if not isPlayerChoiceMoveEnabled() then return end
 		if InCombatLockdown() and self:IsProtected() then return end
 
 		self._eqol_isApplying = true
@@ -485,6 +600,7 @@ local function FixPlayerChoiceAnchor()
 	end)
 
 	frame:HookScript("OnShow", function(self)
+		if not isPlayerChoiceMoveEnabled() then return end
 		if not self._eqol_needsReapply then return end
 		self._eqol_needsReapply = nil
 
@@ -499,7 +615,7 @@ local function FixPlayerChoiceAnchor()
 end
 
 local function isHeroTalentsMoveEnabled()
-	if not db.enabled then return false end
+	if not db or not db.enabled then return false end
 	local entry = addon.Mover.functions.GetEntryForFrameName("HeroTalentsSelectionDialog")
 	if not entry then return false end
 	return addon.Mover.functions.IsFrameEnabled(entry)
@@ -507,6 +623,7 @@ end
 
 local function FixHeroTalentsAnchor()
 	if addon.Mover.variables.heroTalentsAnchorFix then return true end
+	if not isHeroTalentsMoveEnabled() then return false end
 	if not (TalentFrameUtil and TalentFrameUtil.GetNormalizedSubTreeNodePosition) then return false end
 	if not (_G.HeroTalentsSelectionDialog and _G.PlayerSpellsFrame) then return false end
 
@@ -584,6 +701,7 @@ function addon.Mover.functions.createHooks(frame, entry)
 	if not resolved then return end
 
 	captureDefaultPoints(frame)
+	captureDefaultState(frame)
 
 	if InCombatLockdown() then
 		addon.Mover.variables.combatQueue[frame] = resolved
@@ -591,11 +709,7 @@ function addon.Mover.functions.createHooks(frame, entry)
 	end
 
 	frame._eqolLayoutEntryId = resolved.id
-	frame:SetMovable(true)
-	frame:SetClampedToScreen(true)
-	if resolved.userPlaced ~= nil and frame.SetUserPlaced then frame:SetUserPlaced(resolved.userPlaced) end
-	if resolved.ignoreFramePositionManager ~= nil then frame.ignoreFramePositionManager = resolved.ignoreFramePositionManager end
-	if frame.EnableMouse then frame:EnableMouse(true) end
+	frame._eqolMoverEntry = resolved
 
 	local function onStartDrag(_, button)
 		if button and button ~= "LeftButton" then return end
@@ -652,35 +766,60 @@ function addon.Mover.functions.createHooks(frame, entry)
 		end
 	end
 
-	local function updateWheelState(handle)
-		if not handle or not handle.EnableMouseWheel then return end
-		local enabled = db.scaleEnabled and isEntryActive(resolved) and scaleModifierPressed()
-		if handle._eqolScaleWheelEnabled ~= enabled then
-			handle._eqolScaleWheelEnabled = enabled
-			handle:EnableMouseWheel(enabled)
+	local function registerScaleHover(target)
+		if not target or target._eqolScaleHoverHooked then return end
+		target._eqolScaleHoverHooked = true
+		target:HookScript("OnEnter", function()
+			if not isEntryActive(resolved) then return end
+			addon.Mover.variables.scaleMouseover[target] = true
+			addon.Mover.functions.CheckScaleWheelCapture()
+		end)
+		target:HookScript("OnLeave", function()
+			if not addon.Mover.variables.scaleMouseover[target] then return end
+			addon.Mover.variables.scaleMouseover[target] = nil
+			addon.Mover.functions.CheckScaleWheelCapture()
+		end)
+		if MouseIsOver and MouseIsOver(target) then
+			local function markHover()
+				if not isEntryActive(resolved) then return end
+				if MouseIsOver(target) then
+					addon.Mover.variables.scaleMouseover[target] = true
+					addon.Mover.functions.CheckScaleWheelCapture()
+				end
+			end
+			if RunNextFrame then
+				RunNextFrame(markHover)
+			elseif C_Timer and C_Timer.After then
+				C_Timer.After(0, markHover)
+			else
+				markHover()
+			end
 		end
 	end
 
-	local function attachScaleHandlers(handle)
-		if not handle or handle._eqolScaleHooked then return end
-		handle._eqolScaleHooked = true
-		if handle.EnableMouseWheel then handle:EnableMouseWheel(false) end
-		handle:HookScript("OnMouseWheel", onScaleWheel)
-		handle:HookScript("OnMouseUp", onScaleReset)
-		handle:HookScript("OnEnter", function()
-			handle._eqolScaleHover = true
-			updateWheelState(handle)
-		end)
-		handle:HookScript("OnLeave", function()
-			handle._eqolScaleHover = nil
-			handle._eqolScaleWheelEnabled = nil
-			if handle.EnableMouseWheel then handle:EnableMouseWheel(false) end
-		end)
-		handle:HookScript("OnUpdate", function()
-			if not handle._eqolScaleHover then return end
-			updateWheelState(handle)
-		end)
+	local function registerScaleTarget(target)
+		if not target or target._eqolScaleTargetHooked then return end
+		target._eqolScaleTargetHooked = true
+		addon.Mover.variables.scaleTargets[target] = frame
+		registerScaleHover(target)
 	end
+
+	local function attachScaleReset(target)
+		if not target or target._eqolScaleResetHooked then return end
+		target._eqolScaleResetHooked = true
+		target:HookScript("OnMouseUp", onScaleReset)
+	end
+
+	local function registerMoveHandle(handle)
+		if not handle then return end
+		addon.Mover.variables.moveHandles[handle] = true
+		registerScaleHover(handle)
+		attachScaleReset(handle)
+	end
+
+	frame._eqolScaleWheel = function(delta) onScaleWheel(nil, delta) end
+	registerScaleTarget(frame)
+	attachScaleReset(frame)
 
 	local function attachHandle(anchor)
 		if not anchor then return nil end
@@ -702,18 +841,22 @@ function addon.Mover.functions.createHooks(frame, entry)
 		if handle.EnableMouse then handle:EnableMouse(true) end
 		handle:HookScript("OnDragStart", onStartDrag)
 		handle:HookScript("OnDragStop", onStopDrag)
-		attachScaleHandlers(handle)
+		registerMoveHandle(handle)
 		return handle
 	end
 
+	local dragTargets = frame._eqolMoveDragTargets or {}
 	local function attachDragHandlers(target)
 		if not target or target._eqolDragHooked then return end
 		if target.IsForbidden and target:IsForbidden() then return end
 		target._eqolDragHooked = true
+		captureDefaultState(target)
+		if target ~= frame then dragTargets[target] = true end
 		if target.EnableMouse then target:EnableMouse(true) end
 		target:HookScript("OnMouseDown", onStartDrag)
 		target:HookScript("OnMouseUp", onStopDrag)
-		attachScaleHandlers(target)
+		registerScaleTarget(target)
+		attachScaleReset(target)
 	end
 
 	local useOverlay = resolved.useRootHandle
@@ -759,6 +902,7 @@ function addon.Mover.functions.createHooks(frame, entry)
 			end)
 		end
 	end
+	frame._eqolMoveDragTargets = dragTargets
 
 	hooksecurefunc(frame, "SetPoint", function(self)
 		if not isEntryActive(resolved) then return end
@@ -807,20 +951,44 @@ function addon.Mover.functions.createHooks(frame, entry)
 		if not handle then return end
 		if handle.EnableMouse then handle:EnableMouse(enabled) end
 		if handle.SetShown then handle:SetShown(enabled) end
-		if not enabled then
-			handle._eqolScaleHover = nil
-			handle._eqolScaleWheelEnabled = nil
-			if handle.EnableMouseWheel then handle:EnableMouseWheel(false) end
-			if handle.GetScript and handle:GetScript("OnUpdate") then handle:SetScript("OnUpdate", nil) end
-		end
 	end
 
 	local function updateHandleState()
 		local enabled = isEntryActive(resolved)
+		applyFrameState(frame, resolved, enabled, useOverlay)
+		for target in pairs(dragTargets) do
+			applyDragTargetState(target, enabled)
+		end
 		setHandleEnabled(frame._eqolMoveHandle, enabled)
 		for _, handle in pairs(frame._eqolMoveSubHandles or {}) do
 			setHandleEnabled(handle, enabled)
 		end
+		if not enabled then
+			local mouseover = addon.Mover.variables.scaleMouseover
+			if mouseover then
+				mouseover[frame] = nil
+				for target in pairs(dragTargets) do
+					mouseover[target] = nil
+				end
+				if frame._eqolMoveHandle then mouseover[frame._eqolMoveHandle] = nil end
+				for _, handle in pairs(frame._eqolMoveSubHandles or {}) do
+					mouseover[handle] = nil
+				end
+			end
+		elseif MouseIsOver then
+			local function markHover(target)
+				if target and MouseIsOver(target) then addon.Mover.variables.scaleMouseover[target] = true end
+			end
+			markHover(frame)
+			for target in pairs(dragTargets) do
+				markHover(target)
+			end
+			markHover(frame._eqolMoveHandle)
+			for _, handle in pairs(frame._eqolMoveSubHandles or {}) do
+				markHover(handle)
+			end
+		end
+		addon.Mover.functions.CheckScaleWheelCapture()
 	end
 
 	frame._eqolUpdateHandleState = updateHandleState
@@ -831,6 +999,7 @@ function addon.Mover.functions.TryHookEntry(entry)
 	local resolved = resolveEntry(entry)
 	if not resolved then return end
 	if not isAnyAddonLoaded(resolved) then return end
+	if not isEntryActive(resolved) then return end
 	for _, name in ipairs(resolved.names or {}) do
 		local frame = resolveFramePath(name)
 		if frame then
@@ -860,6 +1029,8 @@ function addon.Mover.functions.RefreshEntry(entry)
 	addon.Mover.functions.UpdateHandleState(entry)
 	local resolved = resolveEntry(entry)
 	if resolved and resolved.id == "CollectionsJournal" then FixWardrobeSecondaryAppearanceLabel() end
+	if resolved and resolved.id == "PlayerChoiceFrame" then FixPlayerChoiceAnchor() end
+	if resolved and resolved.id == "HeroTalentsSelectionDialog" then FixHeroTalentsAnchor() end
 end
 
 function addon.Mover.functions.ApplyAll()

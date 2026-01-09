@@ -1859,6 +1859,7 @@ function UF.ClearCastInterruptState(st)
 	if st.castInterruptAnim then st.castInterruptAnim:Stop() end
 	if st.castInterruptGlowAnim then st.castInterruptGlowAnim:Stop() end
 	if st.castInterruptGlow then st.castInterruptGlow:Hide() end
+	UFHelper.hideCastSpark(st)
 	if st.castBar then st.castBar:SetAlpha(1) end
 	st.castInterruptActive = nil
 	st.castInterruptToken = (st.castInterruptToken or 0) + 1
@@ -1868,6 +1869,8 @@ local function stopCast(unit)
 	local st = states[unit]
 	if not st or not st.castBar then return end
 	UF.ClearCastInterruptState(st)
+	UFHelper.clearEmpowerStages(st)
+	UFHelper.hideCastSpark(st)
 	st.castBar:Hide()
 	if st.castName then st.castName:SetText("") end
 	if st.castDuration then st.castDuration:SetText("") end
@@ -1922,8 +1925,10 @@ local function applyCastLayout(cfg, unit)
 		st.castIcon:SetShown(ccfg.showIcon ~= false)
 	end
 	local texKey = ccfg.texture or defc.texture or "DEFAULT"
+	local useDefaultArt = not texKey or texKey == "" or texKey == "DEFAULT"
 	local castTexture = UFHelper.resolveCastTexture(texKey)
 	st.castBar:SetStatusBarTexture(castTexture)
+	st.castUseDefaultArt = useDefaultArt
 	do -- Cast backdrop
 		local bd = (ccfg and ccfg.backdrop) or (defc and defc.backdrop) or { enabled = true, color = { 0, 0, 0, 0.6 } }
 		if st.castBar.SetBackdrop then st.castBar:SetBackdrop(nil) end
@@ -1937,8 +1942,7 @@ local function applyCastLayout(cfg, unit)
 			end
 			local col = bd.color or { 0, 0, 0, 0.6 }
 			bg:ClearAllPoints()
-			local useBlizzBackdrop = not texKey or texKey == "" or texKey == "DEFAULT"
-			if useBlizzBackdrop and bg.SetAtlas then
+			if useDefaultArt and bg.SetAtlas then
 				bg:SetAtlas("ui-castingbar-background", false)
 				bg:SetPoint("TOPLEFT", st.castBar, "TOPLEFT", -1, 1)
 				bg:SetPoint("BOTTOMRIGHT", st.castBar, "BOTTOMRIGHT", 1, -1)
@@ -1962,6 +1966,7 @@ local function applyCastLayout(cfg, unit)
 		if st.castName.SetMaxLines then st.castName:SetMaxLines(1) end
 		if st.castName.SetJustifyH then st.castName:SetJustifyH("LEFT") end
 	end
+	if st.castEmpower and st.castEmpower.stagePercents then UFHelper.layoutEmpowerStages(st) end
 end
 
 local function configureCastStatic(unit, ccfg, defc)
@@ -1977,7 +1982,8 @@ local function configureCastStatic(unit, ccfg, defc)
 	st.castBar:SetStatusBarColor(clr[1] or 0.9, clr[2] or 0.7, clr[3] or 0.2, clr[4] or 1)
 	local duration = (st.castInfo.endTime or 0) - (st.castInfo.startTime or 0)
 	local maxValue = duration and duration > 0 and duration / 1000 or 1
-	UFHelper.applyStatusBarReverseFill(st.castBar, st.castInfo.isChannel == true)
+	st.castInfo.maxValue = maxValue
+	-- UFHelper.applyStatusBarReverseFill(st.castBar, st.castInfo.isChannel == true and not st.castInfo.isEmpowered)
 	st.castBar:SetMinMaxValues(0, maxValue)
 	if st.castName then
 		local showName = ccfg.showName ~= false
@@ -1996,7 +2002,20 @@ end
 local function updateCastBar(unit)
 	local st = states[unit]
 	local ccfg = st and st.castCfg
-	if not st or not st.castBar or not st.castInfo or not st.castInfo.startTime or not st.castInfo.endTime or not ccfg then
+	if not st or not st.castBar or not st.castInfo or not ccfg then
+		stopCast(unit)
+		return
+	end
+	if st.castInfo.useTimer then
+		if st.castInfo.isEmpowered then
+			UFHelper.updateEmpowerStageFromBar(st)
+			UFHelper.updateCastSpark(st, "empowered")
+		else
+			UFHelper.hideCastSpark(st)
+		end
+		return
+	end
+	if not st.castInfo.startTime or not st.castInfo.endTime then
 		stopCast(unit)
 		return
 	end
@@ -2020,10 +2039,26 @@ local function updateCastBar(unit)
 		end
 		return
 	end
-	local elapsedMs = st.castInfo.isChannel and (endMs - nowMs) or (nowMs - startMs)
+	local elapsedMs
+	if st.castInfo.isEmpowered then
+		elapsedMs = nowMs - startMs
+	else
+		elapsedMs = st.castInfo.isChannel and (endMs - nowMs) or (nowMs - startMs)
+	end
 	if elapsedMs < 0 then elapsedMs = 0 end
 	local value = elapsedMs / 1000
 	st.castBar:SetValue(value)
+	if st.castInfo.isEmpowered then
+		local maxValue = st.castInfo.maxValue
+		if not maxValue then
+			local _, maxVal = st.castBar:GetMinMaxValues()
+			maxValue = maxVal
+		end
+		if maxValue and maxValue > 0 and (not issecretvalue or (not issecretvalue(value) and not issecretvalue(maxValue))) then UFHelper.updateEmpowerStageFromProgress(st, value / maxValue) end
+		UFHelper.updateCastSpark(st, "empowered")
+	else
+		UFHelper.hideCastSpark(st)
+	end
 	if st.castDuration then
 		if ccfg.showDuration ~= false then
 			local remaining = (endMs - nowMs) / 1000
@@ -2044,6 +2079,7 @@ setSampleCast = function(unit)
 	local st = states[unit]
 	if not st or not st.castBar then return end
 	UF.ClearCastInterruptState(st)
+	UFHelper.clearEmpowerStages(st)
 	local cfg = (st and st.cfg) or ensureDB(key or unit)
 	local ccfg = (cfg or {}).cast or {}
 	local def = defaultsFor(unit)
@@ -2084,6 +2120,7 @@ function UF.ShowCastInterrupt(unit, event)
 	if not st.castBar:IsShown() and not st.castInfo then return end
 
 	UF.ClearCastInterruptState(st)
+	UFHelper.clearEmpowerStages(st)
 	st.castInterruptActive = true
 	local token = st.castInterruptToken or 0
 
@@ -2211,6 +2248,8 @@ local function setCastInfoFromUnit(unit)
 	if not name then
 		name, text, texture, startTimeMS, endTimeMS, _, _, notInterruptible = UnitCastingInfo(unit)
 		isChannel = false
+		isEmpowered = nil
+		numEmpowerStages = nil
 	end
 	if not name then
 		if shouldShowSampleCast(unit) then
@@ -2225,8 +2264,17 @@ local function setCastInfoFromUnit(unit)
 		if type(startTimeMS) ~= "nil" and type(endTimeMS) ~= "nil" then
 			st.castBar:Show()
 
-			local durObj, direction
-			if isChannel then
+			local durObj, direction, empoweredCast
+			if UnitEmpoweredChannelDuration then
+				durObj = _G.UnitEmpoweredChannelDuration and _G.UnitEmpoweredChannelDuration(unit, true)
+				direction = Enum.StatusBarTimerDirection.ElapsedTime
+				if not durObj and UnitChannelDuration then
+					durObj = UnitChannelDuration(unit)
+					direction = Enum.StatusBarTimerDirection.RemainingTime
+				else
+					empoweredCast = true
+				end
+			elseif isChannel then
 				durObj = UnitChannelDuration(unit)
 				direction = Enum.StatusBarTimerDirection.RemainingTime
 			else
@@ -2234,6 +2282,16 @@ local function setCastInfoFromUnit(unit)
 				direction = Enum.StatusBarTimerDirection.ElapsedTime
 			end
 			st.castBar:SetTimerDuration(durObj, Enum.StatusBarInterpolation.Immediate, direction)
+			-- st.castInfo = {
+			-- 	name = text or name,
+			-- 	texture = texture,
+			-- 	notInterruptible = notInterruptible,
+			-- 	isChannel = isChannel,
+			-- 	isEmpowered = isEmpowered,
+			-- 	numEmpowerStages = numEmpowerStages,
+			-- 	useTimer = true,
+			-- }
+			-- UFHelper.applyStatusBarReverseFill(st.castBar, isChannel and not isEmpowered)
 			if st.castName then
 				local showName = ccfg.showName ~= false
 				st.castName:SetShown(showName)
@@ -2252,6 +2310,20 @@ local function setCastInfoFromUnit(unit)
 				CreateColor(clr[1] or 0.9, clr[2] or 0.7, clr[3] or 0.2, clr[4] or 1)
 			)
 			st.castBar:SetStatusBarDesaturated(true)
+			-- applyCastLayout(cfg, unit)
+			-- if st.castDuration then
+			-- 	st.castDuration:SetText("")
+			-- 	st.castDuration:Hide()
+			-- end
+			-- if isEmpowered then
+			-- 	UFHelper.setupEmpowerStages(st, unit, numEmpowerStages)
+			-- 	if not castOnUpdateHandlers[unit] then
+			-- 		st.castBar:SetScript("OnUpdate", function() updateCastBar(unit) end)
+			-- 		castOnUpdateHandlers[unit] = true
+			-- 	end
+			-- else
+			-- 	UFHelper.clearEmpowerStages(st)
+			-- end
 		else
 			stopCast(unit)
 		end
@@ -2271,9 +2343,16 @@ local function setCastInfoFromUnit(unit)
 		endTime = endTimeMS,
 		notInterruptible = notInterruptible,
 		isChannel = isChannel,
+		isEmpowered = isEmpowered,
+		numEmpowerStages = numEmpowerStages,
 	}
 	applyCastLayout(cfg, unit)
 	configureCastStatic(unit, resolvedCfg, defc)
+	if isEmpowered then
+		UFHelper.setupEmpowerStages(st, unit, numEmpowerStages)
+	else
+		UFHelper.clearEmpowerStages(st)
+	end
 	if not castOnUpdateHandlers[unit] then
 		st.castBar:SetScript("OnUpdate", function() updateCastBar(unit) end)
 		castOnUpdateHandlers[unit] = true
@@ -3875,6 +3954,9 @@ local unitEvents = {
 	"UNIT_SPELLCAST_CHANNEL_START",
 	"UNIT_SPELLCAST_CHANNEL_STOP",
 	"UNIT_SPELLCAST_CHANNEL_UPDATE",
+	"UNIT_SPELLCAST_EMPOWER_START",
+	"UNIT_SPELLCAST_EMPOWER_UPDATE",
+	"UNIT_SPELLCAST_EMPOWER_STOP",
 }
 local unitEventsMap = {}
 for _, evt in ipairs(unitEvents) do
@@ -4525,7 +4607,13 @@ local function onEvent(self, event, unit, arg1)
 	elseif event == "UNIT_TARGET" and unit == UNIT.TARGET then
 		local totCfg = getCfg(UNIT.TARGET_TARGET)
 		if totCfg.enabled then updateTargetTargetFrame(totCfg) end
-	elseif event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_CHANNEL_START" or event == "UNIT_SPELLCAST_CHANNEL_UPDATE" then
+	elseif
+		event == "UNIT_SPELLCAST_START"
+		or event == "UNIT_SPELLCAST_CHANNEL_START"
+		or event == "UNIT_SPELLCAST_CHANNEL_UPDATE"
+		or event == "UNIT_SPELLCAST_EMPOWER_START"
+		or event == "UNIT_SPELLCAST_EMPOWER_UPDATE"
+	then
 		if unit == UNIT.PLAYER then setCastInfoFromUnit(UNIT.PLAYER) end
 		if unit == UNIT.TARGET then setCastInfoFromUnit(UNIT.TARGET) end
 		if unit == UNIT.FOCUS then setCastInfoFromUnit(UNIT.FOCUS) end
@@ -4535,7 +4623,12 @@ local function onEvent(self, event, unit, arg1)
 		if unit == UNIT.TARGET then UF.ShowCastInterrupt(UNIT.TARGET, event) end
 		if unit == UNIT.FOCUS then UF.ShowCastInterrupt(UNIT.FOCUS, event) end
 		if isBossUnit(unit) then UF.ShowCastInterrupt(unit, event) end
-	elseif event == "UNIT_SPELLCAST_STOP" or event == "UNIT_SPELLCAST_CHANNEL_STOP" then
+	elseif event == "UNIT_SPELLCAST_EMPOWER_STOP" then
+		if unit == UNIT.PLAYER then UF.ShowCastInterrupt(UNIT.PLAYER, "UNIT_SPELLCAST_INTERRUPTED") end
+		if unit == UNIT.TARGET then UF.ShowCastInterrupt(UNIT.TARGET, "UNIT_SPELLCAST_INTERRUPTED") end
+		if unit == UNIT.FOCUS then UF.ShowCastInterrupt(UNIT.FOCUS, "UNIT_SPELLCAST_INTERRUPTED") end
+		if isBossUnit(unit) then UF.ShowCastInterrupt(unit, "UNIT_SPELLCAST_INTERRUPTED") end
+	elseif event == "UNIT_SPELLCAST_STOP" or event == "UNIT_SPELLCAST_CHANNEL_STOP" or event == "UNIT_SPELLCAST_EMPOWER_STOP" then
 		if unit == UNIT.PLAYER then
 			if not (states[UNIT.PLAYER] and states[UNIT.PLAYER].castInterruptActive) then
 				stopCast(UNIT.PLAYER)

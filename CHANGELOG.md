@@ -105,6 +105,7 @@
 - Unit Frames had a shadow color on the texts which made it darker
 - TomTom Minimap Icons are ignored in Button Sink
 - Mover: Dragging no longer overlays the PlayerSpells/Talents UI, so buttons remain clickable.
+- Mover: Disabled entries no longer get touched, and mousewheel scaling no longer blocks MerchantFrame scrolling.
 - Blizzard Boss Frame visibility rule now hides when EQoL Boss Frames are enabled.
 - UF Plus Edit Mode samples now show percent text for Boss frame power/health.
 - Resource Bars: Warlock Soul Shards now show partial values (e.g. 3.4).
@@ -112,6 +113,7 @@
 - UF Plus: Level text now refreshes on level-up.
 - DataPanels: Micro Bar missions entry no longer errors when Covenant data is unavailable.
 - Show Leader/Assist Icon on Raidframes expanded the size in edit mode for the selection overlay
+- Bonus Roll frame no longer disappears when loot anchoring is disabled.
 
 ---
 

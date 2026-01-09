@@ -383,7 +383,6 @@ local frames = {
 		ignoreFramePositionManager = true,
 		userPlaced = true,
 	},
-
 	{
 		id = "AuctionHouseFrame",
 		label = L["Auction House"] or "Auction House",
@@ -403,8 +402,8 @@ local frames = {
 		id = "OpenMailFrame",
 		label = L["OpenMail"] or "Open Mail",
 		group = "vendors",
-		names = {"OpenMailFrame" },
-		defaultEnabled = true
+		names = { "OpenMailFrame" },
+		defaultEnabled = true,
 	},
 	{
 		id = "ChatConfigFrame",
@@ -765,6 +764,7 @@ function addon.Mover.functions.InitRegistry()
 	if not db then return end
 
 	initSettingsDefaults()
+	if addon.Mover.functions.EnsureScaleCaptureFrame then addon.Mover.functions.EnsureScaleCaptureFrame() end
 
 	for groupId, group in pairs(groups) do
 		local order = groupOrder[groupId] or group.order

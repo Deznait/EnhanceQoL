@@ -218,11 +218,7 @@ function LootToast:Enable()
 
 	self:RefreshEventBindings()
 
-	if addon.db.enableLootToastAnchor then
-		self:ApplyAnchorPosition()
-	elseif not addon.db.enableGroupLootAnchor then
-		self:RestoreDefaultAnchors()
-	end
+	if addon.db.enableLootToastAnchor then self:ApplyAnchorPosition() end
 	if addon.db.enableGroupLootAnchor then self:ApplyGroupLootLayout() end
 end
 
@@ -273,6 +269,8 @@ LootToast.alertFrameHooked = LootToast.alertFrameHooked
 local GroupLootContainer = _G.GroupLootContainer
 LootToast.defaultGroupLootAnchor = LootToast.defaultGroupLootAnchor
 LootToast.defaultBonusRollAnchor = LootToast.defaultBonusRollAnchor
+LootToast.toastAnchorApplied = LootToast.toastAnchorApplied or false
+LootToast.groupLootAnchorApplied = LootToast.groupLootAnchorApplied or false
 
 local DEFAULT_GROUPROLL_LAYOUT = { scale = 1, offsetX = 0, offsetY = 0, spacing = 4 }
 
@@ -301,16 +299,19 @@ local function RememberDefaultAnchors()
 end
 
 function LootToast:RestoreDefaultAnchors(force)
-	if force or not addon.db.enableLootToastAnchor then
+	local restoreToast = (force or not addon.db.enableLootToastAnchor) and self.toastAnchorApplied
+	if restoreToast then
 		if self.toastAnchorFrame then self.toastAnchorFrame:Hide() end
 		local alert = self.defaultAlertAnchor
 		if alert and alert.point then
 			AlertFrame:ClearAllPoints()
 			AlertFrame:SetPoint(alert.point, alert.relativeTo, alert.relativePoint, alert.x, alert.y)
 		end
+		self.toastAnchorApplied = false
 	end
 
-	if force or not addon.db.enableGroupLootAnchor then
+	local restoreGroup = (force or not addon.db.enableGroupLootAnchor) and self.groupLootAnchorApplied
+	if restoreGroup then
 		if self.groupRollAnchorFrame then self.groupRollAnchorFrame:Hide() end
 		if GroupLootContainer then
 			local container = self.defaultGroupLootAnchor
@@ -328,11 +329,16 @@ function LootToast:RestoreDefaultAnchors(force)
 		local bonusFrame = _G.BonusRollFrame
 		if FrameIsAccessible(bonusFrame) then
 			local saved = self.defaultBonusRollAnchor
-			bonusFrame:ClearAllPoints()
-			if saved and saved.point then bonusFrame:SetPoint(saved.point, saved.relativeTo, saved.relativePoint, saved.x, saved.y) end
+			if saved and saved.point then
+				bonusFrame:ClearAllPoints()
+				bonusFrame:SetPoint(saved.point, saved.relativeTo, saved.relativePoint, saved.x, saved.y)
+			else
+				bonusFrame:ClearAllPoints()
+			end
 			bonusFrame:SetScale(1)
 			bonusFrame.ignoreFramePositionManager = nil
 		end
+		self.groupLootAnchorApplied = false
 	end
 end
 
@@ -402,10 +408,7 @@ end
 function LootToast:GetGroupLootLayout() return GetGroupLootLayoutConfig() end
 
 function LootToast:ApplyGroupLootLayout()
-	if not addon.db.enableGroupLootAnchor then
-		self:RestoreDefaultAnchors()
-		return
-	end
+	if not addon.db.enableGroupLootAnchor then return end
 
 	RememberDefaultAnchors()
 
@@ -434,6 +437,7 @@ function LootToast:ApplyGroupLootLayout()
 		bonusFrame:SetScale(layout.scale)
 	end
 
+	self.groupLootAnchorApplied = true
 	self:SyncRollEditModePosition()
 end
 
@@ -612,10 +616,7 @@ function LootToast:GetToastAnchorFrame()
 end
 
 function LootToast:ApplyAnchorPosition()
-	if not addon.db.enableLootToastAnchor then
-		self:RestoreDefaultAnchors()
-		return
-	end
+	if not addon.db.enableLootToastAnchor then return end
 
 	RememberDefaultAnchors()
 	local cfg = GetToastAnchorConfig()
@@ -628,6 +629,7 @@ function LootToast:ApplyAnchorPosition()
 	AlertFrame:ClearAllPoints()
 	AlertFrame:SetPoint("BOTTOM", anchor, "BOTTOM", 0, 0)
 	if addon.db.enableGroupLootAnchor then self:ApplyGroupLootLayout() end
+	self.toastAnchorApplied = true
 	self:SyncToastEditModePosition()
 end
 
@@ -724,11 +726,7 @@ function LootToast:OnGroupRollAnchorOptionChanged(enabled)
 end
 
 local function ReanchorAlerts()
-	if addon.db.enableLootToastAnchor then
-		LootToast:ApplyAnchorPosition()
-	elseif LootToast.defaultAlertAnchor and not addon.db.enableGroupLootAnchor then
-		LootToast:RestoreDefaultAnchors()
-	end
+	if addon.db.enableLootToastAnchor then LootToast:ApplyAnchorPosition() end
 	if addon.db.enableGroupLootAnchor then LootToast:ApplyGroupLootLayout() end
 end
 

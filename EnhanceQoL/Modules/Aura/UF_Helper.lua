@@ -262,6 +262,715 @@ function H.applyStatusBarReverseFill(bar, reverse)
 	end
 end
 
+function H.shouldUseDefaultCastArt(st)
+	return st and st.castUseDefaultArt == true
+end
+
+local CAST_SPARK_WIDTH = 8
+local CAST_SPARK_HEIGHT = 20
+local CAST_SPARK_LAYER_DEFAULT = 3
+local CAST_SPARK_LAYER_CUSTOM = 7
+local EMPOWER_PIP_LAYER_DEFAULT = 2
+local EMPOWER_PIP_LAYER_CUSTOM = 6
+local EMPOWER_CUSTOM_PIP_MIN_WIDTH = 3
+local EMPOWER_CUSTOM_PIP_MAX_WIDTH = 6
+local EMPOWER_CUSTOM_PIP_ALPHA = 0.9
+local EMPOWER_CUSTOM_PIP_LINE_SUBLEVEL = 5
+local EMPOWER_CUSTOM_PIP_FX_SUBLEVEL = 7
+
+local function getCustomPipDimensions(barHeight)
+	local baseHeight = barHeight or 0
+	if baseHeight <= 0 then baseHeight = 16 end
+	local lineHeight = baseHeight
+	local width = floor(baseHeight * 0.18)
+	if width < EMPOWER_CUSTOM_PIP_MIN_WIDTH then width = EMPOWER_CUSTOM_PIP_MIN_WIDTH end
+	if width > EMPOWER_CUSTOM_PIP_MAX_WIDTH then width = EMPOWER_CUSTOM_PIP_MAX_WIDTH end
+	return width, lineHeight
+end
+
+local function setPipFxLayer(pip, layer, sublevel)
+	if not pip then return end
+	if pip.PipGlow and pip.PipGlow.SetDrawLayer then pip.PipGlow:SetDrawLayer(layer, sublevel) end
+	if pip.FlakesBottom and pip.FlakesBottom.SetDrawLayer then pip.FlakesBottom:SetDrawLayer(layer, sublevel) end
+	if pip.FlakesTop and pip.FlakesTop.SetDrawLayer then pip.FlakesTop:SetDrawLayer(layer, sublevel) end
+	if pip.FlakesTop02 and pip.FlakesTop02.SetDrawLayer then pip.FlakesTop02:SetDrawLayer(layer, sublevel) end
+	if pip.FlakesBottom02 and pip.FlakesBottom02.SetDrawLayer then pip.FlakesBottom02:SetDrawLayer(layer, sublevel) end
+end
+
+local function ensureCastSparkTextures(st)
+	if not st or not st.castBar then return nil end
+	local bar = st.castBar
+	if not st.castSparkLayer then
+		st.castSparkLayer = CreateFrame("Frame", nil, bar)
+		st.castSparkLayer:SetAllPoints(bar)
+		st.castSparkLayer:EnableMouse(false)
+	end
+	if st.castSparkLayer:GetParent() ~= bar then st.castSparkLayer:SetParent(bar) end
+	st.castSparkLayer:SetFrameStrata(bar:GetFrameStrata())
+	local baseLevel = bar:GetFrameLevel() or 0
+	local layerOffset = H.shouldUseDefaultCastArt(st) and CAST_SPARK_LAYER_DEFAULT or CAST_SPARK_LAYER_CUSTOM
+	st.castSparkLayer:SetFrameLevel(baseLevel + layerOffset)
+	local layer = st.castSparkLayer
+	local spark = st.castSpark
+	if not spark then
+		spark = layer:CreateTexture(nil, "OVERLAY", nil, 2)
+		if spark.SetAtlas then spark:SetAtlas("ui-castingbar-pip", false) end
+		spark:SetSize(CAST_SPARK_WIDTH, CAST_SPARK_HEIGHT)
+		spark.offsetY = 0
+		spark:Hide()
+		st.castSpark = spark
+	end
+	if not st.castSparkGlow then
+		local glow = layer:CreateTexture(nil, "OVERLAY", nil, 3)
+		if glow.SetBlendMode then glow:SetBlendMode("ADD") end
+		glow:Hide()
+		st.castSparkGlow = glow
+	end
+	if not st.castSparkShadow then
+		local shadow = layer:CreateTexture(nil, "OVERLAY", nil, 3)
+		shadow:Hide()
+		st.castSparkShadow = shadow
+	end
+	return spark
+end
+
+local function setSparkAtlas(spark, atlas)
+	if not spark then return end
+	if spark.SetAtlas then
+		local current = spark.GetAtlas and spark:GetAtlas()
+		if current ~= atlas then spark:SetAtlas(atlas, false) end
+	end
+end
+
+local function updateSparkFx(st, barType)
+	if not st then return end
+	local glow = st.castSparkGlow
+	local shadow = st.castSparkShadow
+	if glow then glow:Hide() end
+	if shadow then shadow:Hide() end
+	if not st.castSpark then return end
+
+	if barType == "channel" then
+		if shadow and shadow.SetAtlas then shadow:SetAtlas("cast_channel_pipshadow", true) end
+		if shadow then
+			shadow:ClearAllPoints()
+			shadow:SetPoint("RIGHT", st.castSpark, "LEFT", 1, 0)
+			shadow:Show()
+		end
+		return
+	end
+
+	if not glow then return end
+	if barType ~= "interrupted" and barType ~= "empowered" then
+		if glow.SetAtlas then glow:SetAtlas("cast_standard_pipglow", true) end
+		if glow.SetScale then glow:SetScale(1) end
+		glow:ClearAllPoints()
+		glow:SetPoint("RIGHT", st.castSpark, "LEFT", 2, 0)
+		glow:Show()
+	end
+end
+
+function H.hideCastSpark(st)
+	if not st then return end
+	if st.castSpark then st.castSpark:Hide() end
+	if st.castSparkGlow then st.castSparkGlow:Hide() end
+	if st.castSparkShadow then st.castSparkShadow:Hide() end
+end
+
+function H.updateCastSpark(st, overrideType)
+	if not st or not st.castBar then return end
+	local barType = overrideType
+	if not barType then
+		if st.castInterruptActive then
+			barType = "interrupted"
+		elseif st.castInfo then
+			if st.castInfo.isEmpowered then
+				barType = "empowered"
+			elseif st.castInfo.isChannel then
+				barType = "channel"
+			else
+				barType = "standard"
+			end
+		end
+	end
+	if not barType then
+		H.hideCastSpark(st)
+		return
+	end
+	local spark = ensureCastSparkTextures(st)
+	if not spark then return end
+
+	if barType == "interrupted" then
+		setSparkAtlas(spark, "ui-castingbar-pip-red")
+	elseif barType == "empowered" then
+		setSparkAtlas(spark, "ui-castingbar-empower-cursor")
+	else
+		setSparkAtlas(spark, "ui-castingbar-pip")
+	end
+	spark:Show()
+	updateSparkFx(st, barType)
+
+	local barHeight = st.castBar:GetHeight()
+	local sparkHeight = CAST_SPARK_HEIGHT
+	if barHeight and barHeight > 0 then
+		sparkHeight = barHeight + 8
+		if sparkHeight < CAST_SPARK_HEIGHT then sparkHeight = CAST_SPARK_HEIGHT end
+	end
+	spark:SetSize(CAST_SPARK_WIDTH, sparkHeight)
+	local extra = (barHeight and barHeight > 0) and (sparkHeight - barHeight) or 0
+	if barType == "empowered" then
+		spark.offsetY = (extra > 0) and (extra * 0.5) or 0
+	else
+		spark.offsetY = 0
+	end
+
+	local minVal, maxVal = st.castBar:GetMinMaxValues()
+	local value = st.castBar:GetValue()
+	if value == nil or maxVal == nil then
+		H.hideCastSpark(st)
+		return
+	end
+	if issecretvalue and ((minVal and issecretvalue(minVal)) or issecretvalue(value) or issecretvalue(maxVal)) then
+		H.hideCastSpark(st)
+		return
+	end
+	local range = (maxVal or 0) - (minVal or 0)
+	if not range or range == 0 then
+		H.hideCastSpark(st)
+		return
+	end
+	local width = st.castBar:GetWidth()
+	if not width or width <= 0 then return end
+	local progress = (value - (minVal or 0)) / range
+	if progress < 0 then
+		progress = 0
+	elseif progress > 1 then
+		progress = 1
+	end
+	local offset = width * progress
+	spark:SetPoint("CENTER", st.castBar, "LEFT", offset, spark.offsetY or 0)
+end
+
+local After = C_Timer and C_Timer.After
+local UnitEmpoweredStagePercentages = _G.UnitEmpoweredStagePercentages
+local UnitEmpoweredStageDurations = _G.UnitEmpoweredStageDurations
+local GetUnitEmpowerHoldAtMaxTime = _G.GetUnitEmpowerHoldAtMaxTime
+local GetUnitEmpowerStageDuration = _G.GetUnitEmpowerStageDuration
+
+local function normalizeStageValues(...)
+	local count = select("#", ...)
+	if count == 1 and type((...)) == "table" then
+		local src = ...
+		local values = {}
+		for i = 1, #src do
+			values[i] = src[i]
+		end
+		return values
+	end
+	local values = {}
+	for i = 1, count do
+		local val = select(i, ...)
+		if val ~= nil then values[#values + 1] = val end
+	end
+	return values
+end
+
+local function durationToMilliseconds(duration)
+	if type(duration) == "number" then return duration end
+	if type(duration) ~= "table" then return nil end
+	if duration.GetMilliseconds then
+		local ms = duration:GetMilliseconds()
+		if issecretvalue and issecretvalue(ms) then return nil end
+		return ms
+	end
+	if duration.GetSeconds then
+		local seconds = duration:GetSeconds()
+		if issecretvalue and issecretvalue(seconds) then return nil end
+		return seconds * 1000
+	end
+	if duration.GetDuration then
+		local value = duration:GetDuration()
+		if issecretvalue and issecretvalue(value) then return nil end
+		if type(value) == "number" then
+			if value > 1000 then return value end
+			return value * 1000
+		end
+	end
+	if duration.GetTime then
+		local value = duration:GetTime()
+		if issecretvalue and issecretvalue(value) then return nil end
+		if type(value) == "number" then
+			if value > 1000 then return value end
+			return value * 1000
+		end
+	end
+	return nil
+end
+
+local function normalizeStagePercents(values, numStages)
+	if type(values) ~= "table" then return nil end
+	local cleaned = {}
+	local scale = 1
+	for i = 1, #values do
+		local val = values[i]
+		if type(val) == "number" and (not issecretvalue or not issecretvalue(val)) then
+			if val > 1 then scale = 100 end
+		end
+	end
+	local last = -1
+	for i = 1, #values do
+		local val = values[i]
+		if type(val) == "number" and (not issecretvalue or not issecretvalue(val)) then
+			if scale == 100 then val = val / 100 end
+			if val < 0 then
+				val = 0
+			elseif val > 1 then
+				val = 1
+			end
+			if val > last then
+				cleaned[#cleaned + 1] = val
+				last = val
+			end
+		end
+		if numStages and #cleaned >= numStages then break end
+	end
+	if #cleaned == 0 then return nil end
+	return cleaned
+end
+
+local function buildStagePercentsFromPercentages(values, numStages)
+	if type(values) ~= "table" then return nil end
+	local cleaned = {}
+	local scale = 1
+	local hasSecret = false
+	for i = 1, #values do
+		local val = values[i]
+		if type(val) == "number" then
+			if issecretvalue and issecretvalue(val) then
+				hasSecret = true
+			elseif val > 1 then
+				scale = 100
+			end
+		end
+	end
+	if hasSecret then return nil end
+	for i = 1, #values do
+		local val = values[i]
+		if type(val) == "number" then
+			if scale == 100 then val = val / 100 end
+			if val < 0 then
+				val = 0
+			elseif val > 1 then
+				val = 1
+			end
+			cleaned[#cleaned + 1] = val
+		end
+	end
+	if #cleaned == 0 then return nil end
+	if numStages and #cleaned > numStages then
+		while #cleaned > numStages do
+			table.remove(cleaned)
+		end
+	end
+	if numStages and #cleaned < numStages then return nil end
+	if #cleaned == 0 then return nil end
+	local sum = 0
+	for i = 1, #cleaned do
+		sum = sum + cleaned[i]
+	end
+	local assumeCumulative = #cleaned > 1 and sum > 1.02
+	if assumeCumulative then return normalizeStagePercents(cleaned, numStages) end
+	local cumulative = {}
+	local running = 0
+	for i = 1, #cleaned do
+		running = running + cleaned[i]
+		cumulative[i] = running
+	end
+	return normalizeStagePercents(cumulative, numStages)
+end
+
+local function buildEmpowerStagePercents(unit, numStages)
+	if not numStages or numStages <= 0 then return nil end
+	if UnitEmpoweredStagePercentages then
+		local percents = normalizeStageValues(UnitEmpoweredStagePercentages(unit, true))
+		percents = buildStagePercentsFromPercentages(percents, numStages)
+		if percents then return percents end
+	end
+	local durations
+	if UnitEmpoweredStageDurations then
+		durations = normalizeStageValues(UnitEmpoweredStageDurations(unit))
+	elseif GetUnitEmpowerStageDuration then
+		durations = {}
+		for i = 1, numStages do
+			durations[i] = GetUnitEmpowerStageDuration(unit, i - 1)
+		end
+	end
+	if type(durations) ~= "table" or #durations < numStages then return nil end
+	local hold = GetUnitEmpowerHoldAtMaxTime and GetUnitEmpowerHoldAtMaxTime(unit)
+	if hold ~= nil and type(hold) ~= "number" then hold = durationToMilliseconds(hold) end
+	if issecretvalue and hold and issecretvalue(hold) then return nil end
+	local total = hold or 0
+	local percents = {}
+	local sum = 0
+	for i = 1, numStages do
+		local ms = durationToMilliseconds(durations[i])
+		if not ms then return nil end
+		sum = sum + ms
+		total = total + ms
+		percents[i] = sum
+	end
+	if not total or total <= 0 then return nil end
+	for i = 1, numStages do
+		percents[i] = percents[i] / total
+	end
+	return normalizeStagePercents(percents, numStages)
+end
+
+local function ensureEmpowerState(st)
+	if not st or not st.castBar then return nil end
+	if not st.castEmpower then st.castEmpower = { pips = {}, tiers = {} } end
+	local emp = st.castEmpower
+	if not emp.container then
+		emp.container = CreateFrame("Frame", nil, st.castBar)
+		emp.container:SetAllPoints(st.castBar)
+		emp.container:EnableMouse(false)
+	end
+	if emp.container:GetParent() ~= st.castBar then emp.container:SetParent(st.castBar) end
+	emp.container:SetFrameStrata(st.castBar:GetFrameStrata())
+	local baseLevel = st.castBar:GetFrameLevel() or 0
+	local layerOffset = H.shouldUseDefaultCastArt(st) and EMPOWER_PIP_LAYER_DEFAULT or EMPOWER_PIP_LAYER_CUSTOM
+	emp.container:SetFrameLevel(baseLevel + layerOffset)
+	return emp
+end
+
+local function addAlphaAnim(group, target, fromAlpha, toAlpha, duration, order, startDelay, smoothing)
+	local anim = group:CreateAnimation("Alpha")
+	anim:SetTarget(target)
+	anim:SetFromAlpha(fromAlpha or 0)
+	anim:SetToAlpha(toAlpha or 0)
+	anim:SetDuration(duration or 0)
+	anim:SetOrder(order or 1)
+	if startDelay and startDelay > 0 then anim:SetStartDelay(startDelay) end
+	if smoothing then anim:SetSmoothing(smoothing) end
+	return anim
+end
+
+local function addTranslationAnim(group, target, offsetX, offsetY, duration, order, smoothing)
+	local anim = group:CreateAnimation("Translation")
+	anim:SetTarget(target)
+	anim:SetOffset(offsetX or 0, offsetY or 0)
+	anim:SetDuration(duration or 0)
+	anim:SetOrder(order or 1)
+	if smoothing then anim:SetSmoothing(smoothing) end
+	return anim
+end
+
+local function addRotationAnim(group, target, degrees, duration, order, smoothing)
+	local anim = group:CreateAnimation("Rotation")
+	anim:SetTarget(target)
+	anim:SetDegrees(degrees or 0)
+	anim:SetDuration(duration or 0)
+	anim:SetOrder(order or 1)
+	if smoothing then anim:SetSmoothing(smoothing) end
+	if anim.SetOrigin then anim:SetOrigin("CENTER", 0, 0) end
+	return anim
+end
+
+local function ensureEmpowerPip(emp, index)
+	local pip = emp.pips[index]
+	if pip then return pip end
+	pip = CreateFrame("Frame", nil, emp.container)
+	pip:SetSize(7, 10)
+	pip.BasePip = pip:CreateTexture(nil, "ARTWORK", nil, 2)
+	if pip.BasePip.SetAtlas then pip.BasePip:SetAtlas("ui-castingbar-empower-pip", true) end
+	pip.BasePip:SetPoint("CENTER")
+	pip.PipGlow = pip:CreateTexture(nil, "OVERLAY", nil, 2)
+	if pip.PipGlow.SetAtlas then pip.PipGlow:SetAtlas("cast-empowered-pipflare", true) end
+	pip.PipGlow:SetAlpha(0)
+	pip.PipGlow:SetPoint("CENTER")
+	if pip.PipGlow.SetScale then pip.PipGlow:SetScale(0.5) end
+
+	pip.FlakesBottom = pip:CreateTexture(nil, "OVERLAY", nil, 2)
+	if pip.FlakesBottom.SetAtlas then pip.FlakesBottom:SetAtlas("Cast_Empowered_FlakesS01", true) end
+	if pip.FlakesBottom.SetScale then pip.FlakesBottom:SetScale(0.5) end
+	pip.FlakesBottom:SetAlpha(0)
+	pip.FlakesBottom:SetPoint("CENTER")
+
+	pip.FlakesTop = pip:CreateTexture(nil, "OVERLAY", nil, 2)
+	if pip.FlakesTop.SetAtlas then pip.FlakesTop:SetAtlas("Cast_Empowered_FlakesS02", true) end
+	if pip.FlakesTop.SetScale then pip.FlakesTop:SetScale(0.5) end
+	pip.FlakesTop:SetAlpha(0)
+	pip.FlakesTop:SetPoint("CENTER")
+
+	pip.FlakesTop02 = pip:CreateTexture(nil, "OVERLAY", nil, 2)
+	if pip.FlakesTop02.SetAtlas then pip.FlakesTop02:SetAtlas("Cast_Empowered_FlakesS03", true) end
+	if pip.FlakesTop02.SetScale then pip.FlakesTop02:SetScale(0.5) end
+	pip.FlakesTop02:SetAlpha(0)
+	pip.FlakesTop02:SetPoint("CENTER")
+
+	pip.FlakesBottom02 = pip:CreateTexture(nil, "OVERLAY", nil, 2)
+	if pip.FlakesBottom02.SetAtlas then pip.FlakesBottom02:SetAtlas("Cast_Empowered_FlakesS03", true) end
+	if pip.FlakesBottom02.SetScale then pip.FlakesBottom02:SetScale(0.5) end
+	pip.FlakesBottom02:SetAlpha(0)
+	pip.FlakesBottom02:SetPoint("CENTER")
+
+	pip.StageAnim = pip:CreateAnimationGroup()
+	pip.StageAnim:SetLooping("NONE")
+	if pip.StageAnim.SetToFinalAlpha then pip.StageAnim:SetToFinalAlpha(true) end
+
+	addAlphaAnim(pip.StageAnim, pip.PipGlow, 0, 0, 0, 1, nil, "NONE")
+	addAlphaAnim(pip.StageAnim, pip.PipGlow, 0.1, 1, 0.1, 1, 0, "NONE")
+	addAlphaAnim(pip.StageAnim, pip.PipGlow, 1, 0, 0.25, 1, 0.1, "OUT")
+
+	addTranslationAnim(pip.StageAnim, pip.FlakesBottom, 0, -30, 0.3, 1, "OUT")
+	addRotationAnim(pip.StageAnim, pip.FlakesBottom, 90, 0.3, 1, "OUT")
+	addAlphaAnim(pip.StageAnim, pip.FlakesBottom, 0.1, 1, 0.1, 1, 0, "NONE")
+	addAlphaAnim(pip.StageAnim, pip.FlakesBottom, 1, 0, 0.25, 1, 0.1, "NONE")
+
+	addTranslationAnim(pip.StageAnim, pip.FlakesTop, 0, 30, 0.3, 1, "OUT")
+	addRotationAnim(pip.StageAnim, pip.FlakesTop, -90, 0.3, 1, "OUT")
+	addAlphaAnim(pip.StageAnim, pip.FlakesTop, 0.1, 1, 0.1, 1, 0, "NONE")
+	addAlphaAnim(pip.StageAnim, pip.FlakesTop, 1, 0, 0.25, 1, 0.1, "NONE")
+
+	addTranslationAnim(pip.StageAnim, pip.FlakesTop02, 0, 35, 0.3, 1, "IN")
+	addRotationAnim(pip.StageAnim, pip.FlakesTop02, 60, 0.3, 1, "OUT")
+	addAlphaAnim(pip.StageAnim, pip.FlakesTop02, 0.1, 1, 0.1, 1, 0, "NONE")
+	addAlphaAnim(pip.StageAnim, pip.FlakesTop02, 1, 0, 0.25, 1, 0.1, "NONE")
+
+	addTranslationAnim(pip.StageAnim, pip.FlakesBottom02, 0, -35, 0.3, 1, "IN")
+	addRotationAnim(pip.StageAnim, pip.FlakesBottom02, -60, 0.3, 1, "OUT")
+	addAlphaAnim(pip.StageAnim, pip.FlakesBottom02, 0.1, 1, 0.1, 1, 0, "NONE")
+	addAlphaAnim(pip.StageAnim, pip.FlakesBottom02, 1, 0, 0.25, 1, 0.1, "NONE")
+
+	emp.pips[index] = pip
+	return pip
+end
+
+local function ensureEmpowerTier(emp, index)
+	local tier = emp.tiers[index]
+	if tier then return tier end
+	tier = CreateFrame("Frame", nil, emp.container)
+	tier.Normal = tier:CreateTexture(nil, "BACKGROUND", nil, 4)
+	tier.Disabled = tier:CreateTexture(nil, "BACKGROUND", nil, 4)
+	tier.Glow = tier:CreateTexture(nil, "BACKGROUND", nil, 5)
+	tier.Normal:SetAllPoints(tier)
+	tier.Disabled:SetAllPoints(tier)
+	tier.Glow:SetAllPoints(tier)
+	if tier.Glow.SetBlendMode then tier.Glow:SetBlendMode("ADD") end
+	tier.Glow:SetAlpha(0)
+	tier.GlowAnim = tier.Glow:CreateAnimationGroup()
+	local fadeIn = tier.GlowAnim:CreateAnimation("Alpha")
+	fadeIn:SetFromAlpha(0)
+	fadeIn:SetToAlpha(1)
+	fadeIn:SetDuration(0.1)
+	fadeIn:SetOrder(1)
+	local fadeOut = tier.GlowAnim:CreateAnimation("Alpha")
+	fadeOut:SetFromAlpha(1)
+	fadeOut:SetToAlpha(0)
+	fadeOut:SetDuration(0.5)
+	fadeOut:SetOrder(2)
+	emp.tiers[index] = tier
+	return tier
+end
+
+function H.clearEmpowerStages(st)
+	local emp = st and st.castEmpower
+	if not emp then return end
+	emp.stagePercents = nil
+	emp.stageCount = 0
+	emp.currentStage = 0
+	emp.layoutToken = (emp.layoutToken or 0) + 1
+	if emp.container then emp.container:Hide() end
+	for _, pip in pairs(emp.pips) do
+		if pip.StageAnim then pip.StageAnim:Stop() end
+		if pip.PipGlow then pip.PipGlow:SetAlpha(0) end
+		if pip.FlakesBottom then pip.FlakesBottom:SetAlpha(0) end
+		if pip.FlakesTop then pip.FlakesTop:SetAlpha(0) end
+		if pip.FlakesTop02 then pip.FlakesTop02:SetAlpha(0) end
+		if pip.FlakesBottom02 then pip.FlakesBottom02:SetAlpha(0) end
+		pip:Hide()
+	end
+	for _, tier in pairs(emp.tiers) do
+		if tier.GlowAnim then tier.GlowAnim:Stop() end
+		tier:Hide()
+	end
+end
+
+function H.layoutEmpowerStages(st)
+	local emp = st and st.castEmpower
+	if not st or not st.castBar or not emp or not emp.stagePercents then return end
+	local baseLevel = st.castBar:GetFrameLevel() or 0
+	local layerOffset = H.shouldUseDefaultCastArt(st) and EMPOWER_PIP_LAYER_DEFAULT or EMPOWER_PIP_LAYER_CUSTOM
+	if emp.container then emp.container:SetFrameLevel(baseLevel + layerOffset) end
+	local barLeft = st.castBar:GetLeft()
+	local barRight = st.castBar:GetRight()
+	if not barLeft or not barRight then
+		if After then
+			emp.layoutToken = (emp.layoutToken or 0) + 1
+			local token = emp.layoutToken
+			After(0, function()
+				local st2 = st
+				local emp2 = st2 and st2.castEmpower
+				if emp2 and emp2.layoutToken == token then H.layoutEmpowerStages(st2) end
+			end)
+		end
+		return
+	end
+	local barWidth = barRight - barLeft
+	if not barWidth or barWidth <= 0 then return end
+	local count = emp.stageCount or #emp.stagePercents
+	if count <= 0 then return end
+	local showTiers = H.shouldUseDefaultCastArt(st)
+	local container = emp.container or ensureEmpowerState(st).container
+	if container then container:Show() end
+	local barHeight = st.castBar:GetHeight() or 0
+
+	for i = 1, count do
+		local percent = emp.stagePercents[i]
+		local pip = ensureEmpowerPip(emp, i)
+		pip:ClearAllPoints()
+		local offset = barWidth * percent
+		if showTiers then
+			pip:SetSize(7, 10)
+			pip:SetPoint("TOP", st.castBar, "TOPLEFT", offset, -1)
+			pip:SetPoint("BOTTOM", st.castBar, "BOTTOMLEFT", offset, 1)
+			if pip.BasePip then
+				if pip.BasePip.SetAtlas then pip.BasePip:SetAtlas("ui-castingbar-empower-pip", true) end
+				if pip.BasePip.SetDrawLayer then pip.BasePip:SetDrawLayer("ARTWORK", 2) end
+				if pip.BasePip.SetVertexColor then pip.BasePip:SetVertexColor(1, 1, 1, 1) end
+				pip.BasePip:ClearAllPoints()
+				pip.BasePip:SetPoint("CENTER")
+			end
+			setPipFxLayer(pip, "OVERLAY", 2)
+		else
+			local lineWidth, lineHeight = getCustomPipDimensions(barHeight)
+			pip:SetHeight(lineHeight)
+			pip:SetWidth(lineWidth)
+			pip:SetPoint("TOP", st.castBar, "TOPLEFT", offset, 0)
+			pip:SetPoint("BOTTOM", st.castBar, "BOTTOMLEFT", offset, 0)
+			if pip.BasePip then
+				if pip.BasePip.SetDrawLayer then pip.BasePip:SetDrawLayer("OVERLAY", EMPOWER_CUSTOM_PIP_LINE_SUBLEVEL) end
+				pip.BasePip:ClearAllPoints()
+				pip.BasePip:SetAllPoints(pip)
+				if pip.BasePip.SetColorTexture then
+					pip.BasePip:SetColorTexture(1, 1, 1, EMPOWER_CUSTOM_PIP_ALPHA)
+				else
+					pip.BasePip:SetTexture("Interface\\Buttons\\WHITE8x8")
+					if pip.BasePip.SetVertexColor then pip.BasePip:SetVertexColor(1, 1, 1, EMPOWER_CUSTOM_PIP_ALPHA) end
+				end
+			end
+			setPipFxLayer(pip, "OVERLAY", EMPOWER_CUSTOM_PIP_FX_SUBLEVEL)
+		end
+		if pip.BasePip then pip.BasePip:Show() end
+		pip:Show()
+	end
+	for i = count + 1, #emp.pips do
+		emp.pips[i]:Hide()
+	end
+
+	if showTiers then
+		for i = 1, count do
+			local tier = ensureEmpowerTier(emp, i)
+			tier:ClearAllPoints()
+			local leftStagePip = emp.pips[i]
+			local rightStagePip = emp.pips[i + 1]
+			if leftStagePip then tier:SetPoint("TOPLEFT", leftStagePip, "TOP", 0, 0) end
+			if rightStagePip then
+				tier:SetPoint("BOTTOMRIGHT", rightStagePip, "BOTTOM", 0, 0)
+			else
+				tier:SetPoint("BOTTOMRIGHT", st.castBar, "BOTTOMRIGHT", 0, 1)
+			end
+
+			local tierLeft = tier:GetLeft()
+			local tierRight = tier:GetRight()
+			if tierLeft and tierRight then
+				local texLeft = (tierLeft - barLeft) / barWidth
+				local texRight = 1.0 - ((barRight - tierRight) / barWidth)
+				tier.Normal:SetTexCoord(texLeft, texRight, 0, 1)
+				tier.Disabled:SetTexCoord(texLeft, texRight, 0, 1)
+				tier.Glow:SetTexCoord(texLeft, texRight, 0, 1)
+			end
+
+			if tier.Normal.SetAtlas then tier.Normal:SetAtlas(("ui-castingbar-tier%d-empower"):format(i), true) end
+			if tier.Disabled.SetAtlas then tier.Disabled:SetAtlas(("ui-castingbar-disabled-tier%d-empower"):format(i), true) end
+			if tier.Glow.SetAtlas then tier.Glow:SetAtlas(("ui-castingbar-glow-tier%d-empower"):format(i), true) end
+
+			tier.Normal:SetShown(false)
+			tier.Disabled:SetShown(true)
+			tier.Glow:SetAlpha(0)
+			tier:Show()
+		end
+		for i = count + 1, #emp.tiers do
+			emp.tiers[i]:Hide()
+		end
+	else
+		for _, tier in pairs(emp.tiers) do
+			tier:Hide()
+		end
+	end
+end
+
+function H.updateEmpowerStageFromProgress(st, progress)
+	local emp = st and st.castEmpower
+	if not emp or not emp.stagePercents or not emp.stageCount then return end
+	if issecretvalue and issecretvalue(progress) then return end
+	local maxStage = 0
+	for i = 1, emp.stageCount do
+		local pct = emp.stagePercents[i]
+		if type(pct) == "number" and progress >= pct then
+			maxStage = i
+		else
+			break
+		end
+	end
+	if maxStage <= emp.currentStage then return end
+	local showTiers = H.shouldUseDefaultCastArt(st)
+	for i = emp.currentStage + 1, maxStage do
+		local pip = emp.pips[i]
+		if pip and pip.StageAnim then
+			pip.StageAnim:Stop()
+			pip.StageAnim:Play()
+		elseif pip and pip.PipGlowAnim then
+			pip.PipGlowAnim:Stop()
+			pip.PipGlowAnim:Play()
+		end
+		local tier = emp.tiers[i]
+		if showTiers and tier then
+			tier.Normal:SetShown(true)
+			tier.Disabled:SetShown(false)
+			if tier.GlowAnim then
+				tier.GlowAnim:Stop()
+				tier.GlowAnim:Play()
+			end
+		end
+	end
+	emp.currentStage = maxStage
+end
+
+function H.updateEmpowerStageFromBar(st)
+	if not st or not st.castBar then return end
+	local emp = st.castEmpower
+	if not emp or not emp.stagePercents then return end
+	local _, maxVal = st.castBar:GetMinMaxValues()
+	local value = st.castBar:GetValue()
+	if not maxVal or maxVal == 0 or value == nil then return end
+	if issecretvalue and (issecretvalue(value) or issecretvalue(maxVal)) then return end
+	H.updateEmpowerStageFromProgress(st, value / maxVal)
+end
+
+function H.setupEmpowerStages(st, unit, numStages)
+	H.clearEmpowerStages(st)
+	if not st or not unit or not numStages or numStages <= 0 then return end
+	local percents = buildEmpowerStagePercents(unit, numStages)
+	if not percents then return end
+	local emp = ensureEmpowerState(st)
+	if not emp then return end
+	emp.stagePercents = percents
+	emp.stageCount = #percents
+	emp.currentStage = 0
+	H.layoutEmpowerStages(st)
+end
+
 function H.resolveTextDelimiter(delimiter)
 	if delimiter == nil or delimiter == "" then delimiter = " " end
 	if delimiter == " " then return " " end
