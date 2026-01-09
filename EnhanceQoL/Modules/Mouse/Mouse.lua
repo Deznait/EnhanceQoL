@@ -11,6 +11,7 @@ local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_Mouse")
 
 -- Hotpath locals & constants
 local GetCursorPosition = GetCursorPosition
+local IsMouseButtonDown = IsMouseButtonDown
 local UIParent = UIParent
 local UnitAffectingCombat = UnitAffectingCombat
 local UnitClass = UnitClass
@@ -118,6 +119,13 @@ end
 addon.Mouse.functions.applyPreset = applyPreset
 
 local timeAccumulator = 0
+
+local function isRingWanted(db, inCombat, rightClickActive)
+	if not db or not db["mouseRingEnabled"] then return false end
+	if db["mouseRingOnlyInCombat"] and not inCombat then return false end
+	if db["mouseRingOnlyOnRightClick"] and not rightClickActive then return false end
+	return true
+end
 
 local function getTrailColor()
 	if addon.db["mouseTrailUseClassColor"] then
@@ -244,10 +252,29 @@ local function removeMouseRing()
 end
 addon.Mouse.functions.removeMouseRing = removeMouseRing
 
+local function refreshRingVisibility()
+	local db = addon.db
+	if not db then return false end
+	local ringOnly = db["mouseRingOnlyInCombat"]
+	local inCombat = ringOnly and UnitAffectingCombat and UnitAffectingCombat("player") or nil
+	local rightClickActive = db["mouseRingOnlyOnRightClick"] and IsMouseButtonDown and IsMouseButtonDown("RightButton")
+	local ringWanted = isRingWanted(db, inCombat, rightClickActive)
+
+	if ringWanted then
+		if not addon.mousePointer then createMouseRing() end
+		if addon.mousePointer and not addon.mousePointer:IsShown() then addon.mousePointer:Show() end
+	elseif addon.mousePointer and addon.mousePointer:IsShown() then
+		addon.mousePointer:Hide()
+	end
+
+	return ringWanted
+end
+addon.Mouse.functions.refreshRingVisibility = refreshRingVisibility
+
 function addon.Mouse.functions.InitState()
 	local db = addon.db
 	if not db then return end
-	if db["mouseRingEnabled"] then createMouseRing() end
+	refreshRingVisibility()
 	if db["mouseTrailEnabled"] then applyPreset(db["mouseTrailDensity"]) end
 end
 
@@ -257,19 +284,8 @@ eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED") -- enter combat
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED") -- leave combat
 eventFrame:SetScript("OnEvent", function()
-	local db = addon.db
-	if not db or not db["mouseRingEnabled"] then return end
-	if db["mouseRingOnlyInCombat"] then
-		if UnitAffectingCombat("player") then
-			if not addon.mousePointer then createMouseRing() end
-			if addon.mousePointer then addon.mousePointer:Show() end
-		else
-			if addon.mousePointer then addon.mousePointer:Hide() end
-		end
-	else
-		if not addon.mousePointer then createMouseRing() end
-		if addon.mousePointer then addon.mousePointer:Show() end
-	end
+	if not addon.db then return end
+	refreshRingVisibility()
 end)
 
 -- Shared runner for ring + trail updates
@@ -281,9 +297,11 @@ if not addon.mouseTrailRunner then
 		if not db then return end
 		local ringOnly = db["mouseRingOnlyInCombat"]
 		local trailOnly = db["mouseTrailOnlyInCombat"]
+		local rightClickOnly = db["mouseRingOnlyOnRightClick"]
 		local inCombat
 		if ringOnly or trailOnly then inCombat = UnitAffectingCombat and UnitAffectingCombat("player") end
-		local ringWanted = db["mouseRingEnabled"] and (not ringOnly or inCombat)
+		local rightClickActive = rightClickOnly and IsMouseButtonDown and IsMouseButtonDown("RightButton")
+		local ringWanted = isRingWanted(db, inCombat, rightClickActive)
 		local trailWanted = db["mouseTrailEnabled"] and (not trailOnly or inCombat)
 		if trailWanted and currentPreset ~= db["mouseTrailDensity"] then applyPreset(db["mouseTrailDensity"]) end
 		if trailWanted and not lastTrailWanted then
@@ -292,6 +310,14 @@ if not addon.mouseTrailRunner then
 			timeAccumulator = 0
 		end
 		lastTrailWanted = trailWanted
+
+		if ringWanted then
+			if not addon.mousePointer then createMouseRing() end
+			if addon.mousePointer and not addon.mousePointer:IsShown() then addon.mousePointer:Show() end
+		elseif addon.mousePointer and addon.mousePointer:IsShown() then
+			addon.mousePointer:Hide()
+		end
+
 		if not ringWanted and not trailWanted then return end
 		local x, y = GetCursorPosition()
 		local scale = UIParent:GetEffectiveScale()

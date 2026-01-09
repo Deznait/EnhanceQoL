@@ -2254,6 +2254,21 @@ local function buildUnitSettings(unit)
 			refreshSettingsUI()
 		end, castDef.showName ~= false, "cast", isCastEnabled)
 
+		if unit == "player" then
+			list[#list + 1] = checkbox(
+				L["Show cast target"] or "Show cast target",
+				function() return getValue(unit, { "cast", "showCastTarget" }, castDef.showCastTarget == true) == true end,
+				function(val)
+					setValue(unit, { "cast", "showCastTarget" }, val and true or false)
+					refresh()
+					refreshSettingsUI()
+				end,
+				castDef.showCastTarget == true,
+				"cast",
+				isCastNameEnabled
+			)
+		end
+
 		local castNameX = slider(
 			L["Name X Offset"] or "Name X Offset",
 			-OFFSET_RANGE,

@@ -21,6 +21,7 @@ function addon.Mouse.functions.InitDB()
 	init("mouseRingHideDot", false)
 	-- New options
 	init("mouseRingOnlyInCombat", false)
+	init("mouseRingOnlyOnRightClick", false)
 	init("mouseTrailOnlyInCombat", false)
 	init("mouseRingUseClassColor", false)
 	init("mouseTrailUseClassColor", false)

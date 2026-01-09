@@ -293,6 +293,7 @@ local defaults = {
 			offset = { x = 0, y = -4 },
 			backdrop = { enabled = true, color = { 0, 0, 0, 0.6 } },
 			showName = true,
+			showCastTarget = false,
 			nameOffset = { x = 6, y = 0 },
 			showDuration = true,
 			durationOffset = { x = -6, y = 0 },
@@ -371,6 +372,7 @@ local defaults = {
 			offset = { x = 11, y = -4 },
 			backdrop = { enabled = true, color = { 0, 0, 0, 0.6 } },
 			showName = true,
+			showCastTarget = false,
 			nameOffset = { x = 6, y = 0 },
 			showDuration = true,
 			durationOffset = { x = -6, y = 0 },
@@ -1875,6 +1877,7 @@ local function stopCast(unit)
 	if st.castName then st.castName:SetText("") end
 	if st.castDuration then st.castDuration:SetText("") end
 	if st.castIcon then st.castIcon:Hide() end
+	st.castTarget = nil
 	st.castInfo = nil
 	if castOnUpdateHandlers[unit] then
 		st.castBar:SetScript("OnUpdate", nil)
@@ -1988,7 +1991,14 @@ local function configureCastStatic(unit, ccfg, defc)
 	if st.castName then
 		local showName = ccfg.showName ~= false
 		st.castName:SetShown(showName)
-		st.castName:SetText(showName and (st.castInfo.name or "") or "")
+		local nameText = showName and (st.castInfo.name or "") or ""
+		if showName and UFHelper.formatCastName then
+			local showTarget = ccfg.showCastTarget
+			if showTarget == nil then showTarget = defc.showCastTarget end
+			if unit ~= UNIT.PLAYER then showTarget = false end
+			nameText = UFHelper.formatCastName(nameText, st.castTarget, showTarget == true)
+		end
+		st.castName:SetText(nameText)
 	end
 	if st.castIcon then
 		local showIcon = ccfg.showIcon ~= false and st.castInfo.texture ~= nil
@@ -2260,7 +2270,7 @@ local function setCastInfoFromUnit(unit)
 		return
 	end
 
-	local isEmpoweredCast = isChannel and isEmpowered and numEmpowerStages and numEmpowerStages > 0
+	local isEmpoweredCast = isChannel and (issecretvalue and not issecretvalue(isEmpowered)) and isEmpowered and numEmpowerStages and numEmpowerStages > 0
 	if isEmpoweredCast and startTimeMS and endTimeMS and (not issecretvalue or (not issecretvalue(startTimeMS) and not issecretvalue(endTimeMS))) then
 		local totalMs = UFHelper.getEmpoweredChannelDurationMilliseconds and UFHelper.getEmpoweredChannelDurationMilliseconds(unit)
 		if totalMs and totalMs > 0 and (not issecretvalue or not issecretvalue(totalMs)) then
@@ -2306,7 +2316,14 @@ local function setCastInfoFromUnit(unit)
 			if st.castName then
 				local showName = ccfg.showName ~= false
 				st.castName:SetShown(showName)
-				st.castName:SetText(showName and (text or name or "") or "")
+				local nameText = showName and (text or name or "") or ""
+				if showName and UFHelper.formatCastName then
+					local showTarget = ccfg.showCastTarget
+					if showTarget == nil then showTarget = defc.showCastTarget end
+					if unit ~= UNIT.PLAYER then showTarget = false end
+					nameText = UFHelper.formatCastName(nameText, st.castTarget, showTarget == true)
+				end
+				st.castName:SetText(nameText)
 			end
 			if st.castIcon then
 				local showIcon = ccfg.showIcon ~= false and texture ~= nil
@@ -3960,6 +3977,7 @@ local unitEvents = {
 	"UNIT_THREAT_LIST_UPDATE",
 	"UNIT_AURA",
 	"UNIT_TARGET",
+	"UNIT_SPELLCAST_SENT",
 	"UNIT_SPELLCAST_START",
 	"UNIT_SPELLCAST_STOP",
 	"UNIT_SPELLCAST_FAILED",
@@ -4272,7 +4290,8 @@ function UF.UpdateAllRoleIndicators(skipDisabled)
 	UFHelper.updateRoleIndicator(states[UNIT.FOCUS], UNIT.FOCUS, getCfg(UNIT.FOCUS), defaultsFor(UNIT.FOCUS), skipDisabled)
 end
 
-local function onEvent(self, event, unit, arg1)
+local function onEvent(self, event, unit, ...)
+	local arg1 = ...
 	if (unitEventsMap[event] or portraitEventsMap[event]) and unit and not allowedEventUnit[unit] and event ~= "UNIT_THREAT_SITUATION_UPDATE" and event ~= "UNIT_THREAT_LIST_UPDATE" then return end
 	if (unitEventsMap[event] or portraitEventsMap[event]) and unit and isBossUnit(unit) and not isBossFrameSettingEnabled() then return end
 	if event == "PLAYER_ENTERING_WORLD" then
@@ -4620,6 +4639,11 @@ local function onEvent(self, event, unit, arg1)
 	elseif event == "UNIT_TARGET" and unit == UNIT.TARGET then
 		local totCfg = getCfg(UNIT.TARGET_TARGET)
 		if totCfg.enabled then updateTargetTargetFrame(totCfg) end
+	elseif event == "UNIT_SPELLCAST_SENT" then
+		if unit == UNIT.PLAYER then
+			local st = states[unit]
+			if st then st.castTarget = arg1 end
+		end
 	elseif
 		event == "UNIT_SPELLCAST_START"
 		or event == "UNIT_SPELLCAST_CHANNEL_START"

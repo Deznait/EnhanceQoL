@@ -38,7 +38,11 @@ local data = {
 		func = function(v)
 			addon.db["mouseRingEnabled"] = v
 			if v then
-				addon.Mouse.functions.createMouseRing()
+				if addon.Mouse.functions.refreshRingVisibility then
+					addon.Mouse.functions.refreshRingVisibility()
+				else
+					addon.Mouse.functions.createMouseRing()
+				end
 			else
 				addon.Mouse.functions.removeMouseRing()
 			end
@@ -103,13 +107,25 @@ local data = {
 				text = L["mouseRingOnlyInCombat"],
 				func = function(v)
 					addon.db["mouseRingOnlyInCombat"] = v
-					if addon.mousePointer then
-						if v and not UnitAffectingCombat("player") then
-							addon.mousePointer:Hide()
-						elseif addon.db["mouseRingEnabled"] then
-							addon.mousePointer:Show()
-						end
-					end
+					if addon.Mouse.functions.refreshRingVisibility then addon.Mouse.functions.refreshRingVisibility() end
+				end,
+				parentCheck = function()
+					return addon.SettingsLayout.elements["mouseRingEnabled"]
+						and addon.SettingsLayout.elements["mouseRingEnabled"].setting
+						and addon.SettingsLayout.elements["mouseRingEnabled"].setting:GetValue() == true
+				end,
+				parent = true,
+				default = false,
+				type = Settings.VarType.Boolean,
+				sType = "checkbox",
+				parentSection = expandable,
+			},
+			{
+				var = "mouseRingOnlyOnRightClick",
+				text = L["mouseRingOnlyOnRightClick"],
+				func = function(v)
+					addon.db["mouseRingOnlyOnRightClick"] = v
+					if addon.Mouse.functions.refreshRingVisibility then addon.Mouse.functions.refreshRingVisibility() end
 				end,
 				parentCheck = function()
 					return addon.SettingsLayout.elements["mouseRingEnabled"]

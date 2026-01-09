@@ -22,6 +22,7 @@
   - Optional border highlight for mouseover/aggro.
   - Edit Mode shows sample auras for frames with auras enabled.
   - Tapped mob color indicator for unit frames.
+  - Player castbar can optionally show the cast target.
 - **Misc**
   - Auto-accept summons.
   - Auto-accept resurrection requests.

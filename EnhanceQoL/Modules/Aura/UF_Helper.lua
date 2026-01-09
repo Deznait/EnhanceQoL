@@ -990,6 +990,15 @@ function H.setupEmpowerStages(st, unit, numStages)
 	H.layoutEmpowerStages(st)
 end
 
+local WrapString = _G.C_StringUtil and _G.C_StringUtil.WrapString
+
+function H.formatCastName(nameText, castTarget, showTarget)
+	if not showTarget or type(castTarget) == "nil" then return nameText end
+	if WrapString then return WrapString(castTarget, nameText .. " --> ") or nameText end
+	if not castTarget or castTarget == "" then return nameText end
+	return nameText .. " --> " .. castTarget
+end
+
 function H.resolveTextDelimiter(delimiter)
 	if delimiter == nil or delimiter == "" then delimiter = " " end
 	if delimiter == " " then return " " end
