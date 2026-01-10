@@ -116,6 +116,7 @@
 - DataPanels: Micro Bar missions entry no longer errors when Covenant data is unavailable.
 - Show Leader/Assist Icon on Raidframes expanded the size in edit mode for the selection overlay
 - Bonus Roll frame no longer disappears when loot anchoring is disabled.
+- Edit Mode: imported layouts now reuse the last EQoL layout positions instead of resetting.
 
 ---
 

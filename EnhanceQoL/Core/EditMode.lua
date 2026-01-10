@@ -28,6 +28,7 @@ end
 EditMode.frames = EditMode.frames or {}
 EditMode.lib = LibEditMode
 EditMode.activeLayout = EditMode.activeLayout
+EditMode.layoutFresh = EditMode.layoutFresh or {}
 
 function EditMode:IsAvailable() return self.lib ~= nil end
 
@@ -43,6 +44,7 @@ function EditMode:GetActiveLayoutName()
 	if self:IsAvailable() then
 		local layoutName = self.lib:GetActiveLayoutName()
 		if layoutName and layoutName ~= "" then
+			if self.activeLayout and self.activeLayout ~= layoutName then self.lastActiveLayout = self.activeLayout end
 			self.activeLayout = layoutName
 			return layoutName
 		end
@@ -53,6 +55,45 @@ end
 function EditMode:_resolveLayoutName(layoutName)
 	if layoutName and layoutName ~= "" then return layoutName end
 	return self:GetActiveLayoutName()
+end
+
+function EditMode:_resolveLayoutNameByIndex(layoutIndex)
+	if not layoutIndex then return nil end
+	local lib = self.lib
+	local layoutNames = lib and lib.layoutNames
+	return layoutNames and layoutNames[layoutIndex]
+end
+
+function EditMode:_layoutHasData(layoutName)
+	if not layoutName then return false end
+	local layouts = self:_ensureDB()
+	if not layouts then return false end
+	local data = layouts[layoutName]
+	return data ~= nil and next(data) ~= nil
+end
+
+function EditMode:_copyLayoutData(sourceLayoutName, targetLayoutName, force)
+	if not sourceLayoutName or not targetLayoutName or sourceLayoutName == targetLayoutName then return false end
+	local layouts = self:_ensureDB()
+	if not layouts then return false end
+	local source = layouts[sourceLayoutName]
+	if not source or next(source) == nil then return false end
+	local target = layouts[targetLayoutName]
+	if target and next(target) ~= nil and not force then return false end
+	layouts[targetLayoutName] = CopyTable(source)
+	return true
+end
+
+function EditMode:_getLayoutCopySource(targetLayoutName)
+	local source = self:GetActiveLayoutName()
+	if source == targetLayoutName then source = self.lastActiveLayout end
+	if source == targetLayoutName then source = nil end
+	return source
+end
+
+function EditMode:_applyLayoutIfActive(layoutName)
+	if not layoutName then return end
+	if self:GetActiveLayoutName() == layoutName then self:OnLayoutChanged(layoutName) end
 end
 
 local function isInCombat() return InCombatLockdown and InCombatLockdown() end
@@ -304,9 +345,21 @@ function EditMode:_registerCallbacks()
 	self.lib:RegisterCallback("enter", function() self:OnEnterEditMode() end)
 	self.lib:RegisterCallback("exit", function() self:OnExitEditMode() end)
 	self.lib:RegisterCallback("layout", function(layoutName)
-		if layoutName and layoutName ~= "" then self.activeLayout = layoutName end
+		if layoutName and layoutName ~= "" then
+			if self.activeLayout and self.activeLayout ~= layoutName then self.lastActiveLayout = self.activeLayout end
+			self.activeLayout = layoutName
+		end
 		self:OnLayoutChanged(layoutName)
 	end)
+	self.lib:RegisterCallback("layoutrenamed", function(oldName, newName, layoutIndex) self:OnLayoutRenamed(oldName, newName, layoutIndex) end)
+	self.lib:RegisterCallback(
+		"layoutadded",
+		function(layoutIndex, activateNewLayout, isLayoutImported, layoutType, layoutName) self:OnLayoutAdded(layoutIndex, activateNewLayout, isLayoutImported, layoutType, layoutName) end
+	)
+	self.lib:RegisterCallback(
+		"layoutduplicate",
+		function(addedLayoutIndex, dupes, isLayoutImported, layoutType, newName) self:OnLayoutDuplicate(addedLayoutIndex, dupes, isLayoutImported, layoutType, newName) end
+	)
 end
 
 function EditMode:OnEnterEditMode()
@@ -325,9 +378,70 @@ function EditMode:OnExitEditMode()
 end
 
 function EditMode:OnLayoutChanged(layoutName)
+	local resolved = self:_resolveLayoutName(layoutName)
+	if resolved and not self:_layoutHasData(resolved) then
+		if not self.layoutFresh[resolved] then self.layoutFresh[resolved] = true end
+	end
 	for id in pairs(self.frames) do
 		self:ApplyLayout(id, layoutName)
 	end
+end
+
+function EditMode:OnLayoutRenamed(oldName, newName, layoutIndex)
+	if not oldName or oldName == "" or not newName or newName == "" or oldName == newName then return end
+	local layouts = self:_ensureDB()
+	if layouts then
+		local data = layouts[oldName]
+		if data then
+			layouts[newName] = data
+			layouts[oldName] = nil
+		end
+	else
+		for _, entry in pairs(self.frames) do
+			local fallback = entry._fallback
+			if fallback and fallback[oldName] then
+				fallback[newName] = fallback[oldName]
+				fallback[oldName] = nil
+			end
+		end
+	end
+	if self.activeLayout == oldName then self.activeLayout = newName end
+	if self.lastActiveLayout == oldName then self.lastActiveLayout = newName end
+	if self.layoutFresh and self.layoutFresh[oldName] then
+		self.layoutFresh[newName] = true
+		self.layoutFresh[oldName] = nil
+	end
+end
+
+function EditMode:OnLayoutAdded(layoutIndex, activateNewLayout, isLayoutImported, layoutType, layoutName)
+	local targetName = layoutName or self:_resolveLayoutNameByIndex(layoutIndex)
+	if not targetName or targetName == "" then return end
+	local sourceName = self:_getLayoutCopySource(targetName)
+	if not sourceName then return end
+	local force = self.layoutFresh and self.layoutFresh[targetName] and true or false
+	if self:_copyLayoutData(sourceName, targetName, force) then self:_applyLayoutIfActive(targetName) end
+	if self.layoutFresh then self.layoutFresh[targetName] = nil end
+end
+
+function EditMode:OnLayoutDuplicate(addedLayoutIndex, dupes, isLayoutImported, layoutType, newName)
+	local targetName = newName or self:_resolveLayoutNameByIndex(addedLayoutIndex)
+	if not targetName or targetName == "" then return end
+
+	local sourceName
+	if type(dupes) == "table" then
+		for _, dupeIndex in ipairs(dupes) do
+			local dupeName = self:_resolveLayoutNameByIndex(dupeIndex)
+			if dupeName and self:_layoutHasData(dupeName) then
+				sourceName = dupeName
+				break
+			end
+		end
+	end
+
+	if not sourceName then sourceName = self:_getLayoutCopySource(targetName) end
+	if not sourceName then return end
+	if self:_copyLayoutData(sourceName, targetName, true) then self:_applyLayoutIfActive(targetName) end
+	if self.layoutFresh then self.layoutFresh[targetName] = nil end
 end
 
 function EditMode:_prepareSetting(id, setting)
