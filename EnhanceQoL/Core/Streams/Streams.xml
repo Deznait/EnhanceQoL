@@ -13,6 +13,7 @@
         <Script file="Stream_LootSpec.lua"/>
         <Script file="Stream_MythicKey.lua"/>
         <Script file="Stream_MythicRating.lua"/>
+        <Script file="Stream_Mail.lua"/>
         <Script file="Stream_EquipmentSets.lua"/>
         <Script file="Stream_MicroBar.lua"/>
         <Script file="Stream_PetTracker.lua"/>
