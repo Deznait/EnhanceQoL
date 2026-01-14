@@ -43,6 +43,16 @@ local STRATA_INDEX = {}
 for index, strata in ipairs(STRATA_ORDER) do
 	STRATA_INDEX[strata] = index
 end
+local CONTENT_ANCHOR_ORDER = { "LEFT", "CENTER", "RIGHT" }
+local VALID_CONTENT_ANCHOR = {}
+for _, anchor in ipairs(CONTENT_ANCHOR_ORDER) do
+	VALID_CONTENT_ANCHOR[anchor] = true
+end
+local CONTENT_ANCHOR_OPTIONS = {
+	{ value = "LEFT", label = LEFT or "Left" },
+	{ value = "CENTER", label = CENTER or "Center" },
+	{ value = "RIGHT", label = RIGHT or "Right" },
+}
 
 local function normalizePercent(value, fallback)
 	local num = tonumber(value)
@@ -83,6 +93,18 @@ local function normalizeStrata(strata, fallback)
 		if VALID_STRATA[upper] then return upper end
 	end
 	return "MEDIUM"
+end
+
+local function normalizeContentAnchor(anchor, fallback)
+	if type(anchor) == "string" then
+		local upper = string.upper(anchor)
+		if VALID_CONTENT_ANCHOR[upper] then return upper end
+	end
+	if type(fallback) == "string" then
+		local upper = string.upper(fallback)
+		if VALID_CONTENT_ANCHOR[upper] then return upper end
+	end
+	return "LEFT"
 end
 
 local function updateSelectionStrata(panel, targetStrata)
@@ -234,6 +256,7 @@ local function registerEditModePanel(panel)
 		hideBorder = panel.info.noBorder or false,
 		clickThrough = panel.info.clickThrough == true,
 		strata = normalizeStrata(panel.info.strata, panel.frame:GetFrameStrata()),
+		contentAnchor = normalizeContentAnchor(panel.info.contentAnchor, "LEFT"),
 		streams = copyList(panel.info.streams),
 		fontOutline = panel.info.fontOutline ~= false,
 		fontShadow = panel.info.fontShadow == true,
@@ -241,6 +264,7 @@ local function registerEditModePanel(panel)
 		textAlphaOutOfCombat = normalizePercent(panel.info.textAlphaOutOfCombat, panel.info.textAlphaInCombat),
 	}
 	panel.info.strata = defaults.strata
+	panel.info.contentAnchor = defaults.contentAnchor
 
 	local settings
 	if SettingType then
@@ -303,6 +327,31 @@ local function registerEditModePanel(panel)
 							else
 								panel:AddStream(streamName)
 							end
+						end)
+					end
+				end,
+			},
+			{
+				name = L["DataPanelContentAlignment"] or "Content alignment",
+				kind = SettingType.Dropdown,
+				field = "contentAnchor",
+				default = defaults.contentAnchor,
+				get = function(layoutName)
+					if EditMode and EditMode.GetValue then return EditMode:GetValue(id, "contentAnchor", layoutName) end
+					return panel.info and panel.info.contentAnchor or defaults.contentAnchor
+				end,
+				set = function(layoutName, value)
+					if EditMode and EditMode.SetValue then
+						EditMode:SetValue(id, "contentAnchor", value, layoutName)
+					elseif panel.info then
+						panel.info.contentAnchor = normalizeContentAnchor(value, panel.info.contentAnchor)
+						panel:Refresh()
+					end
+				end,
+				generator = function(_, rootDescription, data)
+					for _, option in ipairs(CONTENT_ANCHOR_OPTIONS) do
+						rootDescription:CreateRadio(option.label, function() return data.get and data.get(nil) == option.value end, function()
+							if data.set then data.set(nil, option.value) end
 						end)
 					end
 				end,
@@ -438,6 +487,7 @@ local function ensureSettings(id, name)
 			noBorder = false,
 			clickThrough = false,
 			strata = "MEDIUM",
+			contentAnchor = "LEFT",
 			fontOutline = DEFAULT_FONT_OUTLINE,
 			fontShadow = DEFAULT_FONT_SHADOW,
 			textAlphaInCombat = DEFAULT_TEXT_ALPHA,
@@ -450,6 +500,7 @@ local function ensureSettings(id, name)
 		if info.noBorder == nil then info.noBorder = false end
 		if info.clickThrough == nil then info.clickThrough = false end
 		info.strata = normalizeStrata(info.strata, "MEDIUM")
+		info.contentAnchor = normalizeContentAnchor(info.contentAnchor, "LEFT")
 		if info.fontOutline == nil then info.fontOutline = DEFAULT_FONT_OUTLINE end
 		if info.fontShadow == nil then info.fontShadow = DEFAULT_FONT_SHADOW end
 		info.textAlphaInCombat = normalizePercent(info.textAlphaInCombat, DEFAULT_TEXT_ALPHA)
@@ -527,6 +578,7 @@ function DataPanel.Create(id, name, existingOnly)
 		for _, data in pairs(panel.streams) do
 			data.button:SetHeight(f:GetHeight())
 		end
+		if panel.Refresh then panel:Refresh() end
 	end)
 
 	if not info.noBorder then
@@ -688,6 +740,7 @@ function DataPanel.Create(id, name, existingOnly)
 			or field == "clickThrough"
 			or field == "streams"
 			or field == "strata"
+			or field == "contentAnchor"
 			or field == "fontOutline"
 			or field == "fontShadow"
 			or field == "textAlphaInCombat"
@@ -756,6 +809,7 @@ function DataPanel.Create(id, name, existingOnly)
 		local info = self.info
 		local alphaChanged = false
 		local fontStyleChanged = false
+		local layoutChanged = false
 		if data.width then
 			info.width = round2(data.width)
 			self.frame:SetWidth(info.width)
@@ -776,6 +830,13 @@ function DataPanel.Create(id, name, existingOnly)
 			end
 		end
 		if data.strata then self:ApplyStrata(data.strata) end
+		if data.contentAnchor then
+			local anchor = normalizeContentAnchor(data.contentAnchor, info.contentAnchor)
+			if info.contentAnchor ~= anchor then
+				info.contentAnchor = anchor
+				layoutChanged = true
+			end
+		end
 		if data.fontOutline ~= nil then
 			local desired = data.fontOutline and true or false
 			if info.fontOutline ~= desired then
@@ -811,10 +872,11 @@ function DataPanel.Create(id, name, existingOnly)
 		end
 		if fontStyleChanged then self:ApplyTextStyle() end
 		if alphaChanged then self:ApplyAlpha() end
+		if layoutChanged then self:Refresh() end
 		self.suspendEditSync = nil
 	end
 
-	function panel:Refresh()
+	function panel:Refresh(force)
 		local visible = {}
 		for _, name in ipairs(self.order) do
 			local data = self.streams[name]
@@ -827,7 +889,9 @@ function DataPanel.Create(id, name, existingOnly)
 			end
 		end
 
-		local changed = false
+		local frameWidth = self.frame and self.frame.GetWidth and self.frame:GetWidth() or 0
+		local contentAnchor = normalizeContentAnchor(self.info and self.info.contentAnchor, "LEFT")
+		local changed = force and true or self.lastLayoutAnchor ~= contentAnchor or self.lastLayoutWidth ~= frameWidth
 		if not self.lastOrder or #self.lastOrder ~= #visible then
 			changed = true
 		else
@@ -841,6 +905,23 @@ function DataPanel.Create(id, name, existingOnly)
 		end
 		if not changed then return end
 
+		local spacing = 5
+		local padding = 5
+		local totalWidth = 0
+		for i, name in ipairs(visible) do
+			local data = self.streams[name]
+			local width = (data and data.lastWidth) or 0
+			if i > 1 then totalWidth = totalWidth + spacing end
+			totalWidth = totalWidth + width
+		end
+		local startX = padding
+		if contentAnchor == "CENTER" then
+			local available = frameWidth - (padding * 2)
+			startX = padding + (available - totalWidth) / 2
+		elseif contentAnchor == "RIGHT" then
+			startX = frameWidth - padding - totalWidth
+		end
+
 		local prev
 		for _, name in ipairs(visible) do
 			local data = self.streams[name]
@@ -849,9 +930,9 @@ function DataPanel.Create(id, name, existingOnly)
 			btn:ClearAllPoints()
 			btn:SetWidth(data.lastWidth or 0)
 			if prev then
-				btn:SetPoint("LEFT", prev, "RIGHT", 5, 0)
+				btn:SetPoint("LEFT", prev, "RIGHT", spacing, 0)
 			else
-				btn:SetPoint("LEFT", self.frame, "LEFT", 5, 0)
+				btn:SetPoint("LEFT", self.frame, "LEFT", startX, 0)
 			end
 			prev = btn
 		end
@@ -862,6 +943,8 @@ function DataPanel.Create(id, name, existingOnly)
 			self.lastOrder[i] = name
 			self.lastWidths[name] = self.streams[name].lastWidth or 0
 		end
+		self.lastLayoutAnchor = contentAnchor
+		self.lastLayoutWidth = frameWidth
 	end
 
 	function panel:AddStream(name)
@@ -902,6 +985,7 @@ function DataPanel.Create(id, name, existingOnly)
 
 		local function cb(payload)
 			payload = payload or {}
+			local layoutNeedsRefresh = false
 			local hasSecureParts = payloadHasSecureParts(payload)
 			if hasSecureParts then data.secureParts = true end
 			if hasSecureParts and InCombatLockdown and InCombatLockdown() and not data.secureInitialized then
@@ -1132,6 +1216,7 @@ function DataPanel.Create(id, name, existingOnly)
 					data.lastWidth = totalWidth
 					data.button:SetWidth(totalWidth)
 					if self.lastWidths and self.lastWidths[name] then self.lastWidths[name] = totalWidth end
+					layoutNeedsRefresh = true
 				end
 			else
 				data.usingParts = nil
@@ -1162,6 +1247,7 @@ function DataPanel.Create(id, name, existingOnly)
 						data.lastWidth = width
 						data.button:SetWidth(width)
 						if self.lastWidths and self.lastWidths[name] then self.lastWidths[name] = width end
+						layoutNeedsRefresh = true
 					end
 				end
 			end
@@ -1197,6 +1283,7 @@ function DataPanel.Create(id, name, existingOnly)
 				data.pendingPayload = nil
 				pendingSecure[data] = nil
 			end
+			if layoutNeedsRefresh then self:Refresh(true) end
 		end
 
 		data.applyPayload = cb

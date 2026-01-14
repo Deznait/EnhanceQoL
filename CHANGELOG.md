@@ -6,6 +6,7 @@
 
 - DataPanels: Pet Tracker stream with customizable text color/size and optional blinking when a pet spec has no active pet. Checks for Frost Mage, Hunter, Warlock, Unholy DK and respects needed talents.
 - DataPanels: Edit Mode click-through toggle to make panels ignore mouse input.
+- DataPanels: Content alignment option (left/center/right) in Edit Mode.
 - DataPanels: Mail notification stream with minimap mail icon and tooltip senders.
 - Inventory: Bag sort and loot order controls (left-to-right or right-to-left).
 - Inventory: Enhanced rarity glow for bags and the character frame.
@@ -16,6 +17,7 @@
 ### 🔄 Changed
 
 - Minimap Button Bin: Buttons are now sorted alphabetically by default.
+- DataPanels: Talents stream defaults to a grey "Talents:" prefix.
 
 ### 🐛 Fixed
 

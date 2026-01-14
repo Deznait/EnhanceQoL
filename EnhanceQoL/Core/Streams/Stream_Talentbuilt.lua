@@ -6,6 +6,7 @@ local AceGUI = addon.AceGUI
 local db
 local stream
 local provider
+local TALENTS_PREFIX_DEFAULT = (TALENTS or "Talents") .. ":"
 
 local function getOptionsHint()
 	if addon.DataPanel and addon.DataPanel.GetOptionsHintText then
@@ -20,7 +21,7 @@ local function ensureDB()
 	addon.db.datapanel = addon.db.datapanel or {}
 	addon.db.datapanel.talent = addon.db.datapanel.talent or {}
 	db = addon.db.datapanel.talent
-	db.prefix = db.prefix or ""
+	db.prefix = db.prefix or TALENTS_PREFIX_DEFAULT
 	db.fontSize = db.fontSize or 14
 	db.hideIcon = db.hideIcon or false
 end
@@ -149,7 +150,14 @@ local function GetCurrentTalents(stream)
 	local specId = PlayerUtil.GetCurrentSpecID()
 	local name = UNKNOWN
 	if specId then name = GetConfigName(C_ClassTalents.GetLastSelectedSavedConfigID(specId)) end
-	local prefix = db.prefix ~= "" and (db.prefix .. " ") or ""
+	local prefix = ""
+	if db.prefix ~= "" then
+		if db.prefix == TALENTS_PREFIX_DEFAULT then
+			prefix = ("|cffc0c0c0%s|r "):format(TALENTS_PREFIX_DEFAULT)
+		else
+			prefix = db.prefix .. " "
+		end
+	end
 	local icon = ""
 	if not db.hideIcon then
 		local size = db and db.fontSize or 14
