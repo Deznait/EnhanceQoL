@@ -914,6 +914,17 @@ local function buildUnitSettings(unit)
 	end, (def.border and def.border.detachedPowerOffset) or (def.border and def.border.offset) or (def.border and def.border.edgeSize) or 1, "frame", true)
 	list[#list + 1] = detachedBorderOffset
 
+	local powerDefaults = def.power or {}
+	local detachedPowerLevelOffset = slider(L["UFDetachedPowerLevelOffset"] or "Detached power bar level offset", 0, 50, 1, function()
+		return getValue(unit, { "power", "detachedFrameLevelOffset" }, powerDefaults.detachedFrameLevelOffset or 5)
+	end, function(val)
+		debounced(unit .. "_detachedPowerLevelOffset", function()
+			setValue(unit, { "power", "detachedFrameLevelOffset" }, val or powerDefaults.detachedFrameLevelOffset or 5)
+			refresh()
+		end)
+	end, powerDefaults.detachedFrameLevelOffset or 5, "frame", true)
+	list[#list + 1] = detachedPowerLevelOffset
+
 	local highlightDef = def.highlight or {}
 	list[#list + 1] = checkboxColor({
 		name = L["UFHighlightBorder"] or "Highlight border",

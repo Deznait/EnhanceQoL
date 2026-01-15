@@ -239,6 +239,7 @@ local defaults = {
 		power = {
 			enabled = true,
 			detached = false,
+			detachedFrameLevelOffset = 5,
 			color = { 0.1, 0.45, 1, 1 },
 			backdrop = { enabled = true, color = { 0, 0, 0, 0.6 } },
 			useCustomColor = false,
@@ -2735,13 +2736,6 @@ for i = 1, #STRATA_ORDER do
 	STRATA_INDEX[STRATA_ORDER[i]] = i
 end
 
-local function elevateStrata(strata)
-	local idx = STRATA_INDEX[strata] or STRATA_INDEX.MEDIUM
-	if not idx then return "HIGH" end
-	if idx < #STRATA_ORDER then return STRATA_ORDER[idx + 1] end
-	return STRATA_ORDER[idx]
-end
-
 local function syncTextFrameLevels(st)
 	if not st then return end
 	setFrameLevelAbove(st.healthTextLayer, st.health, 5)
@@ -3134,6 +3128,7 @@ local function layoutFrame(cfg, unit)
 	local showUnitStatus = usCfg.enabled == true
 	local showStatus = showName or showLevel or showUnitStatus or (unit == UNIT.PLAYER and ciCfg.enabled ~= false)
 	local pcfg = cfg.power or {}
+	local powerDef = def.power or {}
 	local powerEnabled = pcfg.enabled ~= false
 	local powerDetached = powerEnabled and pcfg.detached == true
 	local width = max(MIN_WIDTH, cfg.width or def.width)
@@ -3202,9 +3197,21 @@ local function layoutFrame(cfg, unit)
 	if powerDetached and pcfg.width and pcfg.width > 0 then powerWidth = pcfg.width end
 	st.power:SetSize(powerWidth, powerHeight)
 	st.power:SetShown(powerEnabled)
+	if st.power.GetFrameLevel and st._powerBaseFrameLevel == nil then st._powerBaseFrameLevel = st.power:GetFrameLevel() end
 	if st.power.SetFrameStrata then
-		local baseStrata = (st.barGroup and st.barGroup.GetFrameStrata and st.barGroup:GetFrameStrata()) or (st.frame and st.frame.GetFrameStrata and st.frame:GetFrameStrata()) or "MEDIUM"
-		st.power:SetFrameStrata(powerDetached and elevateStrata(baseStrata) or baseStrata)
+		local baseStrata = (st.frame and st.frame.GetFrameStrata and st.frame:GetFrameStrata()) or "MEDIUM"
+		st.power:SetFrameStrata(baseStrata)
+	end
+	if st.power.SetFrameLevel then
+		if powerDetached then
+			local baseLevel = (st.frame and st.frame.GetFrameLevel and st.frame:GetFrameLevel()) or 0
+			local levelOffset = pcfg.detachedFrameLevelOffset
+			if levelOffset == nil then levelOffset = powerDef.detachedFrameLevelOffset end
+			levelOffset = levelOffset or 0
+			st.power:SetFrameLevel(max(0, baseLevel + levelOffset))
+		elseif st._powerBaseFrameLevel then
+			st.power:SetFrameLevel(st._powerBaseFrameLevel)
+		end
 	end
 	if st.powerGroup and st.powerGroup.SetFrameStrata then
 		local pStrata = st.power.GetFrameStrata and st.power:GetFrameStrata() or st.frame:GetFrameStrata()
