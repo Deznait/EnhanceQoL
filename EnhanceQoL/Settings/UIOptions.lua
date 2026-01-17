@@ -128,9 +128,7 @@ local function buildBorderDropdown()
 	if LSM and LSM.HashTable then
 		local entries = {}
 		for name, path in pairs(LSM:HashTable("border") or {}) do
-			if type(path) == "string" and path ~= "" then
-				entries[#entries + 1] = { name = tostring(name), path = path }
-			end
+			if type(path) == "string" and path ~= "" then entries[#entries + 1] = { name = tostring(name), path = path } end
 		end
 		table.sort(entries, function(a, b) return a.name < b.name end)
 		for _, entry in ipairs(entries) do

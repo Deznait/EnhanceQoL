@@ -50,6 +50,7 @@ local ApplyFrameVisibilityConfig = addon.functions and addon.functions.ApplyFram
 
 local shouldShowSampleCast
 local setSampleCast
+local shouldHideClassificationText
 
 local UNIT = {
 	PLAYER = "player",
@@ -270,6 +271,7 @@ local defaults = {
 			hideLevelAtMax = false,
 			classificationIcon = {
 				enabled = false,
+				hideText = false,
 				size = 16,
 				offset = { x = -4, y = 0 },
 			},
@@ -2616,8 +2618,9 @@ local function updateHealth(cfg, unit)
 	local delimiter2 = UFHelper.getTextDelimiterSecondary(hc, defH, delimiter)
 	local delimiter3 = UFHelper.getTextDelimiterTertiary(hc, defH, delimiter, delimiter2)
 	local hidePercentSymbol = hc.hidePercentSymbol == true
+	local hideClassText = shouldHideClassificationText(cfg, unit)
 	local levelText
-	if UFHelper.textModeUsesLevel(leftMode) or UFHelper.textModeUsesLevel(centerMode) or UFHelper.textModeUsesLevel(rightMode) then levelText = UFHelper.getUnitLevelText(unit) end
+	if UFHelper.textModeUsesLevel(leftMode) or UFHelper.textModeUsesLevel(centerMode) or UFHelper.textModeUsesLevel(rightMode) then levelText = UFHelper.getUnitLevelText(unit, nil, hideClassText) end
 	if st.healthTextLeft then
 		if leftMode == "NONE" then
 			st.healthTextLeft:SetText("")
@@ -2655,8 +2658,9 @@ local function updatePower(cfg, unit)
 	local leftMode = pcfg.textLeft or "PERCENT"
 	local centerMode = pcfg.textCenter or "NONE"
 	local rightMode = pcfg.textRight or "CURMAX"
+	local hideClassText = shouldHideClassificationText(cfg, unit)
 	local levelText
-	if UFHelper.textModeUsesLevel(leftMode) or UFHelper.textModeUsesLevel(centerMode) or UFHelper.textModeUsesLevel(rightMode) then levelText = UFHelper.getUnitLevelText(unit) end
+	if UFHelper.textModeUsesLevel(leftMode) or UFHelper.textModeUsesLevel(centerMode) or UFHelper.textModeUsesLevel(rightMode) then levelText = UFHelper.getUnitLevelText(unit, nil, hideClassText) end
 	if pcfg.enabled == false then
 		bar:Hide()
 		bar:SetValue(0)
@@ -2853,6 +2857,13 @@ local function shouldShowLevel(scfg, unit)
 		if addon.variables.isMaxLevel[level] then return false end
 	end
 	return true
+end
+
+shouldHideClassificationText = function(cfg, unit)
+	if unit == UNIT.PLAYER or not cfg then return false end
+	local scfg = cfg.status or {}
+	local icfg = scfg.classificationIcon or {}
+	return icfg.enabled == true and icfg.hideText == true
 end
 
 local function updateStatus(cfg, unit)
@@ -3663,6 +3674,7 @@ local function updateNameAndLevel(cfg, unit, levelOverride)
 	if st.levelText then
 		local scfg = cfg.status or {}
 		local enabled = shouldShowLevel(scfg, unit)
+		local hideClassText = shouldHideClassificationText(cfg, unit)
 		st.levelText:SetShown(enabled)
 		if enabled then
 			local lc
@@ -3677,7 +3689,7 @@ local function updateNameAndLevel(cfg, unit, levelOverride)
 					lc = { 1, 0.85, 0, 1 }
 				end
 			end
-			local levelText = UFHelper.getUnitLevelText(unit, levelOverride)
+			local levelText = UFHelper.getUnitLevelText(unit, levelOverride, hideClassText)
 			st.levelText:SetText(levelText)
 			st.levelText:SetTextColor(lc[1] or 1, lc[2] or 0.85, lc[3] or 0, lc[4] or 1)
 		end
@@ -3876,6 +3888,7 @@ local function applyBossEditSample(idx, cfg)
 	local hc = cfg.health or defH or {}
 	local pcfg = cfg.power or defP or {}
 	local cdef = cfg.cast or def.cast or {}
+	local hideClassText = shouldHideClassificationText(cfg, unit)
 
 	local cur = UnitHealth("player") or 1
 	local maxv = UnitHealthMax("player") or cur or 1
@@ -3892,7 +3905,9 @@ local function applyBossEditSample(idx, cfg)
 	local delimiter3 = UFHelper.getTextDelimiterTertiary(hc, defH, delimiter, delimiter2)
 	local hidePercentSymbol = hc.hidePercentSymbol == true
 	local levelText
-	if UFHelper.textModeUsesLevel(leftMode) or UFHelper.textModeUsesLevel(centerMode) or UFHelper.textModeUsesLevel(rightMode) then levelText = UFHelper.getUnitLevelText("player") end
+	if UFHelper.textModeUsesLevel(leftMode) or UFHelper.textModeUsesLevel(centerMode) or UFHelper.textModeUsesLevel(rightMode) then
+		levelText = UFHelper.getUnitLevelText("player", nil, hideClassText)
+	end
 	if st.healthTextLeft then
 		if leftMode == "NONE" then
 			st.healthTextLeft:SetText("")
@@ -3936,7 +3951,7 @@ local function applyBossEditSample(idx, cfg)
 			local pHidePercentSymbol = pcfg.hidePercentSymbol == true
 			local pLevelText = levelText
 			if not pLevelText and (UFHelper.textModeUsesLevel(pLeftMode) or UFHelper.textModeUsesLevel(pCenterMode) or UFHelper.textModeUsesLevel(pRightMode)) then
-				pLevelText = UFHelper.getUnitLevelText("player")
+				pLevelText = UFHelper.getUnitLevelText("player", nil, hideClassText)
 			end
 			if st.powerTextLeft then
 				if pLeftMode == "NONE" then

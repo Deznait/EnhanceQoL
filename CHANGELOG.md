@@ -18,6 +18,7 @@
 - UF Plus: Custom class colors for unit frames.
 - UF Plus: Secondary/tertiary delimiter options for health/power texts.
 - UF Plus: Status line option to show elite/rare/rareelite icons on non-player frames.
+- UF Plus: Option to hide elite/rare text indicators when the classification icon is enabled.
 - UF Plus: Shaman Maelstrom Weapon class resource bar with animated swirl/proc visuals (respects UF Player + Class Resource settings).
 - Inventory: Midnight Season 1 catalyst charge display on the character frame.
 - Gear & Upgrades: Gem Helper tracker under the character frame (shows equipped gem types and missing highlights).
@@ -210,7 +211,6 @@
 ### ✨ Added
 
 - **UF Plus**
-
   - New text modes (Max, Max/Percent) + optional percent symbol hiding.
   - New unit frame text modes (Cur/Max + percent combos) + separator dropdown.
   - Target aura anchor now supports LEFT/RIGHT + growth direction combinations.
@@ -228,30 +228,25 @@
   - Click Casting Addon support (e.g. Clique).
 
 - **Mover**
-
   - Position persistence mode (close / logout / reset).
   - Reset scale + position to defaults with scale modifier + right-click on a handle.
 
 - **Data Panels**
-
   - Difficulty stream now opens a difficulty selection menu on click.
   - New Mythic+ Key stream with owned-key display.
   - New Loot Spec stream with quick menu for loot spec + active spec.
   - New Coordinates stream for persistent player coordinates.
 
 - **Action Bars**
-
   - Option to show all action bars when hovering any mouseover bar.
 
 - **Chat / Social / History**
-
   - Social: Community chat privacy toggle (Always / Session) + quick eye reveal + overlay hint.
   - Chat History: optional restore of recent messages on login.
   - Chat: toggle to bump the default chat window history to 2000 lines.
   - Chat: optional item level (and equip slot) appended to item links.
 
 - **Bags**
-
   - New filter toggle to show upgrades only.
 
 - **Misc**
@@ -262,7 +257,6 @@
 ### 🔄 Changed
 
 - **UF Plus / Resource Bars**
-
   - Resting indicator settings merged into the Unit status section.
   - Sample cast previews now auto-show in Edit Mode.
   - Name/Level font sizes are now configurable independently in the status line.
@@ -270,16 +264,13 @@
   - Castbar backdrop now uses the Blizzard default background when the default texture is selected.
 
 - **Mover**
-
   - Merged Quest and Gossip Frame.
 
 - **Data Panels**
-
   - Talent stream now offers a loadout switch menu.
   - Durability stream tooltip expanded with per-item details and repair info.
 
 - **Chat**
-
   - Item/currency icon option now applies to all item links.
   - “DELETE” for the delete-item dialog now also removes focus of the editbox (for addons like DialogKey).
 
@@ -292,7 +283,6 @@
 ### 🐛 Fixed
 
 - **UF Plus / Resource Bars**
-
   - Resource Bars: anchor changes made via dropdowns/sliders now sync to Edit Mode layouts (positions persist after reload).
   - Focus frame health now updates on unit health events.
   - Defaults are now properly used as fallback.
@@ -306,11 +296,9 @@
   - Class resources (e.g., combo points) now stay above unit frame borders after form swaps.
 
 - **Mover**
-
   - Fixed overlapping issues with some UI elements.
 
 - **Action Bars**
-
   - Fade amount slider now applies instantly without animation (reduces lag).
   - Mouseover performance: coalesced refreshes and reduced fade restarts.
 

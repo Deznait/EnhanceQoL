@@ -2576,7 +2576,7 @@ local function buildUnitSettings(unit)
 	local function isLevelEnabled() return getValue(unit, { "status", "levelEnabled" }, statusDef.levelEnabled ~= false) ~= false end
 	local function isUnitStatusEnabled() return getValue(unit, { "status", "unitStatus", "enabled" }, (statusDef.unitStatus and statusDef.unitStatus.enabled) == true) == true end
 	local function isStatusTextEnabled() return isNameEnabled() or isLevelEnabled() or isUnitStatusEnabled() end
-	local classIconDef = statusDef.classificationIcon or { enabled = false, size = 16, offset = { x = -4, y = 0 } }
+	local classIconDef = statusDef.classificationIcon or { enabled = false, hideText = false, size = 16, offset = { x = -4, y = 0 } }
 	local function isClassificationIconEnabled() return getValue(unit, { "status", "classificationIcon", "enabled" }, classIconDef.enabled == true) == true end
 
 	local showNameToggle = checkbox(L["UFStatusEnable"] or "Show status line", isNameEnabled, function(val)
@@ -2807,6 +2807,20 @@ local function buildUnitSettings(unit)
 			refresh()
 			refreshSettingsUI()
 		end, classIconDef.enabled == true, "status")
+
+		local hideClassTextToggle = checkbox(
+			L["UFClassificationIconHideText"] or "Hide elite/rare text indicators",
+			function() return getValue(unit, { "status", "classificationIcon", "hideText" }, classIconDef.hideText == true) == true end,
+			function(val)
+				setValue(unit, { "status", "classificationIcon", "hideText" }, val and true or false)
+				refresh()
+			end,
+			classIconDef.hideText == true,
+			"status"
+		)
+		hideClassTextToggle.isEnabled = isClassificationIconEnabled
+		hideClassTextToggle.isShown = isClassificationIconEnabled
+		list[#list + 1] = hideClassTextToggle
 
 		local classIconSize = slider(L["Icon size"] or "Icon size", 8, 40, 1, function() return getValue(unit, { "status", "classificationIcon", "size" }, classIconDef.size or 16) end, function(val)
 			local v = val or classIconDef.size or 16

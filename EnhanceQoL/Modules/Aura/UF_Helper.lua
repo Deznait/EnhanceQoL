@@ -1052,7 +1052,7 @@ end
 
 function H.textModeUsesLevel(mode) return type(mode) == "string" and mode:find("LEVEL", 1, true) ~= nil end
 
-function H.getUnitLevelText(unit, levelOverride)
+function H.getUnitLevelText(unit, levelOverride, hideClassificationText)
 	if not unit then return "??" end
 	local rawLevel = tonumber(levelOverride) or UnitLevel(unit) or 0
 	local levelText = rawLevel > 0 and tostring(rawLevel) or "??"
@@ -1060,11 +1060,11 @@ function H.getUnitLevelText(unit, levelOverride)
 	if classification == "worldboss" then
 		levelText = "??"
 	elseif classification == "elite" then
-		levelText = levelText .. "+"
+		if not hideClassificationText then levelText = levelText .. "+" end
 	elseif classification == "rareelite" then
-		levelText = levelText .. " R+"
+		if not hideClassificationText then levelText = levelText .. " R+" end
 	elseif classification == "rare" then
-		levelText = levelText .. " R"
+		if not hideClassificationText then levelText = levelText .. " R" end
 	elseif classification == "trivial" or classification == "minus" then
 		levelText = levelText .. "-"
 	end
