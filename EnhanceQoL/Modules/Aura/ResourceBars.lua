@@ -1175,6 +1175,7 @@ local function configureSpecialTexture(bar, pType, cfg)
 		local shouldNormalize = true
 		if cfg then
 			if cfg.useBarColor == true then shouldNormalize = false end
+			if cfg.useClassColor == true then shouldNormalize = false end
 			if cfg.useMaxColor == true and bar._usingMaxColor then shouldNormalize = false end
 		end
 		if shouldNormalize then
@@ -1574,13 +1575,13 @@ local function applyBarFillColor(bar, cfg, pType)
 		local col = getStaggerStateColor(percent)
 		r, g, b = col.r or 1, col.g or 1, col.b or 1
 		a = col.a or (cfg.barColor and cfg.barColor[4]) or 1
-	elseif pType == "HEALTH" and cfg.useClassColor == true then
-		r, g, b, a = getPlayerClassColor()
-		a = a or (cfg.barColor and cfg.barColor[4]) or 1
-		shouldDesaturate = true
 	elseif cfg.useBarColor then
 		local color = cfg.barColor or RB.WHITE
 		r, g, b, a = color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 1
+	elseif cfg.useClassColor == true then
+		r, g, b, a = getPlayerClassColor()
+		a = a or (cfg.barColor and cfg.barColor[4]) or 1
+		if pType == "HEALTH" then shouldDesaturate = true end
 	else
 		r, g, b = getPowerBarColor(pType or "MANA")
 		a = (cfg.barColor and cfg.barColor[4]) or 1
@@ -2948,6 +2949,9 @@ function updatePowerBar(type, runeSlot)
 		if cfg.useBarColor then
 			local custom = cfg.barColor or RB.WHITE
 			bar._baseColor[1], bar._baseColor[2], bar._baseColor[3], bar._baseColor[4] = custom[1] or 1, custom[2] or 1, custom[3] or 1, custom[4] or 1
+		elseif cfg.useClassColor == true then
+			local cr, cg, cb, ca = getPlayerClassColor()
+			bar._baseColor[1], bar._baseColor[2], bar._baseColor[3], bar._baseColor[4] = cr, cg, cb, ca or (cfg.barColor and cfg.barColor[4]) or 1
 		end
 
 		local targetR, targetG, targetB, targetA = bar._baseColor[1] or 1, bar._baseColor[2] or 1, bar._baseColor[3] or 1, bar._baseColor[4] or 1
@@ -3077,6 +3081,9 @@ function updatePowerBar(type, runeSlot)
 	if cfg.useBarColor then
 		local custom = cfg.barColor or RB.WHITE
 		bar._baseColor[1], bar._baseColor[2], bar._baseColor[3], bar._baseColor[4] = custom[1] or 1, custom[2] or 1, custom[3] or 1, custom[4] or 1
+	elseif cfg.useClassColor == true then
+		local cr, cg, cb, ca = getPlayerClassColor()
+		bar._baseColor[1], bar._baseColor[2], bar._baseColor[3], bar._baseColor[4] = cr, cg, cb, ca or (cfg.barColor and cfg.barColor[4]) or 1
 	elseif cfgDef and cfgDef.defaultColor then
 		local c = cfgDef.defaultColor
 		bar._baseColor[1], bar._baseColor[2], bar._baseColor[3], bar._baseColor[4] = c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1
@@ -4528,6 +4535,7 @@ function ResourceBars.Refresh()
 				applyTextPosition(bar, cfg, 3, 0)
 			end
 			if pType == "RUNES" then layoutRunes(bar) end
+			if pType ~= "RUNES" then updatePowerBar(pType) end
 		end
 	end
 	if ResourceBars and ResourceBars.SyncRelativeFrameWidths then ResourceBars.SyncRelativeFrameWidths() end

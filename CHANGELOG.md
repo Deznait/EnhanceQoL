@@ -33,6 +33,7 @@
 ### 🐛 Fixed
 
 - Resource Bars: Font dropdown selection no longer resets on click (fonts are selectable again).
+- Resource Bars: Class color and max-color overrides now apply correctly to resource bars.
 - DataPanels: Volume stream right-click no longer requires the context menu modifier.
 - Talents: Filter out the internal TalentLoadoutManager placeholder loadout in selection lists.
 
