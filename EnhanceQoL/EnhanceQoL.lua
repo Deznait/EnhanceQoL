@@ -4019,6 +4019,10 @@ local function initUI()
 			removeButtonSink()
 
 			firstStartButtonSink(0)
+			C_Timer.After(2, function()
+				addon.functions.gatherMinimapButtons()
+				addon.functions.LayoutButtons()
+			end)
 			local buttonBag = CreateFrame("Frame", addonName .. "_ButtonSink", UIParent, "BackdropTemplate")
 			buttonBag:SetSize(150, 150)
 

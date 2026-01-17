@@ -915,14 +915,22 @@ local function buildUnitSettings(unit)
 	list[#list + 1] = detachedBorderOffset
 
 	local powerDefaults = def.power or {}
-	local detachedPowerLevelOffset = slider(L["UFDetachedPowerLevelOffset"] or "Detached power bar level offset", 0, 50, 1, function()
-		return getValue(unit, { "power", "detachedFrameLevelOffset" }, powerDefaults.detachedFrameLevelOffset or 5)
-	end, function(val)
-		debounced(unit .. "_detachedPowerLevelOffset", function()
-			setValue(unit, { "power", "detachedFrameLevelOffset" }, val or powerDefaults.detachedFrameLevelOffset or 5)
-			refresh()
-		end)
-	end, powerDefaults.detachedFrameLevelOffset or 5, "frame", true)
+	local detachedPowerLevelOffset = slider(
+		L["UFDetachedPowerLevelOffset"] or "Detached power bar level offset",
+		0,
+		50,
+		1,
+		function() return getValue(unit, { "power", "detachedFrameLevelOffset" }, powerDefaults.detachedFrameLevelOffset or 5) end,
+		function(val)
+			debounced(unit .. "_detachedPowerLevelOffset", function()
+				setValue(unit, { "power", "detachedFrameLevelOffset" }, val or powerDefaults.detachedFrameLevelOffset or 5)
+				refresh()
+			end)
+		end,
+		powerDefaults.detachedFrameLevelOffset or 5,
+		"frame",
+		true
+	)
 	list[#list + 1] = detachedPowerLevelOffset
 
 	local highlightDef = def.highlight or {}
@@ -2195,7 +2203,7 @@ local function buildUnitSettings(unit)
 		list[#list + 1] = roleIconSize
 
 		local roleOffsetX = slider(
-			L["Offset X"] or "Offset X",
+			L["UFRoleIndicatorOffsetX"] or "Role indicator X offset",
 			-OFFSET_RANGE,
 			OFFSET_RANGE,
 			1,
@@ -2212,7 +2220,7 @@ local function buildUnitSettings(unit)
 		list[#list + 1] = roleOffsetX
 
 		local roleOffsetY = slider(
-			L["Offset Y"] or "Offset Y",
+			L["UFRoleIndicatorOffsetY"] or "Role indicator Y offset",
 			-OFFSET_RANGE,
 			OFFSET_RANGE,
 			1,
@@ -2571,39 +2579,12 @@ local function buildUnitSettings(unit)
 	local classIconDef = statusDef.classificationIcon or { enabled = false, size = 16, offset = { x = -4, y = 0 } }
 	local function isClassificationIconEnabled() return getValue(unit, { "status", "classificationIcon", "enabled" }, classIconDef.enabled == true) == true end
 
-	list[#list + 1] = checkbox(L["UFStatusEnable"] or "Show status line", isNameEnabled, function(val)
+	local showNameToggle = checkbox(L["UFStatusEnable"] or "Show status line", isNameEnabled, function(val)
 		setValue(unit, { "status", "enabled" }, val and true or false)
 		refresh()
 		refreshSettingsUI()
 	end, statusDef.enabled ~= false, "status")
-
-	local showLevelToggle = checkbox(L["UFShowLevel"] or "Show level", function() return getValue(unit, { "status", "levelEnabled" }, statusDef.levelEnabled ~= false) end, function(val)
-		setValue(unit, { "status", "levelEnabled" }, val and true or false)
-		refresh()
-		refreshSettingsUI()
-	end, statusDef.levelEnabled ~= false, "status")
-	list[#list + 1] = showLevelToggle
-
-	if not isPlayer then
-		list[#list + 1] = checkbox(L["UFShowClassificationIcon"] or "Show elite/rare icon", isClassificationIconEnabled, function(val)
-			setValue(unit, { "status", "classificationIcon", "enabled" }, val and true or false)
-			refresh()
-			refreshSettingsUI()
-		end, classIconDef.enabled == true, "status")
-	end
-
-	local hideLevelAtMaxToggle = checkbox(
-		L["UFHideLevelAtMax"] or "Hide at max level",
-		function() return getValue(unit, { "status", "hideLevelAtMax" }, statusDef.hideLevelAtMax == true) end,
-		function(val)
-			setValue(unit, { "status", "hideLevelAtMax" }, val and true or false)
-			refresh()
-		end,
-		statusDef.hideLevelAtMax == true,
-		"status"
-	)
-	hideLevelAtMaxToggle.isEnabled = isLevelEnabled
-	list[#list + 1] = hideLevelAtMaxToggle
+	list[#list + 1] = showNameToggle
 
 	if not isBoss then
 		local nameColorSetting = checkboxColor({
@@ -2630,55 +2611,7 @@ local function buildUnitSettings(unit)
 		})
 		nameColorSetting.isEnabled = isNameEnabled
 		list[#list + 1] = nameColorSetting
-
-		local levelColorSetting = checkboxColor({
-			name = L["UFLevelColor"] or "Custom level color",
-			parentId = "status",
-			defaultChecked = (statusDef.levelColorMode or "CLASS") ~= "CLASS",
-			isChecked = function() return getValue(unit, { "status", "levelColorMode" }, statusDef.levelColorMode or "CLASS") ~= "CLASS" end,
-			onChecked = function(val)
-				setValue(unit, { "status", "levelColorMode" }, val and "CUSTOM" or "CLASS")
-				refresh()
-			end,
-			getColor = function() return toRGBA(getValue(unit, { "status", "levelColor" }, statusDef.levelColor or { 1, 0.85, 0, 1 }), statusDef.levelColor or { 1, 0.85, 0, 1 }) end,
-			onColor = function(color)
-				setColor(unit, { "status", "levelColor" }, color.r, color.g, color.b, color.a)
-				setValue(unit, { "status", "levelColorMode" }, "CUSTOM")
-				refresh()
-			end,
-			colorDefault = {
-				r = (statusDef.levelColor and statusDef.levelColor[1]) or 1,
-				g = (statusDef.levelColor and statusDef.levelColor[2]) or 0.85,
-				b = (statusDef.levelColor and statusDef.levelColor[3]) or 0,
-				a = (statusDef.levelColor and statusDef.levelColor[4]) or 1,
-			},
-		})
-		levelColorSetting.isEnabled = isLevelEnabled
-		list[#list + 1] = levelColorSetting
 	end
-
-	if #fontOptions() > 0 then
-		local statusFont = checkboxDropdown(L["Font"] or "Font", fontOptions, function() return getValue(unit, { "status", "font" }, statusDef.font or defaultFontPath()) end, function(val)
-			setValue(unit, { "status", "font" }, val)
-			refreshSelf()
-		end, statusDef.font or defaultFontPath(), "status")
-		statusFont.isEnabled = isStatusTextEnabled
-		list[#list + 1] = statusFont
-	end
-
-	local statusFontOutline = checkboxDropdown(
-		L["Font outline"] or "Font outline",
-		outlineOptions,
-		function() return getValue(unit, { "status", "fontOutline" }, statusDef.fontOutline or "OUTLINE") end,
-		function(val)
-			setValue(unit, { "status", "fontOutline" }, val)
-			refreshSelf()
-		end,
-		statusDef.fontOutline or "OUTLINE",
-		"status"
-	)
-	statusFontOutline.isEnabled = isStatusTextEnabled
-	list[#list + 1] = statusFontOutline
 
 	local nameAnchorSetting = radioDropdown(
 		L["UFNameAnchor"] or "Name anchor",
@@ -2754,6 +2687,53 @@ local function buildUnitSettings(unit)
 	nameOffsetYSetting.isEnabled = isNameEnabled
 	list[#list + 1] = nameOffsetYSetting
 
+	local showLevelToggle = checkbox(L["UFShowLevel"] or "Show level", function() return getValue(unit, { "status", "levelEnabled" }, statusDef.levelEnabled ~= false) end, function(val)
+		setValue(unit, { "status", "levelEnabled" }, val and true or false)
+		refresh()
+		refreshSettingsUI()
+	end, statusDef.levelEnabled ~= false, "status")
+	list[#list + 1] = showLevelToggle
+
+	local hideLevelAtMaxToggle = checkbox(
+		L["UFHideLevelAtMax"] or "Hide at max level",
+		function() return getValue(unit, { "status", "hideLevelAtMax" }, statusDef.hideLevelAtMax == true) end,
+		function(val)
+			setValue(unit, { "status", "hideLevelAtMax" }, val and true or false)
+			refresh()
+		end,
+		statusDef.hideLevelAtMax == true,
+		"status"
+	)
+	hideLevelAtMaxToggle.isEnabled = isLevelEnabled
+	list[#list + 1] = hideLevelAtMaxToggle
+
+	if not isBoss then
+		local levelColorSetting = checkboxColor({
+			name = L["UFLevelColor"] or "Custom level color",
+			parentId = "status",
+			defaultChecked = (statusDef.levelColorMode or "CLASS") ~= "CLASS",
+			isChecked = function() return getValue(unit, { "status", "levelColorMode" }, statusDef.levelColorMode or "CLASS") ~= "CLASS" end,
+			onChecked = function(val)
+				setValue(unit, { "status", "levelColorMode" }, val and "CUSTOM" or "CLASS")
+				refresh()
+			end,
+			getColor = function() return toRGBA(getValue(unit, { "status", "levelColor" }, statusDef.levelColor or { 1, 0.85, 0, 1 }), statusDef.levelColor or { 1, 0.85, 0, 1 }) end,
+			onColor = function(color)
+				setColor(unit, { "status", "levelColor" }, color.r, color.g, color.b, color.a)
+				setValue(unit, { "status", "levelColorMode" }, "CUSTOM")
+				refresh()
+			end,
+			colorDefault = {
+				r = (statusDef.levelColor and statusDef.levelColor[1]) or 1,
+				g = (statusDef.levelColor and statusDef.levelColor[2]) or 0.85,
+				b = (statusDef.levelColor and statusDef.levelColor[3]) or 0,
+				a = (statusDef.levelColor and statusDef.levelColor[4]) or 1,
+			},
+		})
+		levelColorSetting.isEnabled = isLevelEnabled
+		list[#list + 1] = levelColorSetting
+	end
+
 	local levelAnchorSetting = radioDropdown(
 		L["UFLevelAnchor"] or "Level anchor",
 		anchorOptions,
@@ -2822,6 +2802,12 @@ local function buildUnitSettings(unit)
 	list[#list + 1] = levelOffsetYSetting
 
 	if not isPlayer then
+		list[#list + 1] = checkbox(L["UFShowClassificationIcon"] or "Show elite/rare icon", isClassificationIconEnabled, function(val)
+			setValue(unit, { "status", "classificationIcon", "enabled" }, val and true or false)
+			refresh()
+			refreshSettingsUI()
+		end, classIconDef.enabled == true, "status")
+
 		local classIconSize = slider(L["Icon size"] or "Icon size", 8, 40, 1, function() return getValue(unit, { "status", "classificationIcon", "size" }, classIconDef.size or 16) end, function(val)
 			local v = val or classIconDef.size or 16
 			setValue(unit, { "status", "classificationIcon", "size" }, v)
@@ -2832,7 +2818,7 @@ local function buildUnitSettings(unit)
 		list[#list + 1] = classIconSize
 
 		local classIconOffsetX = slider(
-			L["Offset X"] or "Offset X",
+			L["UFClassificationIconOffsetX"] or "Elite/rare icon X offset",
 			-OFFSET_RANGE,
 			OFFSET_RANGE,
 			1,
@@ -2852,7 +2838,7 @@ local function buildUnitSettings(unit)
 		list[#list + 1] = classIconOffsetX
 
 		local classIconOffsetY = slider(
-			L["Offset Y"] or "Offset Y",
+			L["UFClassificationIconOffsetY"] or "Elite/rare icon Y offset",
 			-OFFSET_RANGE,
 			OFFSET_RANGE,
 			1,
@@ -2871,6 +2857,29 @@ local function buildUnitSettings(unit)
 		classIconOffsetY.isShown = isClassificationIconEnabled
 		list[#list + 1] = classIconOffsetY
 	end
+
+	if #fontOptions() > 0 then
+		local statusFont = checkboxDropdown(L["Font"] or "Font", fontOptions, function() return getValue(unit, { "status", "font" }, statusDef.font or defaultFontPath()) end, function(val)
+			setValue(unit, { "status", "font" }, val)
+			refreshSelf()
+		end, statusDef.font or defaultFontPath(), "status")
+		statusFont.isEnabled = isStatusTextEnabled
+		list[#list + 1] = statusFont
+	end
+
+	local statusFontOutline = checkboxDropdown(
+		L["Font outline"] or "Font outline",
+		outlineOptions,
+		function() return getValue(unit, { "status", "fontOutline" }, statusDef.fontOutline or "OUTLINE") end,
+		function(val)
+			setValue(unit, { "status", "fontOutline" }, val)
+			refreshSelf()
+		end,
+		statusDef.fontOutline or "OUTLINE",
+		"status"
+	)
+	statusFontOutline.isEnabled = isStatusTextEnabled
+	list[#list + 1] = statusFontOutline
 
 	local usDef = statusDef.unitStatus or {}
 

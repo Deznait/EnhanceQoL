@@ -900,3 +900,59 @@ addon.Query.frame = eventFrame
 -- 	if not actionButton.GetSpellID and not actionButton.cooldownID then return end
 -- 	ActionButtonSpellAlertManager:HideAlert(actionButton)
 -- end)
+
+-- local anchor = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+-- anchor:SetSize(32, 32)
+-- anchor:SetBackdrop({ bgFile = "Interface/Tooltips/UI-Tooltip-Background" })
+-- anchor:SetBackdropColor(0, 0, 0, 0.6)
+-- anchor:SetMovable(true)
+-- anchor:EnableMouse(true)
+-- anchor:RegisterForDrag("LeftButton")
+-- anchor:SetPoint("CENTER", UIParent, "CENTER", 0, 200)
+
+-- local frame = CreateFrame("Frame", nil, anchor)
+-- frame:SetAllPoints(anchor)
+-- frame:SetSize(32, 32)
+-- frame:SetFrameStrata("MEDIUM")
+-- frame:Show()
+
+-- local cd = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
+-- cd:SetAllPoints(frame)
+-- cd:SetDrawEdge(false)
+-- cd:SetHideCountdownNumbers(false)
+-- frame.cd = cd
+
+-- local tex = frame:CreateTexture(nil, "ARTWORK")
+-- tex:SetAllPoints(frame)
+-- tex:SetTexture(572025)
+
+-- local overlay = CreateFrame("Frame", nil, frame)
+-- overlay:SetAllPoints(frame)
+-- overlay:SetFrameLevel(cd:GetFrameLevel() + 5)
+
+-- local count = overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+-- count:SetFont(addon.variables.defaultFont, 16, "OUTLINE")
+-- count:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, 1)
+-- count:SetShadowOffset(1, -1)
+-- count:SetShadowColor(0, 0, 0, 1)
+-- frame.count = count
+
+-- local charges = overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+-- charges:SetFont(addon.variables.defaultFont, 16, "OUTLINE")
+-- charges:SetPoint("CENTER", frame, "TOP", 0, -1)
+-- charges:SetShadowOffset(1, -1)
+-- charges:SetShadowColor(0, 0, 0, 1)
+-- frame.charges = charges
+
+-- frame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+-- frame:RegisterEvent("PLAYER_LOGIN")
+-- frame:SetScript("OnEvent", function(_, event, spellId)
+-- 	if event == "SPELL_UPDATE_COOLDOWN" and spellId == 102342 then
+-- 		local durObj = C_Spell.GetSpellCooldownDuration(spellId)
+-- 		cd:SetCooldownFromDurationObject(durObj)
+-- 	end
+-- 	if event == "PLAYER_LOGIN" then
+-- 		local durObj = C_Spell.GetSpellCooldownDuration(102342)
+-- 		cd:SetCooldownFromDurationObject(durObj)
+-- 	end
+-- end)

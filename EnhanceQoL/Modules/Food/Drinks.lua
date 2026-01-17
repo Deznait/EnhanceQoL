@@ -581,6 +581,7 @@ table.sort(addon.Drinks.drinkList, function(a, b) return a.mana > b.mana end)
 -- Curated list of mana potions for use in the Drink macro (combat only)
 -- Order reflects preference (highest first)
 addon.Drinks.manaPotions = {
+	{ key = "LightfusedManaPotion", id = 241300, requiredLevel = 81, mana = 17466 },
 	{ key = "AlgariManaPotion3", id = 212241, requiredLevel = 71, mana = 270000 },
 	{ key = "AlgariManaPotion2", id = 212240, requiredLevel = 71, mana = 234782 },
 	{ key = "AlgariManaPotion1", id = 212239, requiredLevel = 71, mana = 204158 },
