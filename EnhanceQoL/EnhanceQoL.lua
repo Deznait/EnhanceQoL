@@ -2300,6 +2300,10 @@ local function initActionBars()
 	addon.functions.InitDBValue("actionBarHotkeyFontFace", addon.variables.defaultFont)
 	addon.functions.InitDBValue("actionBarHotkeyFontSize", 12)
 	addon.functions.InitDBValue("actionBarHotkeyFontOutline", "OUTLINE")
+	addon.functions.InitDBValue("actionBarCountFontOverride", false)
+	addon.functions.InitDBValue("actionBarCountFontFace", addon.variables.defaultFont)
+	addon.functions.InitDBValue("actionBarCountFontSize", 12)
+	addon.functions.InitDBValue("actionBarCountFontOutline", "OUTLINE")
 	addon.functions.InitDBValue("actionBarShortHotkeys", false)
 	addon.functions.InitDBValue("actionBarHiddenHotkeys", {})
 	if type(addon.db.actionBarHiddenHotkeys) ~= "table" then addon.db.actionBarHiddenHotkeys = {} end
@@ -2313,6 +2317,7 @@ local function initActionBars()
 	end
 	addon.db.actionBarMacroFontSize = clampFontSize(addon.db.actionBarMacroFontSize)
 	addon.db.actionBarHotkeyFontSize = clampFontSize(addon.db.actionBarHotkeyFontSize)
+	addon.db.actionBarCountFontSize = clampFontSize(addon.db.actionBarCountFontSize)
 	addon.db.actionBarFadeStrength = GetActionBarFadeStrength()
 	for _, cbData in ipairs(addon.variables.actionBarNames) do
 		if cbData.var and cbData.name then
@@ -2339,6 +2344,7 @@ local function initActionBars()
 	end
 	RefreshAllActionBarAnchors()
 	if ActionBarLabels and ActionBarLabels.RefreshAllHotkeyStyles then ActionBarLabels.RefreshAllHotkeyStyles() end
+	if ActionBarLabels and ActionBarLabels.RefreshAllCountStyles then ActionBarLabels.RefreshAllCountStyles() end
 	UpdateAssistedCombatFrameHiding()
 	if ActionBarLabels and ActionBarLabels.RefreshActionButtonBorders then ActionBarLabels.RefreshActionButtonBorders() end
 	ApplyExtraActionArtworkSetting()

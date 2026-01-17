@@ -39,7 +39,7 @@
 ### Action Bars & Mouse
 - **Mouseover action bars** – show each bar only on mouseover.
 - **Full button range coloring** – tint the entire action button when out of range.
-- **Customize button labels** – choose individual fonts, sizes, and outlines for macro names and keybind text.
+- **Customize button labels** – choose individual fonts, sizes, and outlines for macro names, keybind text, and charge counts.
 - **Shorten keybind text** – display compact abbreviations such as **SM3** for **Shift + Mouse Button 3**.
 - **Hide keybinds per bar** – toggle keybind visibility independently for every action bar.
 

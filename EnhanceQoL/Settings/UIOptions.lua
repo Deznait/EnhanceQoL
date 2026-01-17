@@ -610,6 +610,83 @@ local function createLabelControls(category, expandable)
 		parentSection = expandable,
 	})
 
+	local countOverride = addon.functions.SettingsCreateCheckbox(category, {
+		var = "actionBarCountFontOverride",
+		text = L["actionBarCountFontOverride"] or "Change charge/stack font",
+		func = function(value)
+			addon.db.actionBarCountFontOverride = value and true or false
+			if ActionBarLabels and ActionBarLabels.RefreshAllCountStyles then ActionBarLabels.RefreshAllCountStyles() end
+		end,
+		parentSection = expandable,
+	})
+
+	local function countParentCheck() return countOverride.setting and countOverride.setting:GetValue() == true end
+
+	addon.functions.SettingsCreateScrollDropdown(category, {
+		var = "actionBarCountFontFace",
+		text = L["actionBarCountFontLabel"] or "Charge/stack font",
+		listFunc = buildFontDropdown,
+		order = fontOrder,
+		default = addon.variables.defaultFont,
+		get = function()
+			local current = addon.db.actionBarCountFontFace or addon.variables.defaultFont
+			local list = buildFontDropdown()
+			if not list[current] then current = addon.variables.defaultFont end
+			return current
+		end,
+		set = function(key)
+			addon.db.actionBarCountFontFace = key
+			if ActionBarLabels and ActionBarLabels.RefreshAllCountStyles then ActionBarLabels.RefreshAllCountStyles() end
+		end,
+		parent = true,
+		element = countOverride.element,
+		parentCheck = countParentCheck,
+		parentSection = expandable,
+	})
+
+	addon.functions.SettingsCreateDropdown(category, {
+		var = "actionBarCountFontOutline",
+		text = L["actionBarFontOutlineLabel"] or "Font outline",
+		list = outlineOptions,
+		order = outlineOrder,
+		default = "OUTLINE",
+		get = function() return addon.db.actionBarCountFontOutline or "OUTLINE" end,
+		set = function(key)
+			addon.db.actionBarCountFontOutline = key
+			if ActionBarLabels and ActionBarLabels.RefreshAllCountStyles then ActionBarLabels.RefreshAllCountStyles() end
+		end,
+		parent = true,
+		element = countOverride.element,
+		parentCheck = countParentCheck,
+		parentSection = expandable,
+	})
+
+	addon.functions.SettingsCreateSlider(category, {
+		var = "actionBarCountFontSize",
+		text = L["actionBarCountFontSize"] or "Charge/stack font size",
+		min = 8,
+		max = 24,
+		step = 1,
+		default = 12,
+		get = function()
+			local value = tonumber(addon.db.actionBarCountFontSize) or 12
+			if value < 8 then value = 8 end
+			if value > 24 then value = 24 end
+			return value
+		end,
+		set = function(val)
+			val = math.floor(val + 0.5)
+			if val < 8 then val = 8 end
+			if val > 24 then val = 24 end
+			addon.db.actionBarCountFontSize = val
+			if ActionBarLabels and ActionBarLabels.RefreshAllCountStyles then ActionBarLabels.RefreshAllCountStyles() end
+		end,
+		parent = true,
+		element = countOverride.element,
+		parentCheck = countParentCheck,
+		parentSection = expandable,
+	})
+
 	addon.functions.SettingsCreateHeadline(category, L["actionBarKeybindVisibilityHeader"] or "Keybind label visibility", { parentSection = expandable })
 
 	local barOptions = {}

@@ -44,9 +44,7 @@ local function entryMatchesCategory(entry, category)
 	if not category then return true end
 	if category == "flying" and entry.isSteadyFlight then return true end
 	local mountTypeID = entry.mountTypeID
-	if not mountTypeID or not MOUNT_TYPE_KNOWN[mountTypeID] then
-		return category == "ground"
-	end
+	if not mountTypeID or not MOUNT_TYPE_KNOWN[mountTypeID] then return category == "ground" end
 	local ids = MOUNT_TYPE_CATEGORIES[category]
 	if not ids then return false end
 	for i = 1, #ids do
@@ -71,9 +69,7 @@ local function pickRandomMount(entries, category)
 		local entry = entries[i]
 		if entryMatchesCategory(entry, category) and isEntryUsable(entry) then
 			count = count + 1
-			if math.random(count) == 1 then
-				chosen = entry.spellID
-			end
+			if math.random(count) == 1 then chosen = entry.spellID end
 		end
 	end
 	return chosen
@@ -115,6 +111,24 @@ local function pickFirstUsable(spellList)
 	for _, spellID in ipairs(spellList) do
 		if isMountSpellUsable(spellID) then return spellID end
 	end
+	return nil
+end
+
+local function getMountedTargetSpellID()
+	if not UnitExists("target") then return nil end
+	if not C_MountJournal or not C_MountJournal.GetMountFromSpell then return nil end
+
+	if C_UnitAuras and C_UnitAuras.GetUnitAuras then
+		local auras = C_UnitAuras.GetUnitAuras("target", "HELPFUL")
+		if type(auras) == "table" then
+			for i = 1, #auras do
+				local aura = auras[i]
+				local spellID = aura and aura.spellId
+				if spellID and C_MountJournal.GetMountFromSpell(spellID) then return spellID end
+			end
+		end
+	end
+
 	return nil
 end
 
@@ -161,13 +175,9 @@ local function summonMountBySource(sourceID)
 	return false
 end
 
-function MountActions:IsRandomAllEnabled()
-	return addon.db and addon.db.randomMountUseAll == true
-end
+function MountActions:IsRandomAllEnabled() return addon.db and addon.db.randomMountUseAll == true end
 
-function MountActions:MarkRandomCacheDirty()
-	self.randomMountDirty = true
-end
+function MountActions:MarkRandomCacheDirty() self.randomMountDirty = true end
 
 function MountActions:BuildRandomMountCache(useAll)
 	local list = {}
@@ -203,23 +213,15 @@ function MountActions:GetRandomMountSpell()
 	local spellID
 	if isSwimming() then
 		spellID = pickRandomMount(list, "water")
-		if not spellID and isFlyableArea() then
-			spellID = pickRandomMount(list, "flying")
-		end
-		if not spellID then
-			spellID = pickRandomMount(list, "ground")
-		end
+		if not spellID and isFlyableArea() then spellID = pickRandomMount(list, "flying") end
+		if not spellID then spellID = pickRandomMount(list, "ground") end
 	elseif isFlyableArea() then
 		spellID = pickRandomMount(list, "flying")
-		if not spellID then
-			spellID = pickRandomMount(list, "ground")
-		end
+		if not spellID then spellID = pickRandomMount(list, "ground") end
 	else
 		spellID = pickRandomMount(list, "ground")
 	end
-	if not spellID then
-		spellID = pickRandomMount(list)
-	end
+	if not spellID then spellID = pickRandomMount(list) end
 	return spellID
 end
 
@@ -227,7 +229,13 @@ function MountActions:PrepareActionButton(btn)
 	if InCombatLockdown and InCombatLockdown() then return end
 	if not btn or not btn._eqolAction then return end
 	if btn._eqolAction == "random" then
-		local spellID = self:GetRandomMountSpell()
+		local spellID
+		local targetSpellID = getMountedTargetSpellID()
+		if targetSpellID and isMountSpellUsable(targetSpellID) then
+			spellID = targetSpellID
+		else
+			spellID = self:GetRandomMountSpell()
+		end
 		if spellID then
 			btn:SetAttribute("spell1", spellID)
 			btn:SetAttribute("spell", spellID)
@@ -253,6 +261,19 @@ function MountActions:HandleClick(btn, button, down)
 	if not btn or not btn._eqolAction then return end
 
 	if btn._eqolAction == "random" then
+		if IsMounted and IsMounted() then
+			if C_MountJournal and C_MountJournal.Dismiss then
+				C_MountJournal.Dismiss()
+			elseif Dismount then
+				Dismount()
+			end
+			return
+		end
+		local targetSpellID = getMountedTargetSpellID()
+		if targetSpellID and isMountSpellUsable(targetSpellID) then
+			summonMountBySource(targetSpellID)
+			return
+		end
 		local spellID = self:GetRandomMountSpell()
 		if spellID then
 			summonMountBySource(spellID)
@@ -270,9 +291,7 @@ end
 
 function MountActions:EnsureButton(name, action)
 	local btn = _G[name]
-	if not btn then
-		btn = CreateFrame("Button", name, UIParent, "InsecureActionButtonTemplate")
-	end
+	if not btn then btn = CreateFrame("Button", name, UIParent, "InsecureActionButtonTemplate") end
 	btn:RegisterForClicks("AnyDown")
 	btn:SetAttribute("type1", "spell")
 	btn:SetAttribute("type", "spell")
@@ -297,9 +316,7 @@ function MountActions:Init()
 	self:EnsureButton("EQOLAuctionMountButton", "ah")
 end
 
-local function handleMountEvents()
-	MountActions:MarkRandomCacheDirty()
-end
+local function handleMountEvents() MountActions:MarkRandomCacheDirty() end
 
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")

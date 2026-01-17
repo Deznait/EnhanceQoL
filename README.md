@@ -60,7 +60,7 @@ English • German • French • Spanish • Italian • Russian • Korean •
 *   Mouse-over action bars.
 *   **Full button range coloring** – tint entire action button when out of range.
 *   Visible cursor ring and trail, with options to hide the dot or adjust visuals.
-*   Optional shortened keybind text and custom fonts/outlines for macro/keybind labels.
+*   Optional shortened keybind text and custom fonts/outlines for macro/keybind/charge counts.
 
 ### Unit Frames & Resource Bars
 
@@ -144,4 +144,3 @@ English • German • French • Spanish • Italian • Russian • Korean •
 ### Sound Control
 
 *   Mute categories (class abilities, mounts, etc.).
-

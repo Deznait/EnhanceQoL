@@ -57,7 +57,7 @@ English • German • French • Spanish • Italian • Russian • Korean •
 *   Mouse-over action bars.
 *   **Full button range coloring** – tint entire action button when out of range.
 *   Visible cursor ring and trail, with options to hide the dot or adjust visuals.
-*   Customize macro/keybind fonts, outlines, and sizes independently.
+*   Customize macro/keybind/charge count fonts, outlines, and sizes independently.
 *   Hide or shorten keybind text per bar (e.g., show `SM3` for Shift + Mouse Button 3).
 
 ### Unit Frames

@@ -359,6 +359,13 @@ local function GetActionButtonHotkey(button)
 	return nil
 end
 
+local function GetActionButtonCount(button)
+	if not button then return nil end
+	if button.Count then return button.Count end
+	if button.GetName then return _G[button:GetName() .. "Count"] end
+	return nil
+end
+
 local function NormalizeFontSize(size, minValue, maxValue)
 	local value = tonumber(size) or minValue
 	if value < minValue then value = minValue end
@@ -372,6 +379,31 @@ local function ApplyFontWithFallback(region, face, size, outline)
 	if not region or not region.SetFont then return end
 	local ok = region:SetFont(face or addon.variables.defaultFont, size, outline or "OUTLINE")
 	if not ok then region:SetFont(addon.variables.defaultFont, size, outline or "OUTLINE") end
+end
+
+local function ApplyCountStyling(button)
+	if not addon.db then return end
+	local count = GetActionButtonCount(button)
+	if not count then return end
+	local face = addon.db.actionBarCountFontFace or addon.variables.defaultFont
+	local size = NormalizeFontSize(addon.db.actionBarCountFontSize, 6, 32)
+	local outline = addon.db.actionBarCountFontOutline or "OUTLINE"
+	if addon.db.actionBarCountFontOverride then
+		if not count.EQOL_OriginalCountFont then
+			local oface, osize, ooutline = count:GetFont()
+			count.EQOL_OriginalCountFont = { face = oface, size = osize, outline = ooutline }
+		end
+		ApplyFontWithFallback(count, face, size, outline)
+		count.EQOL_UsingCountOverride = true
+	elseif count.EQOL_UsingCountOverride then
+		local orig = count.EQOL_OriginalCountFont or {}
+		local restoreFace = orig.face or addon.variables.defaultFont
+		local restoreSize = orig.size or size
+		local restoreOutline = orig.outline or "OUTLINE"
+		ApplyFontWithFallback(count, restoreFace, restoreSize, restoreOutline)
+		count.EQOL_UsingCountOverride = nil
+		count.EQOL_OriginalCountFont = nil
+	end
 end
 
 local function ShouldHideHotkey(barName)
@@ -573,6 +605,41 @@ function Labels.RefreshAllHotkeyStyles()
 	ForEachActionButton(function(button) ApplyHotkeyStyling(button) end)
 end
 
+local function InstallCountHook()
+	if Labels.countHookInstalled then return end
+	local hooked = false
+	if ActionBarActionButtonMixin and type(ActionBarActionButtonMixin.UpdateCount) == "function" then
+		hooksecurefunc(ActionBarActionButtonMixin, "UpdateCount", ApplyCountStyling)
+		hooked = true
+	end
+	if hooked then
+		Labels.countHookInstalled = true
+		if Labels.countHookFrame then
+			Labels.countHookFrame:UnregisterEvent("PLAYER_LOGIN")
+			Labels.countHookFrame:SetScript("OnEvent", nil)
+			Labels.countHookFrame = nil
+		end
+	end
+end
+
+InstallCountHook()
+if not Labels.countHookInstalled then
+	local frame = CreateFrame("Frame")
+	frame:RegisterEvent("PLAYER_LOGIN")
+	frame:SetScript("OnEvent", function(self)
+		InstallCountHook()
+		if Labels.countHookInstalled then
+			self:UnregisterEvent("PLAYER_LOGIN")
+			self:SetScript("OnEvent", nil)
+		end
+	end)
+	Labels.countHookFrame = frame
+end
+
+function Labels.RefreshAllCountStyles()
+	ForEachActionButton(function(button) ApplyCountStyling(button) end)
+end
+
 hooksecurefunc("ActionButton_UpdateRangeIndicator", function(self, checksRange, inRange)
 	if not self or not self.action then return end
 	if checksRange and inRange == false then
@@ -626,6 +693,7 @@ local function OnPlayerLogin(self, event)
 	if Labels.EnsureActionButtonArtHook then Labels.EnsureActionButtonArtHook() end
 	if Labels.RefreshAllMacroNameVisibility then Labels.RefreshAllMacroNameVisibility() end
 	if Labels.RefreshAllHotkeyStyles then Labels.RefreshAllHotkeyStyles() end
+	if Labels.RefreshAllCountStyles then Labels.RefreshAllCountStyles() end
 	if Labels.RefreshAllRangeOverlays then Labels.RefreshAllRangeOverlays() end
 	if Labels.RefreshActionButtonBorders then Labels.RefreshActionButtonBorders() end
 	if Labels.UpdateRangeOverlayEvents then Labels.UpdateRangeOverlayEvents() end

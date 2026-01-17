@@ -14,6 +14,7 @@
 - Inventory: Enhanced rarity glow for bags and the character frame.
 - Mounts: New keybind actions for Random, Repair, and Auction House mounts with an option to use all mounts for Random.
 - Action Bars: Custom action button border selection (including SharedMedia) with edge size + padding controls.
+- Action Bars: Charge/stack count font override (font, size, outline).
 - UF Plus: Custom class colors for unit frames.
 - UF Plus: Secondary/tertiary delimiter options for health/power texts.
 - UF Plus: Status line option to show elite/rare/rareelite icons on non-player frames.
@@ -31,6 +32,7 @@
 
 - Resource Bars: Font dropdown selection no longer resets on click (fonts are selectable again).
 - DataPanels: Volume stream right-click no longer requires the context menu modifier.
+- Talents: Filter out the internal TalentLoadoutManager placeholder loadout in selection lists.
 
 ### ❌ Removed
 
