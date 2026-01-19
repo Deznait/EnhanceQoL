@@ -125,6 +125,10 @@ local function importActiveProfile(encoded)
 	return true
 end
 
+-- Public API for external installers (e.g. WagoInstaller).
+addon.exportProfile = exportActiveProfile
+addon.importProfile = importActiveProfile
+
 local function exportErrorMessage(reason)
 	if reason == "NO_ACTIVE" then return L["ProfileExportNoActive"] or "No active profile found." end
 	if reason == "NO_DATA" then return L["ProfileExportEmpty"] or "Active profile has no saved settings to export." end

@@ -2586,32 +2586,30 @@ local function buildUnitSettings(unit)
 	end, statusDef.enabled ~= false, "status")
 	list[#list + 1] = showNameToggle
 
-	if not isBoss then
-		local nameColorSetting = checkboxColor({
-			name = L["UFNameColor"] or "Custom name color",
-			parentId = "status",
-			defaultChecked = (statusDef.nameColorMode or "CLASS") ~= "CLASS",
-			isChecked = function() return getValue(unit, { "status", "nameColorMode" }, statusDef.nameColorMode or "CLASS") ~= "CLASS" end,
-			onChecked = function(val)
-				setValue(unit, { "status", "nameColorMode" }, val and "CUSTOM" or "CLASS")
-				refresh()
-			end,
-			getColor = function() return toRGBA(getValue(unit, { "status", "nameColor" }, statusDef.nameColor or { 0.8, 0.8, 1, 1 }), statusDef.nameColor or { 0.8, 0.8, 1, 1 }) end,
-			onColor = function(color)
-				setColor(unit, { "status", "nameColor" }, color.r, color.g, color.b, color.a)
-				setValue(unit, { "status", "nameColorMode" }, "CUSTOM")
-				refresh()
-			end,
-			colorDefault = {
-				r = (statusDef.nameColor and statusDef.nameColor[1]) or 0.8,
-				g = (statusDef.nameColor and statusDef.nameColor[2]) or 0.8,
-				b = (statusDef.nameColor and statusDef.nameColor[3]) or 1,
-				a = (statusDef.nameColor and statusDef.nameColor[4]) or 1,
-			},
-		})
-		nameColorSetting.isEnabled = isNameEnabled
-		list[#list + 1] = nameColorSetting
-	end
+	local nameColorSetting = checkboxColor({
+		name = L["UFNameColor"] or "Custom name color",
+		parentId = "status",
+		defaultChecked = (statusDef.nameColorMode or "CLASS") ~= "CLASS",
+		isChecked = function() return getValue(unit, { "status", "nameColorMode" }, statusDef.nameColorMode or "CLASS") ~= "CLASS" end,
+		onChecked = function(val)
+			setValue(unit, { "status", "nameColorMode" }, val and "CUSTOM" or "CLASS")
+			refresh()
+		end,
+		getColor = function() return toRGBA(getValue(unit, { "status", "nameColor" }, statusDef.nameColor or { 0.8, 0.8, 1, 1 }), statusDef.nameColor or { 0.8, 0.8, 1, 1 }) end,
+		onColor = function(color)
+			setColor(unit, { "status", "nameColor" }, color.r, color.g, color.b, color.a)
+			setValue(unit, { "status", "nameColorMode" }, "CUSTOM")
+			refresh()
+		end,
+		colorDefault = {
+			r = (statusDef.nameColor and statusDef.nameColor[1]) or 0.8,
+			g = (statusDef.nameColor and statusDef.nameColor[2]) or 0.8,
+			b = (statusDef.nameColor and statusDef.nameColor[3]) or 1,
+			a = (statusDef.nameColor and statusDef.nameColor[4]) or 1,
+		},
+	})
+	nameColorSetting.isEnabled = isNameEnabled
+	list[#list + 1] = nameColorSetting
 
 	local nameAnchorSetting = radioDropdown(
 		L["UFNameAnchor"] or "Name anchor",
@@ -2707,32 +2705,30 @@ local function buildUnitSettings(unit)
 	hideLevelAtMaxToggle.isEnabled = isLevelEnabled
 	list[#list + 1] = hideLevelAtMaxToggle
 
-	if not isBoss then
-		local levelColorSetting = checkboxColor({
-			name = L["UFLevelColor"] or "Custom level color",
-			parentId = "status",
-			defaultChecked = (statusDef.levelColorMode or "CLASS") ~= "CLASS",
-			isChecked = function() return getValue(unit, { "status", "levelColorMode" }, statusDef.levelColorMode or "CLASS") ~= "CLASS" end,
-			onChecked = function(val)
-				setValue(unit, { "status", "levelColorMode" }, val and "CUSTOM" or "CLASS")
-				refresh()
-			end,
-			getColor = function() return toRGBA(getValue(unit, { "status", "levelColor" }, statusDef.levelColor or { 1, 0.85, 0, 1 }), statusDef.levelColor or { 1, 0.85, 0, 1 }) end,
-			onColor = function(color)
-				setColor(unit, { "status", "levelColor" }, color.r, color.g, color.b, color.a)
-				setValue(unit, { "status", "levelColorMode" }, "CUSTOM")
-				refresh()
-			end,
-			colorDefault = {
-				r = (statusDef.levelColor and statusDef.levelColor[1]) or 1,
-				g = (statusDef.levelColor and statusDef.levelColor[2]) or 0.85,
-				b = (statusDef.levelColor and statusDef.levelColor[3]) or 0,
-				a = (statusDef.levelColor and statusDef.levelColor[4]) or 1,
-			},
-		})
-		levelColorSetting.isEnabled = isLevelEnabled
-		list[#list + 1] = levelColorSetting
-	end
+	local levelColorSetting = checkboxColor({
+		name = L["UFLevelColor"] or "Custom level color",
+		parentId = "status",
+		defaultChecked = (statusDef.levelColorMode or "CLASS") ~= "CLASS",
+		isChecked = function() return getValue(unit, { "status", "levelColorMode" }, statusDef.levelColorMode or "CLASS") ~= "CLASS" end,
+		onChecked = function(val)
+			setValue(unit, { "status", "levelColorMode" }, val and "CUSTOM" or "CLASS")
+			refresh()
+		end,
+		getColor = function() return toRGBA(getValue(unit, { "status", "levelColor" }, statusDef.levelColor or { 1, 0.85, 0, 1 }), statusDef.levelColor or { 1, 0.85, 0, 1 }) end,
+		onColor = function(color)
+			setColor(unit, { "status", "levelColor" }, color.r, color.g, color.b, color.a)
+			setValue(unit, { "status", "levelColorMode" }, "CUSTOM")
+			refresh()
+		end,
+		colorDefault = {
+			r = (statusDef.levelColor and statusDef.levelColor[1]) or 1,
+			g = (statusDef.levelColor and statusDef.levelColor[2]) or 0.85,
+			b = (statusDef.levelColor and statusDef.levelColor[3]) or 0,
+			a = (statusDef.levelColor and statusDef.levelColor[4]) or 1,
+		},
+	})
+	levelColorSetting.isEnabled = isLevelEnabled
+	list[#list + 1] = levelColorSetting
 
 	local levelAnchorSetting = radioDropdown(
 		L["UFLevelAnchor"] or "Level anchor",

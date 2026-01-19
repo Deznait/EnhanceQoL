@@ -960,12 +960,30 @@ local function ensureAuraButton(container, icons, index, ac)
 		btn.cd:SetDrawSwipe(true)
 		btn:SetScript("OnEnter", function(self)
 			if not self._showTooltip then return end
+			local tooltip = GameTooltip
+			if not tooltip or (tooltip.IsForbidden and tooltip:IsForbidden()) then return end
 			local spellId = self.spellId
-			if not spellId or (issecretvalue and issecretvalue(spellId)) then return end
-			if GameTooltip then
-				GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
-				GameTooltip:SetSpellByID(spellId)
-				GameTooltip:Show()
+			if spellId and (not issecretvalue or not issecretvalue(spellId)) then
+				tooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
+				tooltip:SetSpellByID(spellId)
+				tooltip:Show()
+				return
+			end
+			local unitToken = self.unitToken
+			local auraInstanceID = self.auraInstanceID
+			if not unitToken or not auraInstanceID then return end
+			if type(auraInstanceID) ~= "number" or auraInstanceID <= 0 then return end
+			tooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
+			if self.isDebuff then
+				if tooltip.SetUnitDebuffByAuraInstanceID then
+					tooltip:SetUnitDebuffByAuraInstanceID(unitToken, auraInstanceID)
+					tooltip:Show()
+				end
+			else
+				if tooltip.SetUnitBuffByAuraInstanceID then
+					tooltip:SetUnitBuffByAuraInstanceID(unitToken, auraInstanceID)
+					tooltip:Show()
+				end
 			end
 		end)
 		btn:SetScript("OnLeave", function()
@@ -1021,6 +1039,9 @@ local function applyAuraToButton(btn, aura, ac, isDebuff, unitToken)
 		isDebuff = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unitToken, aura.auraInstanceID, harmfulFilter)
 	end
 	btn.spellId = aura.spellId
+	btn.auraInstanceID = aura.auraInstanceID
+	btn.unitToken = unitToken
+	btn.isDebuff = isDebuff
 	btn._showTooltip = ac.showTooltip ~= false
 	btn.icon:SetTexture(aura.icon or "")
 	btn.cd:Clear()

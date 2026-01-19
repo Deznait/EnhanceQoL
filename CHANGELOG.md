@@ -42,6 +42,8 @@
 - Resource Bars: Class color and max-color overrides now apply correctly to resource bars.
 - DataPanels: Volume stream right-click no longer requires the context menu modifier.
 - Talents: Filter out the internal TalentLoadoutManager placeholder loadout in selection lists.
+- UF Plus: Aura icon tooltips now show for private/secret auras via auraInstanceID fallback.
+- UF Plus: Boss frame name/level color options are available like other frames.
 
 ### ❌ Removed
 
