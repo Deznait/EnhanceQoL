@@ -153,9 +153,7 @@ end
 
 local function resolveStatusbarPreviewPath(key)
 	if not key then return nil end
-	if key == "DEFAULT" then
-		return (ResourceBars and ResourceBars.DEFAULT_RB_TEX) or "Interface\\Buttons\\WHITE8x8"
-	end
+	if key == "DEFAULT" then return (ResourceBars and ResourceBars.DEFAULT_RB_TEX) or "Interface\\Buttons\\WHITE8x8" end
 	return type(key) == "string" and key or nil
 end
 
@@ -825,54 +823,50 @@ local function registerEditModeBars()
 				}
 			end
 
-				settingsList[#settingsList + 1] = {
-					name = L["Bar Texture"] or "Bar Texture",
-					kind = settingType.Dropdown,
-					height = 180,
-					field = "barTexture",
-					parentId = "frame",
-					generator = function(dropdown, root)
-						local listTex, orderTex = addon.Aura.functions.getStatusbarDropdownLists(true)
-						if not listTex or not orderTex then
-							listTex, orderTex = { DEFAULT = DEFAULT }, { "DEFAULT" }
-						end
-						if not listTex or not orderTex then return end
-						ensureDropdownTexturePreview(dropdown)
-						for index, key in ipairs(orderTex) do
-							local label = listTex[key] or key
-							local previewIndex = index
-							local previewPath = resolveStatusbarPreviewPath(key)
-							local checkbox = root:CreateCheckbox(label, function()
-								local c = curSpecCfg()
-								local cur = c and c.barTexture or cfg.barTexture or "DEFAULT"
-								return cur == key
-							end, function()
-								local c = curSpecCfg()
-								if not c then return end
-								local cur = c.barTexture or cfg.barTexture or "DEFAULT"
-								if cur == key then return end
-								c.barTexture = key
-								queueRefresh()
-							end)
-							if previewPath then
-								checkbox:AddInitializer(function(button)
-									attachDropdownTexturePreview(dropdown, button, previewIndex, previewPath)
-								end)
-							end
-						end
-					end,
-					get = function()
-						local c = curSpecCfg()
-						return (c and c.barTexture) or cfg.barTexture or "DEFAULT"
-					end,
-					set = function(_, value)
-						local c = curSpecCfg()
-						if not c then return end
-						c.barTexture = value
-						queueRefresh()
-					end,
-					default = cfg and cfg.barTexture or "DEFAULT",
-				}
+			settingsList[#settingsList + 1] = {
+				name = L["Bar Texture"] or "Bar Texture",
+				kind = settingType.Dropdown,
+				height = 180,
+				field = "barTexture",
+				parentId = "frame",
+				generator = function(dropdown, root)
+					local listTex, orderTex = addon.Aura.functions.getStatusbarDropdownLists(true)
+					if not listTex or not orderTex then
+						listTex, orderTex = { DEFAULT = DEFAULT }, { "DEFAULT" }
+					end
+					if not listTex or not orderTex then return end
+					ensureDropdownTexturePreview(dropdown)
+					for index, key in ipairs(orderTex) do
+						local label = listTex[key] or key
+						local previewIndex = index
+						local previewPath = resolveStatusbarPreviewPath(key)
+						local checkbox = root:CreateCheckbox(label, function()
+							local c = curSpecCfg()
+							local cur = c and c.barTexture or cfg.barTexture or "DEFAULT"
+							return cur == key
+						end, function()
+							local c = curSpecCfg()
+							if not c then return end
+							local cur = c.barTexture or cfg.barTexture or "DEFAULT"
+							if cur == key then return end
+							c.barTexture = key
+							queueRefresh()
+						end)
+						if previewPath then checkbox:AddInitializer(function(button) attachDropdownTexturePreview(dropdown, button, previewIndex, previewPath) end) end
+					end
+				end,
+				get = function()
+					local c = curSpecCfg()
+					return (c and c.barTexture) or cfg.barTexture or "DEFAULT"
+				end,
+				set = function(_, value)
+					local c = curSpecCfg()
+					if not c then return end
+					c.barTexture = value
+					queueRefresh()
+				end,
+				default = cfg and cfg.barTexture or "DEFAULT",
+			}
 
 			do -- Behavior
 				local behaviorValues = ResourceBars.BehaviorOptionsForType and ResourceBars.BehaviorOptionsForType(barType)
@@ -1039,6 +1033,29 @@ local function registerEditModeBars()
 				}
 
 				settingsList[#settingsList + 1] = {
+					name = L["Use absolute values"] or "Use absolute values",
+					kind = settingType.Checkbox,
+					field = "useAbsoluteThresholds",
+					default = cfg and cfg.useAbsoluteThresholds == true,
+					get = function()
+						local c = curSpecCfg()
+						return c and c.useAbsoluteThresholds == true
+					end,
+					set = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						c.useAbsoluteThresholds = value and true or false
+						queueRefresh()
+						refreshSettingsUI()
+					end,
+					isEnabled = function()
+						local c = curSpecCfg()
+						return c and c.showThresholds == true
+					end,
+					parentId = "frame",
+				}
+
+				settingsList[#settingsList + 1] = {
 					name = L["Number of thresholds"] or "Number of thresholds",
 					kind = settingType.Dropdown,
 					height = 120,
@@ -1100,6 +1117,7 @@ local function registerEditModeBars()
 					parentId = "frame",
 				}
 
+				local thresholdMaxValue = (curSpecCfg() and curSpecCfg().useAbsoluteThresholds == true) and 1000 or 100
 				local function thresholdValue(index)
 					local c = curSpecCfg()
 					local list = (c and c.thresholds)
@@ -1138,7 +1156,7 @@ local function registerEditModeBars()
 						allowInput = true,
 						field = "threshold" .. i,
 						minValue = 0,
-						maxValue = 100,
+						maxValue = thresholdMaxValue,
 						valueStep = 1,
 						get = function() return thresholdValue(i) end,
 						set = function(_, value) setThresholdValue(i, value) end,
@@ -1304,54 +1322,50 @@ local function registerEditModeBars()
 					hasOpacity = true,
 				}
 
-					settingsList[#settingsList + 1] = {
-						name = L["Absorb texture"] or "Absorb texture",
-						kind = settingType.Dropdown,
-						height = 180,
-						field = "absorbTexture",
-						parentId = "absorb",
-						generator = function(dropdown, root)
-							local listTex, orderTex = addon.Aura.functions.getStatusbarDropdownLists(true)
-							if not listTex or not orderTex then
-								listTex, orderTex = { DEFAULT = DEFAULT }, { "DEFAULT" }
-							end
-							if not listTex or not orderTex then return end
-							ensureDropdownTexturePreview(dropdown)
-							for index, key in ipairs(orderTex) do
-								local label = listTex[key] or key
-								local previewIndex = index
-								local previewPath = resolveStatusbarPreviewPath(key)
-								local checkbox = root:CreateCheckbox(label, function()
-									local c = curSpecCfg()
-									local cur = c and c.absorbTexture or cfg.absorbTexture or cfg.barTexture or "DEFAULT"
-									return cur == key
-								end, function()
-									local c = curSpecCfg()
-									if not c then return end
-									local cur = c.absorbTexture or cfg.absorbTexture or cfg.barTexture or "DEFAULT"
-									if cur == key then return end
-									c.absorbTexture = key
-									queueRefresh()
-								end)
-								if previewPath then
-									checkbox:AddInitializer(function(button)
-										attachDropdownTexturePreview(dropdown, button, previewIndex, previewPath)
-									end)
-								end
-							end
-						end,
-						get = function()
-							local c = curSpecCfg()
-							return (c and c.absorbTexture) or cfg.absorbTexture or cfg.barTexture or "DEFAULT"
-						end,
-						set = function(_, value)
-							local c = curSpecCfg()
-							if not c then return end
-							c.absorbTexture = value
-							queueRefresh()
-						end,
-						default = cfg and (cfg.absorbTexture or cfg.barTexture) or "DEFAULT",
-					}
+				settingsList[#settingsList + 1] = {
+					name = L["Absorb texture"] or "Absorb texture",
+					kind = settingType.Dropdown,
+					height = 180,
+					field = "absorbTexture",
+					parentId = "absorb",
+					generator = function(dropdown, root)
+						local listTex, orderTex = addon.Aura.functions.getStatusbarDropdownLists(true)
+						if not listTex or not orderTex then
+							listTex, orderTex = { DEFAULT = DEFAULT }, { "DEFAULT" }
+						end
+						if not listTex or not orderTex then return end
+						ensureDropdownTexturePreview(dropdown)
+						for index, key in ipairs(orderTex) do
+							local label = listTex[key] or key
+							local previewIndex = index
+							local previewPath = resolveStatusbarPreviewPath(key)
+							local checkbox = root:CreateCheckbox(label, function()
+								local c = curSpecCfg()
+								local cur = c and c.absorbTexture or cfg.absorbTexture or cfg.barTexture or "DEFAULT"
+								return cur == key
+							end, function()
+								local c = curSpecCfg()
+								if not c then return end
+								local cur = c.absorbTexture or cfg.absorbTexture or cfg.barTexture or "DEFAULT"
+								if cur == key then return end
+								c.absorbTexture = key
+								queueRefresh()
+							end)
+							if previewPath then checkbox:AddInitializer(function(button) attachDropdownTexturePreview(dropdown, button, previewIndex, previewPath) end) end
+						end
+					end,
+					get = function()
+						local c = curSpecCfg()
+						return (c and c.absorbTexture) or cfg.absorbTexture or cfg.barTexture or "DEFAULT"
+					end,
+					set = function(_, value)
+						local c = curSpecCfg()
+						if not c then return end
+						c.absorbTexture = value
+						queueRefresh()
+					end,
+					default = cfg and (cfg.absorbTexture or cfg.barTexture) or "DEFAULT",
+				}
 
 				settingsList[#settingsList + 1] = {
 					name = L["Reverse absorb fill"] or "Reverse absorb fill",

@@ -132,6 +132,7 @@ local COSMETIC_BAR_KEYS = {
 	"separatorColor",
 	"separatorThickness",
 	"showThresholds",
+	"useAbsoluteThresholds",
 	"thresholds",
 	"thresholdColor",
 	"thresholdThickness",
@@ -3328,21 +3329,43 @@ updateBarThresholds = function(pType)
 	end
 
 	local values = {}
+	local useAbsolute = cfg.useAbsoluteThresholds == true
+	local maxValue
+	if useAbsolute then
+		local _, maxV = bar.GetMinMaxValues and bar:GetMinMaxValues()
+		maxValue = maxV or bar._lastMax or 0
+		if not maxValue or maxValue <= 0 then
+			if bar.thresholdMarks then
+				for _, tx in ipairs(bar.thresholdMarks) do
+					tx:Hide()
+				end
+			end
+			return
+		end
+	end
 	local count = tonumber(cfg and cfg.thresholdCount) or RB.DEFAULT_THRESHOLD_COUNT or 3
 	if count < 1 then count = 1 end
 	if count > 4 then count = 4 end
 	local list = cfg and cfg.thresholds
+	local function addThresholdValue(v)
+		if not v or v <= 0 then return end
+		if useAbsolute then
+			if maxValue and maxValue > 0 and v < maxValue then values[#values + 1] = (v / maxValue) * 100 end
+		elseif v < 100 then
+			values[#values + 1] = v
+		end
+	end
 	if type(list) == "table" then
 		for i = 1, min(#list, count) do
 			local v = tonumber(list[i])
-			if v and v > 0 and v < 100 then values[#values + 1] = v end
+			addThresholdValue(v)
 		end
 	else
 		local defaults = RB.DEFAULT_THRESHOLDS
 		if type(defaults) == "table" then
 			for i = 1, min(#defaults, count) do
 				local v = tonumber(defaults[i])
-				if v and v > 0 and v < 100 then values[#values + 1] = v end
+				addThresholdValue(v)
 			end
 		end
 	end
