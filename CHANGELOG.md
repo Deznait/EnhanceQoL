@@ -1,5 +1,13 @@
 # Changelog
 
+## [7.1.2] - 2026-01-20
+
+### 🐛 Fixed
+
+- Single UF profile import wasn't changing x/y position of UF frames
+
+---
+
 ## [7.1.1] - 2026-01-20
 
 ### 🐛 Fixed

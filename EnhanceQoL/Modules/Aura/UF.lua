@@ -759,6 +759,46 @@ local function resolveProfileDB(profileName)
 	return addon.db, false
 end
 
+local UF_EDITMODE_FRAME_IDS = {
+	player = "EQOL_UF_Player",
+	target = "EQOL_UF_Target",
+	targettarget = "EQOL_UF_ToT",
+	focus = "EQOL_UF_Focus",
+	pet = "EQOL_UF_Pet",
+	boss = "EQOL_UF_Boss",
+}
+
+local function syncEditModeLayoutAnchors(units)
+	if type(units) ~= "table" or #units == 0 then return end
+	local editMode = addon and addon.EditMode
+	if not (editMode and editMode.GetActiveLayoutName) then return end
+	local layoutName = editMode:GetActiveLayoutName() or "_Global"
+	addon.db = addon.db or {}
+	addon.db.editModeLayouts = addon.db.editModeLayouts or {}
+	local layouts = addon.db.editModeLayouts
+	local layout = layouts[layoutName]
+	if type(layout) ~= "table" then
+		layout = {}
+		layouts[layoutName] = layout
+	end
+
+	for _, unit in ipairs(units) do
+		local frameId = UF_EDITMODE_FRAME_IDS[unit]
+		if frameId then
+			local cfg = ensureDB(unit)
+			local anchor = cfg and cfg.anchor
+			if anchor then
+				local data = layout[frameId] or {}
+				data.point = anchor.point or data.point or "CENTER"
+				data.relativePoint = anchor.relativePoint or anchor.point or data.relativePoint or data.point
+				data.x = anchor.x or 0
+				data.y = anchor.y or 0
+				layout[frameId] = data
+			end
+		end
+	end
+end
+
 function UF.ExportProfile(scopeKey, profileName)
 	local function normalize(key)
 		if not key or key == "" then return "ALL" end
@@ -845,6 +885,7 @@ function UF.ImportProfile(encoded, scopeKey)
 	end
 
 	table.sort(applied, function(a, b) return tostring(a) < tostring(b) end)
+	syncEditModeLayoutAnchors(applied)
 	addon.variables.requireReload = true
 	return true, applied
 end
