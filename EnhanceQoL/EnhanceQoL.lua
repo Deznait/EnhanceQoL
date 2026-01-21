@@ -4705,7 +4705,7 @@ local function CreateUI()
 		if addon.functions.ShowOptionsPage and addon.functions.ShowOptionsPage(container, group) then return end
 
 		if type(group) ~= "string" then return end
-		if group == "bufftracker" or group == "combat" or group:sub(1, #"combat\001") == "combat\001" or group:sub(1, #"aura\001") == "aura\001" then
+		if group == "bufftracker" or group == "cooldownpanels" or group == "combat" or group:sub(1, #"combat\001") == "combat\001" or group:sub(1, #"aura\001") == "aura\001" then
 			if addon.Aura and addon.Aura.functions and addon.Aura.functions.treeCallback then addon.Aura.functions.treeCallback(container, group) end
 		end
 	end)
@@ -5064,6 +5064,7 @@ local function setAllHooks()
 		if addon.Aura.functions.InitDB then addon.Aura.functions.InitDB() end
 		if addon.Aura.functions.init then addon.Aura.functions.init() end
 		if addon.Aura.functions.InitBuffTracker then addon.Aura.functions.InitBuffTracker() end
+		if addon.Aura.functions.InitCooldownPanels then addon.Aura.functions.InitCooldownPanels() end
 		if addon.Aura.functions.InitResourceBars then addon.Aura.functions.InitResourceBars() end
 	end
 	if addon.Drinks and addon.Drinks.functions then

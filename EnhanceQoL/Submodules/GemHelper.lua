@@ -104,9 +104,7 @@ local function clearGemButtons()
 	wipe(gemButtons)
 end
 
-local function getGemTracker()
-	return _G.EnhanceQoLGemTracker
-end
+local function getGemTracker() return _G.EnhanceQoLGemTracker end
 
 local function ensureGemTracker()
 	local tracker = getGemTracker()
@@ -337,18 +335,13 @@ local function createButton(parent, itemTexture, itemLink, bag, slot, locked)
 		button:EnableMouse(true)
 	end
 
-	if not addon.variables.isMidnight then
-		button:SetScript("OnEnter", function(self)
-			if not self.itemLink then return end
-			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-			GameTooltip:SetHyperlink(self.itemLink)
-			GameTooltip:Show()
-		end)
-		button:SetScript("OnLeave", function() GameTooltip:Hide() end)
-	else
-		button:SetScript("OnEnter", nil)
-		button:SetScript("OnLeave", nil)
-	end
+	button:SetScript("OnEnter", function(self)
+		if not self.itemLink then return end
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:SetHyperlink(self.itemLink)
+		GameTooltip:Show()
+	end)
+	button:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
 	return button
 end

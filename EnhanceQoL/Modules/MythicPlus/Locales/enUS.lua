@@ -42,16 +42,6 @@ L["HealingPotion"] = "Heal"
 L["potionTrackerHealingPotions"] = "Track health pot CD"
 L["potionTrackerOffhealing"] = "Track Offhealing CD usage"
 L["Bar Texture"] = "Bar Texture"
-L["autoMarkMidnightWarning"] = "|cffff7e0aThis auto marker will be removed in WoW Midnight.|r"
-
--- Automark Frame
-L["AutoMark"] = "Auto marker"
-L["Exclude"] = "Exclude"
-L["autoMarkTankInDungeon"] = "Automatically mark the %s in dungeons"
-L["autoMarkTankInDungeonMarker"] = "Tank marker"
-L["autoMarkHealerInDungeon"] = "Automatically mark the %s in dungeons"
-L["autoMarkHealerInDungeonMarker"] = "Healer marker"
-L["autoMarkTankExplanation"] = "It will mark the %s when he has no mark and only changes the mark, when you are either %s or %s"
 
 -- Teleports
 L["Teleports"] = "Teleports"
@@ -123,9 +113,7 @@ L["collapse"] = "Collapse"
 L["mythicPlusShowChestTimers"] = "Show Mythic+ chest timers"
 L["mythicPlusShowChestTimersDesc"] = "Display +2/+3 upgrade timers alongside the dungeon timer."
 
-L["mythicPlusNoHealerMark"] = "Remove the marker from me when I’m in the healer role"
 L["HideTracker"] = "Hide"
-L["markerAlreadyUsed"] = "This marker is already used for the %s"
 
 L["useTalentLoadoutEx"] = "Switch talents via Talent Loadout Ex"
 L["OpenTalents"] = "Open Talents"
