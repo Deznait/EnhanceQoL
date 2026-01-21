@@ -24,6 +24,11 @@ CooldownPanels.ENTRY_TYPE = {
 
 CooldownPanels.runtime = CooldownPanels.runtime or {}
 
+local curveDesat = C_CurveUtil.CreateCurve()
+curveDesat:SetType(Enum.LuaCurveType.Step)
+curveDesat:AddPoint(0, 0)
+curveDesat:AddPoint(0.1, 1)
+
 local DEFAULT_PREVIEW_COUNT = 6
 local MAX_PREVIEW_COUNT = 12
 local PREVIEW_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
@@ -72,6 +77,7 @@ local GetCursorInfo = GetCursorInfo
 local GetCursorPosition = GetCursorPosition
 local ClearCursor = ClearCursor
 local GetSpellCooldownInfo = C_Spell and C_Spell.GetSpellCooldown or GetSpellCooldown
+local GetSpellCooldownDuration = C_Spell and C_Spell.GetSpellCooldownDuration
 local GetSpellChargesInfo = C_Spell and C_Spell.GetSpellCharges
 local GetPlayerAuraBySpellID = C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID
 local IsSpellKnown = IsSpellKnown
@@ -80,6 +86,7 @@ local GetTime = GetTime
 local ActionButtonSpellAlertManager = ActionButtonSpellAlertManager
 local MenuUtil = MenuUtil
 local issecretvalue = _G.issecretvalue
+local DurationModifierRealTime = Enum and Enum.DurationTimeModifier and Enum.DurationTimeModifier.RealTime
 
 local directionOptions = {
 	{ value = "LEFT", label = _G.HUD_EDIT_MODE_SETTING_BAGS_DIRECTION_LEFT or _G.LEFT or "Left" },
@@ -696,10 +703,20 @@ local function isCooldownActive(startTime, duration)
 	return (startTime + duration) > GetTime()
 end
 
+local function getDurationRemaining(duration)
+	if not duration then return nil end
+	local getter = duration.GetRemainingDuration
+	if type(getter) ~= "function" then return nil end
+	local ok, remaining = pcall(getter, duration, DurationModifierRealTime)
+	if not ok then return nil end
+	if isSafeNumber(remaining) then return remaining end
+	return nil
+end
+
 local function getSpellCooldownInfo(spellID)
 	if not spellID or not GetSpellCooldownInfo then return 0, 0, false, 1 end
 	local a, b, c, d = GetSpellCooldownInfo(spellID)
-	if type(a) == "table" then return a.startTime or 0, a.duration or 0, a.isEnabled, a.modRate or 1 end
+	if type(a) == "table" then return a.startTime or 0, a.duration or 0, a.isEnabled, a.modRate or 1, a.isOnGCD or nil end
 	return a or 0, b or 0, c, d or 1
 end
 
@@ -711,6 +728,13 @@ local function getItemCooldownInfo(itemID, slotID)
 	if not itemID or not GetItemCooldownFn then return 0, 0, false end
 	local start, duration, enabled = GetItemCooldownFn(itemID)
 	return start or 0, duration or 0, enabled
+end
+
+local function getSpellCooldownDurationObject(spellID)
+	if not spellID or not GetSpellCooldownDuration then return nil end
+	local ok, duration = pcall(GetSpellCooldownDuration, spellID)
+	if not ok then return nil end
+	return duration
 end
 
 local function hasItem(itemID)
@@ -793,6 +817,22 @@ local function containsId(list, id)
 	return false
 end
 
+local function setCooldownDrawState(cooldown, drawEdge, drawBling, drawSwipe)
+	if not cooldown then return end
+	if cooldown.SetDrawEdge and cooldown._eqolDrawEdge ~= drawEdge then
+		cooldown:SetDrawEdge(drawEdge)
+		cooldown._eqolDrawEdge = drawEdge
+	end
+	if cooldown.SetDrawBling and cooldown._eqolDrawBling ~= drawBling then
+		cooldown:SetDrawBling(drawBling)
+		cooldown._eqolDrawBling = drawBling
+	end
+	if cooldown.SetDrawSwipe and cooldown._eqolDrawSwipe ~= drawSwipe then
+		cooldown:SetDrawSwipe(drawSwipe)
+		cooldown._eqolDrawSwipe = drawSwipe
+	end
+end
+
 local function applyIconLayout(frame, count, layout)
 	if not frame then return end
 	local iconSize = clampInt(layout.iconSize, 12, 128, Helper.PANEL_LAYOUT_DEFAULTS.iconSize)
@@ -868,11 +908,7 @@ local function applyIconLayout(frame, count, layout)
 			icon.charges:SetPoint(chargesAnchor, icon, chargesAnchor, chargesX, chargesY)
 			icon.charges:SetFont(chargesPath, chargesSize, chargesStyle)
 		end
-		if icon.cooldown then
-			if icon.cooldown.SetDrawEdge then icon.cooldown:SetDrawEdge(drawEdge) end
-			if icon.cooldown.SetDrawBling then icon.cooldown:SetDrawBling(drawBling) end
-			if icon.cooldown.SetDrawSwipe then icon.cooldown:SetDrawSwipe(drawSwipe) end
-		end
+		setCooldownDrawState(icon.cooldown, drawEdge, drawBling, drawSwipe)
 		if icon.previewGlow then
 			icon.previewGlow:ClearAllPoints()
 			icon.previewGlow:SetPoint("CENTER", icon, "CENTER", 0, 0)
@@ -2095,6 +2131,14 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 	local runtime = getRuntime(panelId)
 	local frame = runtime.frame
 	if not frame then return end
+	panel.layout = panel.layout or Helper.CopyTableShallow(Helper.PANEL_LAYOUT_DEFAULTS)
+	local layout = panel.layout
+	local drawEdge = layout.cooldownDrawEdge ~= false
+	local drawBling = layout.cooldownDrawBling ~= false
+	local drawSwipe = layout.cooldownDrawSwipe ~= false
+	local gcdDrawEdge = layout.cooldownGcdDrawEdge == true
+	local gcdDrawBling = layout.cooldownGcdDrawBling == true
+	local gcdDrawSwipe = layout.cooldownGcdDrawSwipe == true
 
 	local visible = runtime.visibleEntries
 	if not visible then
@@ -2128,7 +2172,9 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 			local stackCount
 			local itemCount
 			local chargesInfo
-			local cooldownStart, cooldownDuration, cooldownEnabled, cooldownRate
+			local cooldownDurationObject
+			local cooldownRemaining
+			local cooldownStart, cooldownDuration, cooldownEnabled, cooldownRate, cooldownGCD
 			local show = false
 			local readyNow = false
 			local cooldownEnabledOk = true
@@ -2139,22 +2185,37 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 					show = false
 				else
 					if showCharges and GetSpellChargesInfo then chargesInfo = GetSpellChargesInfo(entry.spellID) end
-					if showCooldown or (showCharges and chargesInfo) then
+					if showCooldown then
+						cooldownDurationObject = getSpellCooldownDurationObject(entry.spellID)
+						cooldownRemaining = getDurationRemaining(cooldownDurationObject)
+						if cooldownRemaining ~= nil and cooldownRemaining <= 0 then
+							cooldownDurationObject = nil
+							cooldownRemaining = nil
+						end
+					end
+					if (showCooldown or (showCharges and chargesInfo)) and not cooldownDurationObject then
 						cooldownStart, cooldownDuration, cooldownEnabled, cooldownRate = getSpellCooldownInfo(entry.spellID)
+					elseif cooldownDurationObject then
+						_, _, _, _, cooldownGCD = getSpellCooldownInfo(entry.spellID)
 					end
 					if showStacks and GetPlayerAuraBySpellID then
 						local aura = GetPlayerAuraBySpellID(entry.spellID)
 						if aura and isSafeGreaterThan(aura.applications, 1) then stackCount = aura.applications end
 					end
 					cooldownEnabledOk = isSafeNotFalse(cooldownEnabled)
-					cooldownActive = showCooldown and cooldownEnabledOk and isCooldownActive(cooldownStart, cooldownDuration)
+					local durationActive = cooldownDurationObject ~= nil and (cooldownRemaining == nil or cooldownRemaining > 0)
+					cooldownActive = showCooldown and (durationActive or (cooldownEnabledOk and isCooldownActive(cooldownStart, cooldownDuration)))
 					if showCharges and chargesInfo then
-						readyNow = isSafeGreaterThan(chargesInfo.currentCharges, 0)
+						if issecretvalue and issecretvalue(chargesInfo.currentCharges) then
+							readyNow = false
+						else
+							readyNow = isSafeGreaterThan(chargesInfo.currentCharges, 0)
+						end
 					else
 						readyNow = showCooldown and not cooldownActive
 					end
 					show = alwaysShow
-					if not show and showCooldown and cooldownEnabledOk and isCooldownActive(cooldownStart, cooldownDuration) then show = true end
+					if not show and showCooldown and ((cooldownDurationObject ~= nil) or (cooldownEnabledOk and isCooldownActive(cooldownStart, cooldownDuration))) then show = true end
 					if not show and showCharges and chargesInfo and isSafeLessThan(chargesInfo.currentCharges, chargesInfo.maxCharges) then show = true end
 					if not show and showStacks and stackCount then show = true end
 				end
@@ -2226,10 +2287,13 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 					stackCount = stackCount,
 					itemCount = itemCount,
 					chargesInfo = chargesInfo,
+					cooldownDurationObject = cooldownDurationObject,
+					cooldownRemaining = cooldownRemaining,
 					cooldownStart = cooldownStart or 0,
 					cooldownDuration = cooldownDuration or 0,
 					cooldownEnabled = cooldownEnabled,
 					cooldownRate = cooldownRate or 1,
+					cooldownGCD = cooldownGCD or nil,
 				}
 			end
 		end
@@ -2252,38 +2316,73 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 		local cooldownStart = data.cooldownStart or 0
 		local cooldownDuration = data.cooldownDuration or 0
 		local cooldownRate = data.cooldownRate or 1
+		local cooldownDurationObject = data.cooldownDurationObject
 		local cooldownEnabledOk = isSafeNotFalse(data.cooldownEnabled)
-		local cooldownActive = data.showCooldown and cooldownEnabledOk and isCooldownActive(cooldownStart, cooldownDuration)
+		local cooldownRemaining = data.cooldownRemaining
+		local durationActive = cooldownDurationObject ~= nil and (cooldownRemaining == nil or cooldownRemaining > 0)
+		local cooldownActive = data.showCooldown and (durationActive or (cooldownEnabledOk and isCooldownActive(cooldownStart, cooldownDuration)))
+		local usingCooldown = false
+		local desaturate = false
 
-		if data.showCharges and data.chargesInfo and isSafeGreaterThan(data.chargesInfo.maxCharges, 0) then
-			if isSafeNumber(data.chargesInfo.currentCharges) then
+		if data.showCharges and data.chargesInfo and data.chargesInfo.maxCharges ~= nil then
+			if data.chargesInfo.currentCharges ~= nil then
 				icon.charges:SetText(data.chargesInfo.currentCharges)
 				icon.charges:Show()
 			else
 				icon.charges:Hide()
 			end
-			if data.showCooldown and isSafeLessThan(data.chargesInfo.currentCharges, data.chargesInfo.maxCharges) then
-				cooldownStart = data.chargesInfo.cooldownStartTime or cooldownStart
-				cooldownDuration = data.chargesInfo.cooldownDuration or cooldownDuration
-				cooldownRate = data.chargesInfo.chargeModRate or cooldownRate
-				cooldownActive = data.showCooldown and cooldownEnabledOk and isCooldownActive(cooldownStart, cooldownDuration)
+			if data.showCooldown then
+				local chargesSecret = issecretvalue and (issecretvalue(data.chargesInfo.currentCharges) or issecretvalue(data.chargesInfo.maxCharges))
+				if chargesSecret or isSafeLessThan(data.chargesInfo.currentCharges, data.chargesInfo.maxCharges) then
+					cooldownStart = data.chargesInfo.cooldownStartTime or cooldownStart
+					cooldownDuration = data.chargesInfo.cooldownDuration or cooldownDuration
+					cooldownRate = data.chargesInfo.chargeModRate or cooldownRate
+					cooldownActive = true
+					usingCooldown = true
+				end
 			end
+			if usingCooldown and isSafeNumber(data.chargesInfo.currentCharges) then desaturate = data.chargesInfo.currentCharges == 0 end
 		else
 			icon.charges:Hide()
 		end
 
 		if not isSafeNumber(cooldownRate) then cooldownRate = 1 end
-		if data.showCooldown and cooldownActive then
-			icon.cooldown:SetCooldown(cooldownStart, cooldownDuration, cooldownRate)
-			icon.texture:SetDesaturated(true)
-			icon.texture:SetAlpha(0.5)
-			if icon.cooldown.SetScript then icon.cooldown:SetScript("OnCooldownDone", onCooldownDone) end
+		icon.texture:SetDesaturated(desaturate)
+		if data.showCooldown then
+			if usingCooldown then
+				icon.cooldown:SetCooldown(cooldownStart, cooldownDuration, cooldownRate)
+				setCooldownDrawState(icon.cooldown, drawEdge, drawBling, drawSwipe)
+				if icon.cooldown.SetScript then icon.cooldown:SetScript("OnCooldownDone", onCooldownDone) end
+			elseif durationActive then
+				icon.cooldown:SetCooldownFromDurationObject(cooldownDurationObject)
+				if data.cooldownGCD then
+					icon.texture:SetDesaturation(0)
+					desaturate = false
+					setCooldownDrawState(icon.cooldown, gcdDrawEdge, gcdDrawBling, gcdDrawSwipe)
+				else
+					setCooldownDrawState(icon.cooldown, drawEdge, drawBling, drawSwipe)
+
+					local desat = cooldownDurationObject:EvaluateRemainingDuration(curveDesat)
+					icon.texture:SetDesaturation(desat)
+				end
+				if icon.cooldown.SetScript then icon.cooldown:SetScript("OnCooldownDone", onCooldownDone) end
+			elseif cooldownActive then
+				icon.cooldown:SetCooldown(cooldownStart, cooldownDuration, cooldownRate)
+				desaturate = true
+				icon.texture:SetDesaturated(desaturate)
+				setCooldownDrawState(icon.cooldown, drawEdge, drawBling, drawSwipe)
+				if icon.cooldown.SetScript then icon.cooldown:SetScript("OnCooldownDone", onCooldownDone) end
+			else
+				setCooldownDrawState(icon.cooldown, drawEdge, drawBling, drawSwipe)
+				icon.cooldown:Clear()
+				if icon.cooldown.SetScript then icon.cooldown:SetScript("OnCooldownDone", nil) end
+			end
 		else
+			setCooldownDrawState(icon.cooldown, drawEdge, drawBling, drawSwipe)
 			icon.cooldown:Clear()
 			if icon.cooldown.SetScript then icon.cooldown:SetScript("OnCooldownDone", nil) end
-			icon.texture:SetDesaturated(false)
-			icon.texture:SetAlpha(1)
 		end
+		icon.texture:SetAlphaFromBoolean(desaturate, 0.5, 1)
 
 		if data.showItemCount and data.itemCount then
 			icon.count:SetText(data.itemCount)
@@ -2475,6 +2574,12 @@ local function applyEditLayout(panelId, field, value, skipRefresh)
 		layout.cooldownDrawBling = value ~= false
 	elseif field == "cooldownDrawSwipe" then
 		layout.cooldownDrawSwipe = value ~= false
+	elseif field == "cooldownGcdDrawEdge" then
+		layout.cooldownGcdDrawEdge = value == true
+	elseif field == "cooldownGcdDrawBling" then
+		layout.cooldownGcdDrawBling = value == true
+	elseif field == "cooldownGcdDrawSwipe" then
+		layout.cooldownGcdDrawSwipe = value == true
 	end
 
 	syncEditModeValue(panelId, field, layout[field])
@@ -2512,6 +2617,9 @@ function CooldownPanels:ApplyEditMode(panelId, data)
 	applyEditLayout(panelId, "cooldownDrawEdge", data.cooldownDrawEdge, true)
 	applyEditLayout(panelId, "cooldownDrawBling", data.cooldownDrawBling, true)
 	applyEditLayout(panelId, "cooldownDrawSwipe", data.cooldownDrawSwipe, true)
+	applyEditLayout(panelId, "cooldownGcdDrawEdge", data.cooldownGcdDrawEdge, true)
+	applyEditLayout(panelId, "cooldownGcdDrawBling", data.cooldownGcdDrawBling, true)
+	applyEditLayout(panelId, "cooldownGcdDrawSwipe", data.cooldownGcdDrawSwipe, true)
 
 	runtime.applyingFromEditMode = nil
 	self:ApplyLayout(panelId)
@@ -2859,6 +2967,33 @@ function CooldownPanels:RegisterEditModePanel(panelId)
 				get = function() return layout.cooldownDrawSwipe ~= false end,
 				set = function(_, value) applyEditLayout(panelId, "cooldownDrawSwipe", value) end,
 			},
+			{
+				name = L["CooldownPanelDrawEdgeGcd"] or "Draw edge on GCD",
+				kind = SettingType.Checkbox,
+				field = "cooldownGcdDrawEdge",
+				parentId = "cooldownPanelCooldown",
+				default = layout.cooldownGcdDrawEdge == true,
+				get = function() return layout.cooldownGcdDrawEdge == true end,
+				set = function(_, value) applyEditLayout(panelId, "cooldownGcdDrawEdge", value) end,
+			},
+			{
+				name = L["CooldownPanelDrawBlingGcd"] or "Draw bling on GCD",
+				kind = SettingType.Checkbox,
+				field = "cooldownGcdDrawBling",
+				parentId = "cooldownPanelCooldown",
+				default = layout.cooldownGcdDrawBling == true,
+				get = function() return layout.cooldownGcdDrawBling == true end,
+				set = function(_, value) applyEditLayout(panelId, "cooldownGcdDrawBling", value) end,
+			},
+			{
+				name = L["CooldownPanelDrawSwipeGcd"] or "Draw swipe on GCD",
+				kind = SettingType.Checkbox,
+				field = "cooldownGcdDrawSwipe",
+				parentId = "cooldownPanelCooldown",
+				default = layout.cooldownGcdDrawSwipe == true,
+				get = function() return layout.cooldownGcdDrawSwipe == true end,
+				set = function(_, value) applyEditLayout(panelId, "cooldownGcdDrawSwipe", value) end,
+			},
 		}
 	end
 
@@ -2891,6 +3026,9 @@ function CooldownPanels:RegisterEditModePanel(panelId)
 			cooldownDrawEdge = layout.cooldownDrawEdge ~= false,
 			cooldownDrawBling = layout.cooldownDrawBling ~= false,
 			cooldownDrawSwipe = layout.cooldownDrawSwipe ~= false,
+			cooldownGcdDrawEdge = layout.cooldownGcdDrawEdge == true,
+			cooldownGcdDrawBling = layout.cooldownGcdDrawBling == true,
+			cooldownGcdDrawSwipe = layout.cooldownGcdDrawSwipe == true,
 		},
 		onApply = function(_, _, data) self:ApplyEditMode(panelId, data) end,
 		onPositionChanged = function(_, _, data) self:HandlePositionChanged(panelId, data) end,

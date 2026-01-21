@@ -150,6 +150,13 @@ local function SafeSetVisible(frame, visible)
 		if not InCombatLockdown() then frame:Hide() end
 	end
 end
+local function isRestrictedContent()
+	if not (Enum and Enum.AddOnRestrictionType and C_RestrictedActions and C_RestrictedActions.GetAddOnRestrictionState) then return false end
+	for _, v in pairs(Enum.AddOnRestrictionType) do
+		if C_RestrictedActions.GetAddOnRestrictionState(v) == 2 then return true end
+	end
+	return false
+end
 local function SetCombatScrolling(enabled)
 	if not panel or not panel.Scroll then return end
 	local s = panel.Scroll
@@ -962,6 +969,22 @@ end
 
 function f:RefreshPanel()
 	if not InCombatLockdown() then
+		if isRestrictedContent() then
+			SetCombatScrolling(false)
+			SetButtonsInteractable(false)
+			if panel and panel.Blocker then
+				panel.Blocker:SetAlpha(1)
+				panel.Blocker:EnableMouse(true)
+				panel.Blocker:EnableMouseWheel(true)
+			end
+			return
+		end
+		if panel and panel.Blocker then
+			panel.Blocker:SetAlpha(0)
+			panel.Blocker:EnableMouse(false)
+			panel.Blocker:EnableMouseWheel(false)
+		end
+		SetCombatScrolling(true)
 		if not addon.db or not addon.db["teleportsWorldMapEnabled"] then
 			if panel then SafeSetVisible(panel, false) end
 			if tabButton then SafeSetVisible(tabButton, false) end

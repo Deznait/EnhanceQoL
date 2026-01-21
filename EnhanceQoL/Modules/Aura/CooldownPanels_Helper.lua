@@ -33,6 +33,9 @@ Helper.PANEL_LAYOUT_DEFAULTS = {
 	cooldownDrawEdge = true,
 	cooldownDrawBling = true,
 	cooldownDrawSwipe = true,
+	cooldownGcdDrawEdge = false,
+	cooldownGcdDrawBling = false,
+	cooldownGcdDrawSwipe = false,
 }
 
 Helper.ENTRY_DEFAULTS = {

@@ -3314,6 +3314,31 @@ updateBarSeparators = function(pType)
 	bar._sepVertical = vertical
 end
 
+local function getSafeThresholdMaxValue(bar, pType)
+	local function isSecret(value) return issecretvalue and issecretvalue(value) end
+
+	local maxValue
+	if bar and bar.GetMinMaxValues then
+		local _, tmpMax = bar:GetMinMaxValues()
+		if tmpMax ~= nil and not isSecret(tmpMax) then maxValue = tmpMax end
+	end
+	if not maxValue and bar then
+		local last = bar._lastMax
+		if last ~= nil and not isSecret(last) then maxValue = last end
+	end
+	if not maxValue and pType and POWER_ENUM and UnitPowerMax then
+		local useRaw = pType == "SOUL_SHARDS"
+		local tmp = UnitPowerMax("player", POWER_ENUM[pType], useRaw)
+		if tmp ~= nil and not isSecret(tmp) then maxValue = tmp end
+	end
+	if maxValue and bar then
+		bar._rbThresholdMax = maxValue
+	elseif bar and bar._rbThresholdMax and not isSecret(bar._rbThresholdMax) then
+		maxValue = bar._rbThresholdMax
+	end
+	return maxValue
+end
+
 updateBarThresholds = function(pType)
 	if pType == "HEALTH" then return end
 	local bar = powerbar[pType]
@@ -3332,12 +3357,7 @@ updateBarThresholds = function(pType)
 	local useAbsolute = cfg.useAbsoluteThresholds == true
 	local maxValue
 	if useAbsolute then
-		local maxV
-		if bar.GetMinMaxValues then
-			local _, tmpMax = bar:GetMinMaxValues()
-			maxV = tmpMax
-		end
-		maxValue = maxV or bar._lastMax or 0
+		maxValue = getSafeThresholdMaxValue(bar, pType)
 		if not maxValue or maxValue <= 0 then
 			if bar.thresholdMarks then
 				for _, tx in ipairs(bar.thresholdMarks) do
