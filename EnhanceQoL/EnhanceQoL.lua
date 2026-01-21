@@ -3054,26 +3054,27 @@ local function initBagsFrame()
 		GameTooltip:Hide()
 	end
 
-	moneyFrame:HookScript("OnEnter", ShowBagMoneyTooltip)
-	moneyFrame:HookScript("OnLeave", HideBagMoneyTooltip)
-	for _, coin in ipairs({ "GoldButton", "SilverButton", "CopperButton" }) do
-		local btn = moneyFrame[coin]
-		if btn then
-			btn:HookScript("OnEnter", ShowBagMoneyTooltip)
-			btn:HookScript("OnLeave", HideBagMoneyTooltip)
-		end
-	end
+	-- ! Still bugging as of 2026-01-21 - need to disable it
+	-- moneyFrame:HookScript("OnEnter", ShowBagMoneyTooltip)
+	-- moneyFrame:HookScript("OnLeave", HideBagMoneyTooltip)
+	-- for _, coin in ipairs({ "GoldButton", "SilverButton", "CopperButton" }) do
+	-- 	local btn = moneyFrame[coin]
+	-- 	if btn then
+	-- 		btn:HookScript("OnEnter", ShowBagMoneyTooltip)
+	-- 		btn:HookScript("OnLeave", HideBagMoneyTooltip)
+	-- 	end
+	-- end
 
-	moneyFrame = ContainerFrame1.MoneyFrame
-	moneyFrame:HookScript("OnEnter", ShowBagMoneyTooltip)
-	moneyFrame:HookScript("OnLeave", HideBagMoneyTooltip)
-	for _, coin in ipairs({ "GoldButton", "SilverButton", "CopperButton" }) do
-		local btn = moneyFrame[coin]
-		if btn then
-			btn:HookScript("OnEnter", ShowBagMoneyTooltip)
-			btn:HookScript("OnLeave", HideBagMoneyTooltip)
-		end
-	end
+	-- moneyFrame = ContainerFrame1.MoneyFrame
+	-- moneyFrame:HookScript("OnEnter", ShowBagMoneyTooltip)
+	-- moneyFrame:HookScript("OnLeave", HideBagMoneyTooltip)
+	-- for _, coin in ipairs({ "GoldButton", "SilverButton", "CopperButton" }) do
+	-- 	local btn = moneyFrame[coin]
+	-- 	if btn then
+	-- 		btn:HookScript("OnEnter", ShowBagMoneyTooltip)
+	-- 		btn:HookScript("OnLeave", HideBagMoneyTooltip)
+	-- 	end
+	-- end
 end
 
 local function initChatFrame()
@@ -5631,7 +5632,7 @@ local eventHandlers = {
 		if addon.db["autoChooseQuest"] and not IsShiftKeyDown() and IsQuestCompletable() then CompleteQuest() end
 	end,
 	["AUCTION_HOUSE_SHOW"] = function()
-		if addon.db["closeBagsOnAuctionHouse"] then CloseAllBags() end
+		if addon.db["closeBagsOnAuctionHouse"] and not addon.functions.isRestrictedContent() then CloseAllBags() end
 		if addon.db["persistAuctionHouseFilter"] then
 			if not AuctionHouseFrame.SearchBar.FilterButton.eqolHooked then
 				hooksecurefunc(AuctionHouseFrame.SearchBar.FilterButton, "Reset", function(self)

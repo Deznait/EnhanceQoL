@@ -2,6 +2,11 @@
 
 ## [7.3.0] - 2026-01-21
 
+### ⏰ Temporarily disabled
+ 
+- Money tracker in bags still has a tooltip error (secret related) in latest retail version
+- Close all Bags option in restricted Environment (m+ key running) when opening auction house - leads to lua error when opening mailbox afterwards...
+
 ### ✨ Added
 
 - Option to hide the "Screen captured" text

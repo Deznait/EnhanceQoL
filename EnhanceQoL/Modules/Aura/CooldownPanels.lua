@@ -2371,7 +2371,15 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 					usingCooldown = true
 				end
 			end
-			if usingCooldown and isSafeNumber(data.chargesInfo.currentCharges) then desaturate = data.chargesInfo.currentCharges == 0 end
+			if usingCooldown then
+				if isSafeNumber(data.chargesInfo.currentCharges) then
+					desaturate = data.chargesInfo.currentCharges == 0
+				else
+					-- TODO need to find a way for charges = 0 in secret to make it desaturated
+					-- print(data.chargesInfo.currentCharges, issecretvalue(data.chargesInfo.currentCharges))
+					-- icon.texture:SetDesaturation(data.chargesInfo.currentCharges)
+				end
+			end
 		else
 			icon.charges:Hide()
 		end
