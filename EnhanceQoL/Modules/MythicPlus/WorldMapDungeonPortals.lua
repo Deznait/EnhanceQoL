@@ -151,9 +151,11 @@ local function SafeSetVisible(frame, visible)
 	end
 end
 local function isRestrictedContent()
-	if not (Enum and Enum.AddOnRestrictionType and C_RestrictedActions and C_RestrictedActions.GetAddOnRestrictionState) then return false end
-	for _, v in pairs(Enum.AddOnRestrictionType) do
-		if C_RestrictedActions.GetAddOnRestrictionState(v) == 2 then return true end
+	local restrictionTypes = Enum and Enum.AddOnRestrictionType
+	local restrictedActions = _G.C_RestrictedActions
+	if not (restrictionTypes and restrictedActions and restrictedActions.GetAddOnRestrictionState) then return false end
+	for _, v in pairs(restrictionTypes) do
+		if restrictedActions.GetAddOnRestrictionState(v) == 2 then return true end
 	end
 	return false
 end

@@ -84,7 +84,6 @@ local GetPlayerAuraBySpellID = C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellI
 local IsSpellKnown = IsSpellKnown
 local IsEquippedItem = IsEquippedItem
 local GetTime = GetTime
-local ActionButtonSpellAlertManager = ActionButtonSpellAlertManager
 local MenuUtil = MenuUtil
 local issecretvalue = _G.issecretvalue
 local DurationModifierRealTime = Enum and Enum.DurationTimeModifier and Enum.DurationTimeModifier.RealTime
@@ -229,8 +228,9 @@ end
 
 local function setExampleCooldown(cooldown)
 	if not cooldown then return end
-	if CooldownFrame_SetDisplayAsPercentage then
-		CooldownFrame_SetDisplayAsPercentage(cooldown, EXAMPLE_COOLDOWN_PERCENT)
+	local setAsPercent = _G.CooldownFrame_SetDisplayAsPercentage
+	if setAsPercent then
+		setAsPercent(cooldown, EXAMPLE_COOLDOWN_PERCENT)
 	elseif cooldown.SetCooldown and GetTime then
 		local duration = 100
 		cooldown:SetCooldown(GetTime() - (duration * EXAMPLE_COOLDOWN_PERCENT), duration, 1)
@@ -674,11 +674,12 @@ end
 local function setGlow(frame, enabled)
 	if frame._glow == enabled then return end
 	frame._glow = enabled
-	if not ActionButtonSpellAlertManager then return end
+	local alertManager = _G.ActionButtonSpellAlertManager
+	if not alertManager then return end
 	if enabled then
-		ActionButtonSpellAlertManager:ShowAlert(frame)
+		alertManager:ShowAlert(frame)
 	else
-		ActionButtonSpellAlertManager:HideAlert(frame)
+		alertManager:HideAlert(frame)
 	end
 end
 
@@ -1156,6 +1157,8 @@ getEditor = function()
 	return runtime and runtime.editor or nil
 end
 
+local ensureDeletePopup
+
 local function ensureEditor()
 	local runtime = getRuntime("editor")
 	if runtime.editor then return runtime.editor end
@@ -1573,7 +1576,7 @@ local function ensureEditor()
 	return runtime.editor
 end
 
-local function ensureDeletePopup()
+ensureDeletePopup = function()
 	if StaticPopupDialogs["EQOL_COOLDOWN_PANEL_DELETE"] then return end
 	StaticPopupDialogs["EQOL_COOLDOWN_PANEL_DELETE"] = {
 		text = L["CooldownPanelDeletePanel"] or "Delete Panel?",

@@ -3651,16 +3651,17 @@ local function initUI()
 	addon.functions.toggleZoneText(addon.db["hideZoneText"], true)
 
 	function addon.functions.toggleScreenshotStatus(value)
-		if not ActionStatus or not ActionStatus.UnregisterEvent or not ActionStatus.RegisterEvent then return end
+		local actionStatus = _G.ActionStatus
+		if not actionStatus or not actionStatus.UnregisterEvent or not actionStatus.RegisterEvent then return end
 		if value then
-			ActionStatus:UnregisterEvent("SCREENSHOT_STARTED")
-			ActionStatus:UnregisterEvent("SCREENSHOT_SUCCEEDED")
-			ActionStatus:UnregisterEvent("SCREENSHOT_FAILED")
-			if ActionStatus.Hide then ActionStatus:Hide() end
+			actionStatus:UnregisterEvent("SCREENSHOT_STARTED")
+			actionStatus:UnregisterEvent("SCREENSHOT_SUCCEEDED")
+			actionStatus:UnregisterEvent("SCREENSHOT_FAILED")
+			if actionStatus.Hide then actionStatus:Hide() end
 		else
-			ActionStatus:RegisterEvent("SCREENSHOT_STARTED")
-			ActionStatus:RegisterEvent("SCREENSHOT_SUCCEEDED")
-			ActionStatus:RegisterEvent("SCREENSHOT_FAILED")
+			actionStatus:RegisterEvent("SCREENSHOT_STARTED")
+			actionStatus:RegisterEvent("SCREENSHOT_SUCCEEDED")
+			actionStatus:RegisterEvent("SCREENSHOT_FAILED")
 		end
 	end
 	addon.functions.toggleScreenshotStatus(addon.db["hideScreenshotStatus"])
