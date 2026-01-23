@@ -557,6 +557,8 @@ L["questTrackerQuestCountOffsetX"] = "Horizontal offset"
 L["questTrackerQuestCountOffsetY"] = "Vertical offset"
 L["questTrackerMinimizeButtonOnly"] = "Minimize to '+' only"
 L["questTrackerMinimizeButtonOnly_desc"] = "When the Objective Tracker is collapsed, hide the header bar and show only the (+) button."
+L["questTrackerMinimizeButtonAnchor"] = "Minimized '+' anchor"
+L["questTrackerMinimizeButtonAnchor_desc"] = "When minimized to '+', choose which corner of the tracker to anchor the button to."
 L["questTrackerRememberState"] = "Remember Quest Tracker state"
 L["questTrackerRememberState_desc"] = "Restores the Objective Tracker's collapsed/expanded state after login or reload."
 

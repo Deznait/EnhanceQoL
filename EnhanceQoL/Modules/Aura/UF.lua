@@ -249,6 +249,8 @@ local defaults = {
 			enabled = true,
 			detached = false,
 			detachedFrameLevelOffset = 5,
+			detachedStrata = nil,
+			emptyMaxFallback = false,
 			color = { 0.1, 0.45, 1, 1 },
 			backdrop = { enabled = true, color = { 0, 0, 0, 0.6 } },
 			useCustomColor = false,
@@ -1070,13 +1072,11 @@ function AuraUtil.ensureAuraButton(container, icons, index, ac)
 		end
 	end
 
-	if MSQgroup then
-		btn._eqolMasqueRegions = btn._eqolMasqueRegions or {
-			Icon = btn.icon,
-			Cooldown = btn.cd,
-			Border = btn.border,
-		}
-	end
+	if MSQgroup then btn._eqolMasqueRegions = btn._eqolMasqueRegions or {
+		Icon = btn.icon,
+		Cooldown = btn.cd,
+		Border = btn.border,
+	} end
 
 	return btn, icons
 end
@@ -2863,6 +2863,7 @@ local function updatePower(cfg, unit)
 	local def = defaultsFor(unit) or {}
 	local defP = def.power or {}
 	local pcfg = cfg.power or {}
+	local powerDetached = pcfg.detached == true
 	local hidePercentSymbol = pcfg.hidePercentSymbol == true
 	local leftMode = pcfg.textLeft or "PERCENT"
 	local centerMode = pcfg.textCenter or "NONE"
@@ -2899,6 +2900,16 @@ local function updatePower(cfg, unit)
 	bar:SetStatusBarColor(cr or 0.1, cg or 0.45, cb or 1, ca or 1)
 	if bar.SetStatusBarDesaturated then bar:SetStatusBarDesaturated(UFHelper.isPowerDesaturated(powerToken)) end
 	local maxZero = (issecretvalue and not issecretvalue(maxv) and maxv == 0) or (not addon.variables.isMidnight and maxv == 0)
+	local emptyFallback = pcfg.emptyMaxFallback == true
+	if emptyFallback then
+		if powerDetached then
+			if bar.SetAlpha then bar:SetAlpha(maxv) end
+			if st.powerGroup and st.powerGroup.SetAlpha then st.powerGroup:SetAlpha(maxv) end
+		end
+	elseif powerDetached then
+		if bar.SetAlpha then bar:SetAlpha(1) end
+		if st.powerGroup and st.powerGroup.SetAlpha then st.powerGroup:SetAlpha(1) end
+	end
 	local delimiter = UFHelper.getTextDelimiter(pcfg, defP)
 	local delimiter2 = UFHelper.getTextDelimiterSecondary(pcfg, defP, delimiter)
 	local delimiter3 = UFHelper.getTextDelimiterTertiary(pcfg, defP, delimiter, delimiter2)
@@ -3422,6 +3433,12 @@ local function layoutFrame(cfg, unit)
 	if st.power.GetFrameLevel and st._powerBaseFrameLevel == nil then st._powerBaseFrameLevel = st.power:GetFrameLevel() end
 	if st.power.SetFrameStrata then
 		local baseStrata = (st.frame and st.frame.GetFrameStrata and st.frame:GetFrameStrata()) or "MEDIUM"
+		if powerDetached then
+			local powerStrata = pcfg.detachedStrata
+			if powerStrata == nil then powerStrata = powerDef.detachedStrata end
+			if powerStrata == "" then powerStrata = nil end
+			if powerStrata then baseStrata = powerStrata end
+		end
 		st.power:SetFrameStrata(baseStrata)
 	end
 	if st.power.SetFrameLevel then

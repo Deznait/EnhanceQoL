@@ -1,5 +1,19 @@
 # Changelog
 
+## [7.6.0] - 2026-01-23
+
+### ✨ Added
+
+- Quest Tracker: Minimized '+' anchor now supports bottom corners properly.
+- UF Plus: Detached power bar can use a custom strata.
+- UF Plus: Optional handling for empty power bars (max 0) when power is detached.
+
+### 🐛 Fixed
+
+- Action Tracker: Ignore list updated for Spark of Madness and alchemy/cooking DNT casts.
+
+---
+
 ## [7.5.0] - 2026-01-23
 
 ### ✨ Added

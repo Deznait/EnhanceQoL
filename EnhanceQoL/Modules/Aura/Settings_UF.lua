@@ -927,6 +927,25 @@ local function buildUnitSettings(unit)
 	list[#list + 1] = detachedBorderOffset
 
 	local powerDefaults = def.power or {}
+	local detachedStrataOptions = { { value = "", label = L["Default"] or "Default" } }
+	for i = 1, #strataOptions do
+		detachedStrataOptions[#detachedStrataOptions + 1] = strataOptions[i]
+	end
+	local detachedPowerStrata = radioDropdown(
+		L["UFDetachedPowerStrata"] or "Detached power bar strata",
+		detachedStrataOptions,
+		function() return getValue(unit, { "power", "detachedStrata" }, powerDefaults.detachedStrata or "") end,
+		function(val)
+			if val == "" then val = nil end
+			setValue(unit, { "power", "detachedStrata" }, val)
+			refresh()
+		end,
+		powerDefaults.detachedStrata or "",
+		"frame",
+		true
+	)
+	list[#list + 1] = detachedPowerStrata
+
 	local detachedPowerLevelOffset = slider(
 		L["UFDetachedPowerLevelOffset"] or "Detached power bar level offset",
 		0,
@@ -1588,6 +1607,21 @@ local function buildUnitSettings(unit)
 	list[#list + 1] = powerDetachedSetting
 
 	local function isPowerDetachedEnabled() return isPowerEnabled() and isPowerDetached() end
+
+	local powerEmptyFallbackSetting = checkbox(
+		L["UFPowerEmptyFallback"] or "Handle empty power bars (max 0)",
+		function() return getValue(unit, { "power", "emptyMaxFallback" }, powerDef.emptyMaxFallback == true) == true end,
+		function(val)
+			setValue(unit, { "power", "emptyMaxFallback" }, val and true or false)
+			refresh()
+		end,
+		powerDef.emptyMaxFallback == true,
+		"power",
+		isPowerEnabled
+	)
+	powerEmptyFallbackSetting.isEnabled = isPowerDetachedEnabled
+	powerEmptyFallbackSetting.isShown = isPowerDetachedEnabled
+	list[#list + 1] = powerEmptyFallbackSetting
 
 	local powerWidthSetting = slider(L["UFPowerWidth"] or "Power width", MIN_WIDTH, 800, 1, function()
 		local fallback = getValue(unit, { "width" }, def.width or MIN_WIDTH)
