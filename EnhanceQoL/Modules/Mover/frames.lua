@@ -192,6 +192,14 @@ local frames = {
 		defaultEnabled = true,
 	},
 	{
+		id = "InspectFrame",
+		label = INSPECT,
+		group = "character",
+		names = { "InspectFrame" },
+		defaultEnabled = true,
+		addon = "Blizzard_InspectUI",
+	},
+	{
 		id = "PlayerSpellsFrame",
 		label = L["Talents & Spells"] or "Talents & Spells",
 		group = "character",

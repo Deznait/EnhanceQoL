@@ -1,5 +1,13 @@
 # Changelog
 
+## [7.4.1] - 2026-01-23
+
+### 🐛 Fixed
+
+- Inspect Frame wasn't movable through _Mover_
+
+---
+
 ## [7.4.0] - 2026-01-22
 
 ### ✨ Added
