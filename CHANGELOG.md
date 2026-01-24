@@ -24,6 +24,7 @@
 - Mythic+: Dungeon portal UI now ignores restriction type 4 (matching world map behavior).
 - Mythic+: World map teleport panel now opens correctly from the collapsed map state.
 - Cooldown Viewer: Druid Travel Form detection now supports dynamic form order (including Flight Form variants).
+- Resource Bars: Max height increased to support vertical layouts.
 - UF Plus: Debuff border colors now use the modern dispel color API (DebuffTypeColor removed).
 - World Marker Cycle: Sometimes not working for some users
 - Mount Keybinding: Only Druids should cancel their respective form now

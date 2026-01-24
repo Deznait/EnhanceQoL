@@ -490,7 +490,7 @@ local function registerEditModeBars()
 					allowInput = true,
 					field = "height",
 					minValue = 6,
-					maxValue = 80,
+					maxValue = 600,
 					valueStep = 1,
 					default = heightDefault or 20,
 					parentId = "frame",
