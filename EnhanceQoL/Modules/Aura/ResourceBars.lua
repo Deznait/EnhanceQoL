@@ -1896,6 +1896,18 @@ local formIndexToKey = {
 	[5] = "TREANT",
 	[6] = "STAG",
 }
+local formIDToKey = {}
+local function mapFormID(key, ...)
+	for i = 1, select("#", ...) do
+		local formID = select(i, ...)
+		if type(formID) == "number" then formIDToKey[formID] = key end
+	end
+end
+mapFormID("BEAR", DRUID_BEAR_FORM)
+mapFormID("CAT", DRUID_CAT_FORM)
+mapFormID("TRAVEL", DRUID_TRAVEL_FORM, DRUID_ACQUATIC_FORM, DRUID_FLIGHT_FORM, DRUID_SWIFT_FLIGHT_FORM)
+mapFormID("MOONKIN", DRUID_MOONKIN_FORM_1, DRUID_MOONKIN_FORM_2)
+mapFormID("TREANT", DRUID_TREE_FORM)
 local formKeyToIndex = {}
 local druidStanceOrder = {}
 for idx, key in pairs(formIndexToKey) do
@@ -1925,6 +1937,7 @@ local function mapFormNameToKey(name)
 	if name:find("travel") or name:find("aquatic") or name:find("flight") or name:find("flight form") then return "TRAVEL" end
 	if name:find("moonkin") or name:find("owl") then return "MOONKIN" end
 	if name:find("treant") then return "TREANT" end
+	if name:find("tree of life") or name:find("tree form") or name:find("treeform") then return "HUMANOID" end
 	if name:find("stag") then return "STAG" end
 	return nil
 end
@@ -3937,6 +3950,11 @@ local function setPowerbars(opts)
 	local forceAllDruidBars = isDruid and ((opts.forceAllDruidBars == true) or editModeActive)
 	local function currentDruidForm()
 		if not isDruid then return nil end
+		if GetShapeshiftFormID then
+			local formID = GetShapeshiftFormID()
+			local key = formIDToKey[formID]
+			if key then return key end
+		end
 		local idx = GetShapeshiftForm() or 0
 		local key = formIndexToKey[idx]
 		if key then return key end

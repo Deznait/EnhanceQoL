@@ -591,7 +591,10 @@ end
 
 addon.variables.isMidnight = select(4, GetBuildInfo()) >= 120000
 
-if addon.variables.isMidnight then
+local playerLevel = UnitLevel("player") or 0
+local useMidnightEnchantRules = playerLevel >= 81
+
+if useMidnightEnchantRules then
 	addon.variables.shouldEnchanted = { [1] = true, [5] = true, [7] = true, [8] = true, [11] = true, [12] = true, [3] = true, [16] = true, [17] = true }
 else
 	addon.variables.shouldEnchanted = { [15] = true, [5] = true, [9] = true, [7] = true, [8] = true, [11] = true, [12] = true, [16] = true, [17] = true }

@@ -27,10 +27,13 @@
 - Mouse Ring: Combat-only color/size override and optional extra combat ring overlay.
 - Sound: Personal crafting orders now have extra sound options for New/Removed orders (fires only on changes).
 - Shared Media: 2 new voices for crafting orders (Crafting Order - New, Crafting Order - Canceled).
+- Visibility: Added player casting/mounted/in-group rules plus skyriding show/hide and player health < 100% support for action bars/cooldown viewer.
 
 ### 🐛 Fixed
 
 - Cooldown Panel glow wasn't working correctly in restricted environment
+- Resource Bars: Druid forms missed Tree of Life
+- Enchant checks: Keep legacy required slots until Midnight rules apply (level 81+)
 
 ---
 
