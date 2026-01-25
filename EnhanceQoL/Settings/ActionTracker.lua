@@ -156,6 +156,7 @@ function addon.functions.initActionTracker()
 	addon.functions.InitDBValue("actionTrackerSpacing", defaults.spacing or 0)
 	addon.functions.InitDBValue("actionTrackerDirection", defaults.direction or "RIGHT")
 	addon.functions.InitDBValue("actionTrackerFadeDuration", defaults.fadeDuration or 0)
+	addon.functions.InitDBValue("actionTrackerShowElapsed", defaults.showElapsed or false)
 
 	if addon.ActionTracker and addon.ActionTracker.OnSettingChanged then addon.ActionTracker:OnSettingChanged(addon.db["actionTrackerEnabled"]) end
 end

@@ -1520,6 +1520,12 @@ local function buildUnitSettings(unit)
 	})
 
 	if unit ~= "pet" then
+		local function getOverlayHeightFallback()
+			local height = getValue(unit, { "healthHeight" }, def.healthHeight or 24)
+			if not height or height <= 0 then height = def.healthHeight or 24 end
+			return height
+		end
+
 		list[#list + 1] = { name = L["AbsorbBar"] or "Absorb Bar", kind = settingType.Collapsible, id = "absorb", defaultCollapsed = true }
 		local absorbColorDef = healthDef.absorbColor or { 0.85, 0.95, 1, 0.7 }
 
@@ -1571,6 +1577,16 @@ local function buildUnitSettings(unit)
 			healthDef.absorbReverseFill == true,
 			"absorb"
 		)
+
+		list[#list + 1] = slider(L["Absorb overlay height"] or "Absorb overlay height", 1, 80, 1, function()
+			local fallback = getOverlayHeightFallback()
+			local val = getValue(unit, { "health", "absorbOverlayHeight" }, healthDef.absorbOverlayHeight)
+			if not val or val <= 0 then return fallback end
+			return math.min(val, fallback)
+		end, function(val)
+			setValue(unit, { "health", "absorbOverlayHeight" }, val or getOverlayHeightFallback())
+			refresh()
+		end, getOverlayHeightFallback(), "absorb", true)
 
 		list[#list + 1] = checkbox(L["Show sample absorb"] or "Show sample absorb", function() return sampleAbsorb[unit] == true end, function(val)
 			sampleAbsorb[unit] = val and true or false
@@ -1630,6 +1646,16 @@ local function buildUnitSettings(unit)
 			healthDef.healAbsorbReverseFill == true,
 			"healAbsorb"
 		)
+
+		list[#list + 1] = slider(L["Heal absorb overlay height"] or "Heal absorb overlay height", 1, 80, 1, function()
+			local fallback = getOverlayHeightFallback()
+			local val = getValue(unit, { "health", "healAbsorbOverlayHeight" }, healthDef.healAbsorbOverlayHeight)
+			if not val or val <= 0 then return fallback end
+			return math.min(val, fallback)
+		end, function(val)
+			setValue(unit, { "health", "healAbsorbOverlayHeight" }, val or getOverlayHeightFallback())
+			refresh()
+		end, getOverlayHeightFallback(), "healAbsorb", true)
 
 		list[#list + 1] = checkbox(L["Show sample heal absorb"] or "Show sample heal absorb", function() return sampleHealAbsorb[unit] == true end, function(val)
 			sampleHealAbsorb[unit] = val and true or false

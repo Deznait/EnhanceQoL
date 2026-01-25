@@ -13,10 +13,14 @@ local ActionTracker = addon.ActionTracker
 local L = LibStub("AceLocale-3.0"):GetLocale(parentAddonName)
 local EditMode = addon.EditMode
 local SettingType = EditMode and EditMode.lib and EditMode.lib.SettingType
+local Masque
 
 local EDITMODE_ID = "actionTracker"
 local MAX_ICONS_LIMIT = 10
 local FADE_TICK = 0.05
+local TIME_LABEL_FONT_SIZE = 11
+local TIME_LABEL_PADDING = 2
+local TIME_LABEL_HEIGHT = TIME_LABEL_FONT_SIZE + TIME_LABEL_PADDING
 
 ActionTracker.defaults = ActionTracker.defaults or {
 	maxIcons = 5,
@@ -24,6 +28,7 @@ ActionTracker.defaults = ActionTracker.defaults or {
 	spacing = 0,
 	direction = "RIGHT",
 	fadeDuration = 0,
+	showElapsed = false,
 }
 
 local defaults = ActionTracker.defaults
@@ -34,6 +39,7 @@ local DB_ICON_SIZE = "actionTrackerIconSize"
 local DB_SPACING = "actionTrackerSpacing"
 local DB_DIRECTION = "actionTrackerDirection"
 local DB_FADE = "actionTrackerFadeDuration"
+local DB_SHOW_ELAPSED = "actionTrackerShowElapsed"
 
 local VALID_DIRECTIONS = {
 	RIGHT = true,
@@ -43,6 +49,15 @@ local VALID_DIRECTIONS = {
 }
 
 ActionTracker.entries = ActionTracker.entries or {}
+ActionTracker.runtime = ActionTracker.runtime or {}
+
+local function getMasqueGroup()
+	if not Masque and LibStub then Masque = LibStub("Masque", true) end
+	if not Masque then return nil end
+	ActionTracker.runtime = ActionTracker.runtime or {}
+	if not ActionTracker.runtime.masqueGroup then ActionTracker.runtime.masqueGroup = Masque:Group(parentAddonName, L["ActionTracker"] or "Action Tracker", "ActionTracker") end
+	return ActionTracker.runtime.masqueGroup
+end
 
 local function getValue(key, fallback)
 	if not addon.db then return fallback end
@@ -84,6 +99,8 @@ function ActionTracker:GetFadeDuration()
 	return fade
 end
 
+function ActionTracker:GetShowElapsed() return getValue(DB_SHOW_ELAPSED, defaults.showElapsed) == true end
+
 function ActionTracker:GetEntryAlpha(entry, now, fade)
 	local duration = fade
 	if duration == nil then duration = self:GetFadeDuration() end
@@ -91,6 +108,18 @@ function ActionTracker:GetEntryAlpha(entry, now, fade)
 	local age = (now or GetTime()) - (entry.time or 0)
 	if age >= duration then return 0 end
 	return 1 - (age / duration)
+end
+
+local function formatElapsed(elapsed)
+	if elapsed < 0 then elapsed = 0 end
+	if elapsed < 10 then
+		return string.format("%.2fs", elapsed)
+	elseif elapsed < 100 then
+		return string.format("%.1fs", elapsed)
+	end
+	local minutes = math.floor(elapsed / 60)
+	local seconds = math.floor(elapsed % 60)
+	return string.format("%dm%02ds", minutes, seconds)
 end
 
 function ActionTracker:TrimEntries()
@@ -104,6 +133,7 @@ local function applyIconSize(icon, size)
 	icon:SetSize(size, size)
 	if icon.texture then icon.texture:SetAllPoints(icon) end
 	if icon.cooldown then icon.cooldown:SetAllPoints(icon) end
+	if icon.timeText and icon.timeText.SetWidth then icon.timeText:SetWidth(size + 8) end
 end
 
 function ActionTracker:EnsureFrame()
@@ -138,6 +168,21 @@ function ActionTracker:EnsureFrame()
 		icon.cooldown = CreateFrame("Cooldown", nil, icon, "CooldownFrameTemplate")
 		icon.cooldown:SetAllPoints(icon)
 
+		icon.msqNormal = icon:CreateTexture(nil, "OVERLAY")
+		icon.msqNormal:SetAllPoints(icon)
+		icon.msqNormal:SetTexture("Interface\\Buttons\\UI-Quickslot2")
+		icon.msqNormal:Hide()
+
+		icon.timeText = icon:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+		icon.timeText:SetPoint("TOP", icon, "BOTTOM", 0, -TIME_LABEL_PADDING)
+		icon.timeText:SetJustifyH("CENTER")
+		icon.timeText:SetText("")
+		if icon.timeText.SetFont then
+			local font, _, flags = icon.timeText:GetFont()
+			if font then icon.timeText:SetFont(font, TIME_LABEL_FONT_SIZE, flags) end
+		end
+		icon.timeText:Hide()
+
 		icon:SetScript("OnEnter", function(selfIcon)
 			if not selfIcon.spellID then return end
 			GameTooltip:SetOwner(selfIcon, "ANCHOR_RIGHT")
@@ -152,6 +197,8 @@ function ActionTracker:EnsureFrame()
 	self.frame = frame
 	self:UpdateLayout()
 	self:RefreshIcons()
+	self:RegisterMasqueButtons()
+	self:ReskinMasque()
 
 	return frame
 end
@@ -175,30 +222,40 @@ function ActionTracker:UpdateLayout()
 	local maxIcons = self:GetMaxIcons()
 	local spacing = self:GetSpacing()
 	local direction = self:GetDirection()
+	local showElapsed = self:GetShowElapsed()
+	local labelExtra = showElapsed and TIME_LABEL_HEIGHT or 0
 
-	local total = (iconSize * maxIcons) + (spacing * (maxIcons - 1))
 	if direction == "LEFT" or direction == "RIGHT" then
-		frame:SetSize(total, iconSize)
+		local total = (iconSize * maxIcons) + (spacing * (maxIcons - 1))
+		frame:SetSize(total, iconSize + labelExtra)
 	else
+		local step = iconSize + spacing + labelExtra
+		local total = (step * maxIcons) - spacing
 		frame:SetSize(iconSize, total)
 	end
 
 	for i = 1, MAX_ICONS_LIMIT do
 		local icon = frame.icons[i]
-		local offset = (i - 1) * (iconSize + spacing)
+		local step = iconSize + spacing
+		if (direction == "UP" or direction == "DOWN") and showElapsed then step = iconSize + spacing + labelExtra end
+		local baseOffset = (showElapsed and direction == "UP") and labelExtra or 0
+		local offset = baseOffset + ((i - 1) * step)
+		local yOffset = (showElapsed and (direction == "LEFT" or direction == "RIGHT")) and (labelExtra / 2) or 0
 
 		applyIconSize(icon, iconSize)
 		icon:ClearAllPoints()
 		if direction == "RIGHT" then
-			icon:SetPoint("LEFT", frame, "LEFT", offset, 0)
+			icon:SetPoint("LEFT", frame, "LEFT", offset, yOffset)
 		elseif direction == "LEFT" then
-			icon:SetPoint("RIGHT", frame, "RIGHT", -offset, 0)
+			icon:SetPoint("RIGHT", frame, "RIGHT", -offset, yOffset)
 		elseif direction == "DOWN" then
 			icon:SetPoint("TOP", frame, "TOP", 0, -offset)
 		else
 			icon:SetPoint("BOTTOM", frame, "BOTTOM", 0, offset)
 		end
 	end
+
+	self:ReskinMasque()
 end
 
 function ActionTracker:RefreshIcons()
@@ -209,6 +266,7 @@ function ActionTracker:RefreshIcons()
 	local maxIcons = self:GetMaxIcons()
 	local now = GetTime()
 	local fade = self:GetFadeDuration()
+	local showElapsed = self:GetShowElapsed()
 
 	self:TrimEntries()
 
@@ -227,15 +285,52 @@ function ActionTracker:RefreshIcons()
 			end
 
 			icon:SetAlpha(self:GetEntryAlpha(entry, now, fade))
+			if icon.timeText then
+				if showElapsed and i > 1 and entries[i - 1] then
+					local delta = (entry.time or now) - (entries[i - 1].time or now)
+					icon.timeText:SetText(formatElapsed(delta))
+					icon.timeText:Show()
+				else
+					icon.timeText:SetText("")
+					icon.timeText:Hide()
+				end
+			end
 			icon:Show()
 		else
 			icon.spellID = nil
 			icon.texture:SetTexture(nil)
 			icon.cooldown:Clear()
 			icon:SetAlpha(0)
+			if icon.timeText then
+				icon.timeText:SetText("")
+				icon.timeText:Hide()
+			end
 			icon:Hide()
 		end
 	end
+end
+
+function ActionTracker:RegisterMasqueButtons()
+	local group = getMasqueGroup()
+	if not group then return end
+	local frame = self.frame
+	if not frame or not frame.icons then return end
+	for _, icon in ipairs(frame.icons) do
+		if icon and not icon._eqolMasqueAdded then
+			local regions = {
+				Icon = icon.texture,
+				Cooldown = icon.cooldown,
+				Normal = icon.msqNormal,
+			}
+			group:AddButton(icon, regions, "Action", true)
+			icon._eqolMasqueAdded = true
+		end
+	end
+end
+
+function ActionTracker:ReskinMasque()
+	local group = getMasqueGroup()
+	if group and group.ReSkin then group:ReSkin() end
 end
 
 function ActionTracker:StartFadeUpdate()
@@ -282,13 +377,15 @@ end
 function ActionTracker:UpdateFadeState(skipRefresh)
 	local fade = self:GetFadeDuration()
 	self:TrimEntries()
-	if fade <= 0 or #self.entries == 0 then
+	local hasEntries = #self.entries > 0
+
+	if fade <= 0 or not hasEntries then
 		self:StopFadeUpdate()
 		if not skipRefresh then self:RefreshIcons() end
-		return
+	else
+		self:StartFadeUpdate()
+		if not skipRefresh then self:RefreshIcons() end
 	end
-	self:StartFadeUpdate()
-	if not skipRefresh then self:RefreshIcons() end
 end
 
 function ActionTracker:ClearEntries()
@@ -351,6 +448,20 @@ function ActionTracker:UnregisterEvents()
 end
 
 local editModeRegistered = false
+local masqueLoader
+
+local function ensureMasqueLoader()
+	if masqueLoader then return end
+	local frame = CreateFrame("Frame")
+	frame:RegisterEvent("ADDON_LOADED")
+	frame:SetScript("OnEvent", function(_, event, name)
+		if event == "ADDON_LOADED" and name == "Masque" then
+			ActionTracker:RegisterMasqueButtons()
+			ActionTracker:ReskinMasque()
+		end
+	end)
+	masqueLoader = frame
+end
 
 function ActionTracker:ApplyLayoutData(data)
 	if not data or not addon.db then return end
@@ -369,12 +480,14 @@ function ActionTracker:ApplyLayoutData(data)
 	local direction = normalizeDirection(data.direction)
 	local fade = tonumber(data.fade) or defaults.fadeDuration
 	if fade < 0 then fade = 0 end
+	local showElapsed = data.showElapsed == true
 
 	addon.db[DB_MAX_ICONS] = maxIcons
 	addon.db[DB_ICON_SIZE] = size
 	addon.db[DB_SPACING] = spacing
 	addon.db[DB_DIRECTION] = direction
 	addon.db[DB_FADE] = fade
+	addon.db[DB_SHOW_ELAPSED] = showElapsed
 
 	self:TrimEntries()
 	self:UpdateLayout()
@@ -411,6 +524,10 @@ local function applySetting(field, value)
 		if fade < 0 then fade = 0 end
 		addon.db[DB_FADE] = fade
 		value = fade
+	elseif field == "showElapsed" then
+		local showElapsed = value == true
+		addon.db[DB_SHOW_ELAPSED] = showElapsed
+		value = showElapsed
 	end
 
 	if EditMode and EditMode.SetValue then EditMode:SetValue(EDITMODE_ID, field, value, nil, true) end
@@ -494,6 +611,14 @@ function ActionTracker:RegisterEditMode()
 				set = function(_, value) applySetting("fade", value) end,
 				formatter = function(value) return tostring(math.floor((tonumber(value) or 0) + 0.5)) end,
 			},
+			{
+				name = L["actionTrackerShowElapsed"] or "Show time since last action",
+				kind = SettingType.Checkbox,
+				field = "showElapsed",
+				default = defaults.showElapsed,
+				get = function() return ActionTracker:GetShowElapsed() end,
+				set = function(_, value) applySetting("showElapsed", value) end,
+			},
 		}
 	end
 
@@ -510,6 +635,7 @@ function ActionTracker:RegisterEditMode()
 			spacing = self:GetSpacing(),
 			direction = self:GetDirection(),
 			fade = self:GetFadeDuration(),
+			showElapsed = self:GetShowElapsed(),
 		},
 		onApply = function(_, _, data) ActionTracker:ApplyLayoutData(data) end,
 		onEnter = function() ActionTracker:ShowEditModeHint(true) end,
@@ -525,6 +651,7 @@ end
 function ActionTracker:OnSettingChanged(enabled)
 	if enabled then
 		self:EnsureFrame()
+		ensureMasqueLoader()
 		self:RegisterEditMode()
 		self:RegisterEvents()
 		self:UpdateLayout()

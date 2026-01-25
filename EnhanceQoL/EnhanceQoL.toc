@@ -79,6 +79,7 @@ Submodules\Mailbox.xml
 Modules\Aura\Locales\[TextLocale].lua
 Modules\Aura\Init.lua
 Modules\Aura\ResourceBars.lua
+Modules\Aura\ResourceBarsHelpers.lua
 Settings\SettingsUI.xml
 
 # Aura

@@ -2260,6 +2260,22 @@ local function applyBarBackdrop(bar, cfg)
 	bar:SetBackdropColor(col[1] or 0, col[2] or 0, col[3] or 0, col[4] or 0.6)
 end
 
+local function applyOverlayHeight(bar, anchor, height, maxHeight)
+	if not bar or not anchor then return end
+	bar:ClearAllPoints()
+	local desired = tonumber(height)
+	if not desired or desired <= 0 then
+		bar:SetAllPoints(anchor)
+		return
+	end
+	local limit = tonumber(maxHeight)
+	if not limit or limit <= 0 then limit = anchor.GetHeight and anchor:GetHeight() or 0 end
+	if limit and limit > 0 and desired > limit then desired = limit end
+	bar:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
+	bar:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 0, 0)
+	bar:SetHeight(desired)
+end
+
 local function shouldShowSampleAbsorb(unit)
 	local samples = addon.variables.ufSampleAbsorb
 	if not samples then return false end
@@ -4065,6 +4081,7 @@ local function applyBars(cfg, unit)
 	local defH = def.health or {}
 	local pcfg = cfg.power or {}
 	local powerEnabled = pcfg.enabled ~= false
+	local healthHeight = cfg.healthHeight or def.healthHeight or (st.health.GetHeight and st.health:GetHeight()) or 0
 	st.health:SetStatusBarTexture(UFHelper.resolveTexture(hc.texture))
 	if st.health.SetStatusBarDesaturated then st.health:SetStatusBarDesaturated(true) end
 	UFHelper.configureSpecialTexture(st.health, "HEALTH", hc.texture, hc)
@@ -4091,15 +4108,18 @@ local function applyBars(cfg, unit)
 		local reverseAbsorb = hc.absorbReverseFill
 		if reverseAbsorb == nil then reverseAbsorb = defH.absorbReverseFill == true end
 		UFHelper.applyStatusBarReverseFill(st.absorb, reverseAbsorb)
-		st.absorb:SetAllPoints(st.health)
+		local absorbHeight = hc.absorbOverlayHeight
+		if absorbHeight == nil then absorbHeight = defH.absorbOverlayHeight end
+		applyOverlayHeight(st.absorb, st.health, absorbHeight, healthHeight)
 		local borderFrame = st.barGroup and st.barGroup._ufBorder
 		setFrameLevelAbove(st.absorb, st.health, 1)
 		st.absorb:SetMinMaxValues(0, 1)
 		st.absorb:SetValue(0)
 		if st.overAbsorbGlow then
 			st.overAbsorbGlow:ClearAllPoints()
-			st.overAbsorbGlow:SetPoint("TOPLEFT", st.health, "TOPRIGHT", -7, 0)
-			st.overAbsorbGlow:SetPoint("BOTTOMLEFT", st.health, "BOTTOMRIGHT", -7, 0)
+			local glowAnchor = st.absorb or st.health
+			st.overAbsorbGlow:SetPoint("TOPLEFT", glowAnchor, "TOPRIGHT", -7, 0)
+			st.overAbsorbGlow:SetPoint("BOTTOMLEFT", glowAnchor, "BOTTOMRIGHT", -7, 0)
 		end
 		if st.overAbsorbGlow then st.overAbsorbGlow:Hide() end
 	elseif st.overAbsorbGlow then
@@ -4113,7 +4133,9 @@ local function applyBars(cfg, unit)
 		local reverseHealAbsorb = hc.healAbsorbReverseFill
 		if reverseHealAbsorb == nil then reverseHealAbsorb = defH.healAbsorbReverseFill == true end
 		UFHelper.applyStatusBarReverseFill(st.healAbsorb, reverseHealAbsorb)
-		st.healAbsorb:SetAllPoints(st.health)
+		local healAbsorbHeight = hc.healAbsorbOverlayHeight
+		if healAbsorbHeight == nil then healAbsorbHeight = defH.healAbsorbOverlayHeight end
+		applyOverlayHeight(st.healAbsorb, st.health, healAbsorbHeight, healthHeight)
 		local anchorBar = st.absorb or st.health
 		setFrameLevelAbove(st.healAbsorb, anchorBar, 1)
 		st.healAbsorb:SetMinMaxValues(0, 1)
