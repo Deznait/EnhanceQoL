@@ -146,19 +146,19 @@ addon.functions.SettingsCreateDropdown(cGearUpgrade, {
 })
 
 addon.functions.SettingsCreateScrollDropdown(cGearUpgrade, {
-	var = "charframe_display_font",
+	var = "charframeDisplayFont",
 	text = L["gearDisplayElementsFont"] or "Font",
 	listFunc = buildFontDropdown,
 	order = fontOrder,
 	default = addon.variables.defaultFont,
 	get = function()
-		local current = addon.db["charframe_display_font"] or addon.variables.defaultFont
+		local current = addon.db["charframeDisplayFont"] or addon.variables.defaultFont
 		local list = buildFontDropdown()
 		if not list[current] then current = addon.variables.defaultFont end
 		return current
 	end,
 	set = function(key)
-		addon.db["charframe_display_font"] = key
+		addon.db["charframeDisplayFont"] = key
 		addon.functions.setCharFrame()
 	end,
 	parent = charDisplayDropdown,
@@ -208,19 +208,19 @@ local inspectDisplayDropdown = addon.functions.SettingsCreateMultiDropdown(cGear
 })
 
 addon.functions.SettingsCreateScrollDropdown(cGearUpgrade, {
-	var = "inspectframe_display_font",
+	var = "inspectframeDisplayFont",
 	text = L["gearDisplayElementsFont"] or "Font",
 	listFunc = buildFontDropdown,
 	order = fontOrder,
 	default = addon.variables.defaultFont,
 	get = function()
-		local current = addon.db["inspectframe_display_font"] or addon.variables.defaultFont
+		local current = addon.db["inspectframeDisplayFont"] or addon.variables.defaultFont
 		local list = buildFontDropdown()
 		if not list[current] then current = addon.variables.defaultFont end
 		return current
 	end,
 	set = function(key)
-		addon.db["inspectframe_display_font"] = key
+		addon.db["inspectframeDisplayFont"] = key
 	end,
 	parent = inspectDisplayDropdown,
 	parentCheck = function() return isInspectDisplaySelected("ilvl") or isInspectDisplaySelected("enchants") end,
