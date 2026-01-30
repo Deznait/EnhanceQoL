@@ -9,9 +9,28 @@ local expandable = addon.functions.SettingsCreateExpandableSection(cGearUpgrade,
 	expanded = false,
 	colorizeTitle = false,
 })
+local fontOrder = {}
 addon.SettingsLayout.gearUpgradeCategory = cGearUpgrade
 
 addon.functions.SettingsCreateHeadline(cGearUpgrade, L["Show on Character Frame"], { parentSection = expandable })
+
+local function buildFontDropdown()
+	local map = {
+		[addon.variables.defaultFont] = L["actionBarFontDefault"] or "Blizzard Font",
+	}
+	local LSM = LibStub("LibSharedMedia-3.0", true)
+	if LSM and LSM.HashTable then
+		for name, path in pairs(LSM:HashTable("font") or {}) do
+			if type(path) == "string" and path ~= "" then map[path] = tostring(name) end
+		end
+	end
+	local list, order = addon.functions.prepareListForDropdown(map)
+	wipe(fontOrder)
+	for i, key in ipairs(order) do
+		fontOrder[i] = key
+	end
+	return list
+end
 
 local function ensureDisplayOptions()
 	if addon.functions and addon.functions.ensureDisplayDB then
@@ -126,6 +145,27 @@ addon.functions.SettingsCreateDropdown(cGearUpgrade, {
 	parentSection = expandable,
 })
 
+addon.functions.SettingsCreateScrollDropdown(cGearUpgrade, {
+	var = "charframe_display_font",
+	text = L["gearDisplayElementsFont"] or "Font",
+	listFunc = buildFontDropdown,
+	order = fontOrder,
+	default = addon.variables.defaultFont,
+	get = function()
+		local current = addon.db["charframe_display_font"] or addon.variables.defaultFont
+		local list = buildFontDropdown()
+		if not list[current] then current = addon.variables.defaultFont end
+		return current
+	end,
+	set = function(key)
+		addon.db["charframe_display_font"] = key
+		addon.functions.setCharFrame()
+	end,
+	parent = charDisplayDropdown,
+	parentCheck = function() return isCharDisplaySelected("ilvl") or isCharDisplaySelected("enchants") or isCharDisplaySelected("durability") or isCharDisplaySelected("catalyst") end,
+	parentSection = expandable,
+})
+
 addon.functions.SettingsCreateHeadline(cGearUpgrade, L["Show on Inspect Frame"], { parentSection = expandable })
 
 local function isInspectDisplaySelected(key)
@@ -152,7 +192,7 @@ local function applyInspectDisplaySelection(selection)
 	addon.db.inspectDisplayOptions.gemtip = selection.gemtip == true
 end
 
-addon.functions.SettingsCreateMultiDropdown(cGearUpgrade, {
+local inspectDisplayDropdown = addon.functions.SettingsCreateMultiDropdown(cGearUpgrade, {
 	var = "inspectframe_display",
 	text = L["gearDisplayElements"] or "Elements",
 	options = {
@@ -164,6 +204,26 @@ addon.functions.SettingsCreateMultiDropdown(cGearUpgrade, {
 	isSelectedFunc = function(key) return isInspectDisplaySelected(key) end,
 	setSelectedFunc = function(key, selected) setInspectDisplayOption(key, selected) end,
 	setSelection = applyInspectDisplaySelection,
+	parentSection = expandable,
+})
+
+addon.functions.SettingsCreateScrollDropdown(cGearUpgrade, {
+	var = "inspectframe_display_font",
+	text = L["gearDisplayElementsFont"] or "Font",
+	listFunc = buildFontDropdown,
+	order = fontOrder,
+	default = addon.variables.defaultFont,
+	get = function()
+		local current = addon.db["inspectframe_display_font"] or addon.variables.defaultFont
+		local list = buildFontDropdown()
+		if not list[current] then current = addon.variables.defaultFont end
+		return current
+	end,
+	set = function(key)
+		addon.db["inspectframe_display_font"] = key
+	end,
+	parent = inspectDisplayDropdown,
+	parentCheck = function() return isInspectDisplaySelected("ilvl") or isInspectDisplaySelected("enchants") end,
 	parentSection = expandable,
 })
 
