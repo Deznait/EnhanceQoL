@@ -269,6 +269,7 @@ local defaults = {
 			useShortNumbers = true,
 			hidePercentSymbol = false,
 			texture = "DEFAULT",
+			reverseFill = false,
 		},
 		power = {
 			enabled = true,
@@ -291,6 +292,7 @@ local defaults = {
 			useShortNumbers = true,
 			hidePercentSymbol = false,
 			texture = "DEFAULT",
+			reverseFill = false,
 		},
 		status = {
 			enabled = true,
@@ -494,6 +496,9 @@ local states = {}
 local targetAuras = {}
 local targetAuraOrder = {}
 local targetAuraIndexById = {}
+local focusAuras = {}
+local focusAuraOrder = {}
+local focusAuraIndexById = {}
 local playerAuras = {}
 local playerAuraOrder = {}
 local playerAuraIndexById = {}
@@ -571,6 +576,7 @@ function AuraUtil.getAuraTables(unit)
 	unit = unit or "target"
 	if unit == UNIT.PLAYER or unit == "player" then return playerAuras, playerAuraOrder, playerAuraIndexById end
 	if unit == UNIT.TARGET or unit == "target" then return targetAuras, targetAuraOrder, targetAuraIndexById end
+	if unit == UNIT.FOCUS or unit == "focus" then return focusAuras, focusAuraOrder, focusAuraIndexById end
 	if not isBossUnit(unit) or unit == "boss" then return nil end
 	local state = bossAuraStates[unit]
 	if not state then
@@ -1300,6 +1306,10 @@ function AuraUtil.ensureAuraButton(container, icons, index, ac)
 		btn.count = btn.overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 		btn.count:SetPoint("BOTTOMRIGHT", btn.overlay, "BOTTOMRIGHT", -2, 2)
 		btn.count:SetDrawLayer("OVERLAY", 2)
+		btn.drText = btn.overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+		btn.drText:SetPoint("TOPLEFT", btn.overlay, "TOPLEFT", 2, -2)
+		btn.drText:SetDrawLayer("OVERLAY", 2)
+		btn.drText:Hide()
 		btn.border = btn.overlay:CreateTexture(nil, "OVERLAY")
 		btn.border:SetAllPoints(btn)
 		btn.border:SetDrawLayer("OVERLAY", 1)
@@ -1353,6 +1363,13 @@ function AuraUtil.ensureAuraButton(container, icons, index, ac)
 		if btn.overlay and btn.border and btn.border:GetParent() ~= btn.overlay then
 			btn.border:SetParent(btn.overlay)
 			btn.border:SetDrawLayer("OVERLAY", 1)
+		end
+		if not btn.drText then
+			local parent = btn.overlay or btn
+			btn.drText = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+			btn.drText:SetPoint("TOPLEFT", parent, "TOPLEFT", 2, -2)
+			btn.drText:SetDrawLayer("OVERLAY", 2)
+			btn.drText:Hide()
 		end
 		if btn.overlay and btn.dispelIcon and btn.dispelIcon:GetParent() ~= btn.overlay then
 			btn.dispelIcon:SetParent(btn.overlay)
@@ -1419,6 +1436,30 @@ function AuraUtil.styleAuraCooldownText(btn, ac, cooldownFontSizeOverride)
 	local size = cooldownFontSizeOverride
 	if size == nil then size = ac.cooldownFontSize end
 	UFHelper.applyCooldownTextStyle(btn.cd, size)
+end
+
+function AuraUtil.styleAuraDRText(btn, ac, drFontSizeOverride)
+	if not btn or not btn.drText then return end
+	ac = ac or {}
+	local anchor = ac.drAnchor or "TOPLEFT"
+	local off = ac.drOffset
+	local ox = (off and off.x) or 2
+	local oy = (off and off.y) or -2
+	local size = drFontSizeOverride
+	if size == nil then size = ac.drFontSize end
+	local flags = ac.drFontOutline
+	local fontKey = ac.drFont or (addon.variables and addon.variables.defaultFont) or (LSM and LSM.DefaultMedia and LSM.DefaultMedia.font) or STANDARD_TEXT_FONT
+	local key = anchor .. "|" .. ox .. "|" .. oy .. "|" .. tostring(fontKey) .. "|" .. tostring(size) .. "|" .. tostring(flags)
+	if btn._drStyleKey == key then return end
+	btn._drStyleKey = key
+	btn.drText:ClearAllPoints()
+	btn.drText:SetPoint(anchor, btn.overlay or btn, anchor, ox, oy)
+	if size == nil or flags == nil then
+		local _, curSize, curFlags = btn.drText:GetFont()
+		if size == nil then size = curSize or 12 end
+		if flags == nil then flags = curFlags end
+	end
+	btn.drText:SetFont(UFHelper.getFont(ac.drFont), size, flags)
 end
 
 function AuraUtil.applyAuraToButton(btn, aura, ac, isDebuff, unitToken)
@@ -1522,6 +1563,42 @@ function AuraUtil.applyAuraToButton(btn, aura, ac, isDebuff, unitToken)
 			btn.dispelIcon:Show()
 		else
 			btn.dispelIcon:Hide()
+		end
+	end
+	if btn.drText then
+		local showDR = ac and ac.showDR == true
+		if showDR then
+			local points = aura.points
+			if issecretvalue and issecretvalue(points) then points = nil end
+			local drValue
+			if type(points) == "table" then
+				local v = points[1]
+				if issecretvalue and issecretvalue(v) then v = nil end
+				if type(v) == "number" then drValue = v end
+			end
+			if drValue ~= nil then
+				local text = tostring(math.floor(drValue + 0.5)) .. "%"
+				if btn._lastDRText ~= text then
+					btn._lastDRText = text
+					btn.drText:SetText(text)
+				end
+				AuraUtil.styleAuraDRText(btn, ac)
+				local col = ac.drColor or { 1, 1, 1, 1 }
+				btn.drText:SetTextColor(col[1] or 1, col[2] or 1, col[3] or 1, col[4] or 1)
+				btn.drText:Show()
+			else
+				if btn._lastDRText ~= "" then
+					btn._lastDRText = ""
+					btn.drText:SetText("")
+				end
+				btn.drText:Hide()
+			end
+		else
+			if btn._lastDRText ~= "" then
+				btn._lastDRText = ""
+				btn.drText:SetText("")
+			end
+			btn.drText:Hide()
 		end
 	end
 	btn:Show()
@@ -2107,10 +2184,6 @@ end
 local function applyVisibilityRules(unit)
 	if not ApplyFrameVisibilityConfig then return end
 	local cfg = ensureDB(unit)
-	if unit == UNIT.PLAYER and cfg and type(cfg.visibility) == "table" and cfg.visibility.PLAYER_HEALTH_NOT_FULL then
-		cfg.visibility.PLAYER_HEALTH_NOT_FULL = nil
-		if not next(cfg.visibility) then cfg.visibility = nil end
-	end
 	local inEdit = addon.EditModeLib and addon.EditModeLib.IsInEditMode and addon.EditModeLib:IsInEditMode()
 	local useConfig = (not inEdit and cfg and cfg.enabled) and normalizeVisibilityConfig(cfg.visibility) or nil
 	local fadeAlpha = nil
@@ -2654,6 +2727,16 @@ local function updateCastBar(unit)
 					st.castInfo.durationTenths = tenths
 					st.castDuration:SetText(("%.1f / %.1f"):format(elapsed, total))
 				end
+			elseif durationFormat == "REMAINING_TOTAL" then
+				local total = duration / 1000
+				local remaining = (endMs - nowMs) / 1000
+				if remaining < 0 then remaining = 0 end
+				if remaining > total then remaining = total end
+				local tenths = math.floor(remaining * 10 + 0.5)
+				if st.castInfo.durationTenths ~= tenths then
+					st.castInfo.durationTenths = tenths
+					st.castDuration:SetText(("%.1f / %.1f"):format(remaining, total))
+				end
 			else
 				local remaining = (endMs - nowMs) / 1000
 				if remaining < 0 then remaining = 0 end
@@ -2979,6 +3062,9 @@ local function setCastInfoFromUnit(unit)
 					local durationFormat = ccfg.durationFormat or defc.durationFormat or "REMAINING"
 					if durationFormat == "ELAPSED_TOTAL" then
 						st.castDuration:SetText(("%.1f / %.1f"):format(timerObj:GetElapsedDuration(), timerObj:GetTotalDuration()))
+						return
+					elseif durationFormat == "REMAINING_TOTAL" then
+						st.castDuration:SetText(("%.1f / %.1f"):format(timerObj:GetRemainingDuration(), timerObj:GetTotalDuration()))
 						return
 					else
 						st.castDuration:SetText(("%.1f"):format(timerObj:GetRemainingDuration()))
@@ -3981,7 +4067,7 @@ local function layoutFrame(cfg, unit)
 	end
 	UFHelper.applyHighlightStyle(st, st._highlightCfg)
 
-	if (unit == UNIT.PLAYER or unit == "target" or isBossUnit(unit)) and st.auraContainer then
+	if (unit == UNIT.PLAYER or unit == "target" or unit == UNIT.FOCUS or isBossUnit(unit)) and st.auraContainer then
 		st.auraContainer:ClearAllPoints()
 		local acfg = cfg.auraIcons or def.auraIcons or defaults.target.auraIcons or {}
 		local anchor = acfg.anchor or "BOTTOM"
@@ -4190,7 +4276,7 @@ local function ensureFrames(unit)
 		ensureRestLoop(st)
 	end
 
-	if unit == UNIT.PLAYER or unit == "target" or isBossUnit(unit) then
+	if unit == UNIT.PLAYER or unit == "target" or unit == UNIT.FOCUS or isBossUnit(unit) then
 		st.auraContainer = CreateFrame("Frame", nil, st.frame)
 		st.debuffContainer = CreateFrame("Frame", nil, st.frame)
 		st.auraButtons = {}
@@ -4211,12 +4297,16 @@ local function applyBars(cfg, unit)
 	local hc = cfg.health or {}
 	local def = defaultsFor(unit) or {}
 	local defH = def.health or {}
+	local defP = def.power or {}
 	local pcfg = cfg.power or {}
 	local powerEnabled = pcfg.enabled ~= false
 	local healthHeight = cfg.healthHeight or def.healthHeight or (st.health.GetHeight and st.health:GetHeight()) or 0
 	st.health:SetStatusBarTexture(UFHelper.resolveTexture(hc.texture))
 	if st.health.SetStatusBarDesaturated then st.health:SetStatusBarDesaturated(true) end
 	UFHelper.configureSpecialTexture(st.health, "HEALTH", hc.texture, hc)
+	local reverseHealth = hc.reverseFill
+	if reverseHealth == nil then reverseHealth = defH.reverseFill == true end
+	UFHelper.applyStatusBarReverseFill(st.health, reverseHealth)
 	applyBarBackdrop(st.health, hc)
 	if powerEnabled then
 		st.power:SetStatusBarTexture(UFHelper.resolveTexture(pcfg.texture))
@@ -4224,6 +4314,9 @@ local function applyBars(cfg, unit)
 		local _, powerToken = getMainPower(unit)
 		if st.power.SetStatusBarDesaturated then st.power:SetStatusBarDesaturated(UFHelper.isPowerDesaturated(powerToken)) end
 		UFHelper.configureSpecialTexture(st.power, powerToken, pcfg.texture, pcfg)
+		local reversePower = pcfg.reverseFill
+		if reversePower == nil then reversePower = defP.reverseFill == true end
+		UFHelper.applyStatusBarReverseFill(st.power, reversePower)
 		applyBarBackdrop(st.power, pcfg)
 		st.power:Show()
 	else
@@ -4394,7 +4487,7 @@ local function applyConfig(unit)
 			ClassResourceUtil.restoreClassResourceFrames()
 			TotemFrameUtil.restoreTotemFrame()
 		end
-		if unit == UNIT.PLAYER or unit == "target" or isBossUnit(unit) then AuraUtil.resetTargetAuras(unit) end
+		if unit == UNIT.PLAYER or unit == "target" or unit == UNIT.FOCUS or isBossUnit(unit) then AuraUtil.resetTargetAuras(unit) end
 		if unit == UNIT.PLAYER then updateRestingIndicator(cfg) end
 		if not isBossUnit(unit) then applyVisibilityRules(unit) end
 		if unit == UNIT.PLAYER and addon.functions and addon.functions.ApplyCastBarVisibility then addon.functions.ApplyCastBarVisibility() end
@@ -4465,6 +4558,8 @@ local function applyConfig(unit)
 		else
 			AuraUtil.updateTargetAuraIcons(1, unit)
 		end
+	elseif unit == UNIT.FOCUS and states[unit] and states[unit].auraContainer then
+		AuraUtil.fullScanTargetAuras(unit)
 	elseif unit == UNIT.PLAYER and states[unit] and states[unit].auraContainer then
 		AuraUtil.fullScanTargetAuras(unit)
 	elseif isBossUnit(unit) and states[unit] and states[unit].auraContainer then
@@ -5019,7 +5114,9 @@ local function updateFocusFrame(cfg, forceApply)
 		if st then
 			if st.barGroup then st.barGroup:Hide() end
 			if st.status then st.status:Hide() end
+			if st.auraContainer then AuraUtil.hideAuraContainers(st) end
 		end
+		AuraUtil.resetTargetAuras(UNIT.FOCUS)
 		updatePortrait(cfg, UNIT.FOCUS)
 		applyVisibilityRules(UNIT.FOCUS)
 		return
@@ -5049,13 +5146,16 @@ local function updateFocusFrame(cfg, forceApply)
 			updatePower(cfg, UNIT.FOCUS)
 			if st.castBar then setCastInfoFromUnit(UNIT.FOCUS) end
 			checkRaidTargetIcon(UNIT.FOCUS, st)
+			if st.auraContainer then AuraUtil.fullScanTargetAuras(UNIT.FOCUS) end
 		end
 	else
 		if st then
 			if st.barGroup then st.barGroup:Hide() end
 			if st.status then st.status:Hide() end
 			if st.castBar then stopCast(UNIT.FOCUS) end
+			if st.auraContainer then AuraUtil.hideAuraContainers(st) end
 		end
+		AuraUtil.resetTargetAuras(UNIT.FOCUS)
 	end
 	checkRaidTargetIcon(UNIT.FOCUS, st)
 	UFHelper.updatePvPIndicator(st, UNIT.FOCUS, cfg, defaultsFor(UNIT.FOCUS), not forceApply)
@@ -5202,7 +5302,7 @@ local function onEvent(self, event, unit, ...)
 		UFHelper.updatePvPIndicator(states[UNIT.TARGET], UNIT.TARGET, targetCfg, defaultsFor(UNIT.TARGET), true)
 		UFHelper.updateRoleIndicator(states[UNIT.TARGET], UNIT.TARGET, targetCfg, defaultsFor(UNIT.TARGET), true)
 		updateUnitStatusIndicator(totCfg, UNIT.TARGET_TARGET)
-	elseif event == "UNIT_AURA" and (unit == "target" or unit == UNIT.PLAYER or isBossUnit(unit)) then
+	elseif event == "UNIT_AURA" and (unit == "target" or unit == UNIT.PLAYER or unit == UNIT.FOCUS or isBossUnit(unit)) then
 		local cfg = getCfg(unit)
 		if not cfg or cfg.enabled == false then return end
 		local def = defaultsFor(unit)
@@ -5587,6 +5687,7 @@ local function ensureEventHandling()
 				applyVisibilityRulesAll()
 				if UF.Refresh then UF.Refresh() end
 				if ensureDB("target").enabled then AuraUtil.fullScanTargetAuras(UNIT.TARGET) end
+				if ensureDB(UNIT.FOCUS).enabled then AuraUtil.fullScanTargetAuras(UNIT.FOCUS) end
 				if states[UNIT.PLAYER] and states[UNIT.PLAYER].castBar then setCastInfoFromUnit(UNIT.PLAYER) end
 				if states[UNIT.TARGET] and states[UNIT.TARGET].castBar then setCastInfoFromUnit(UNIT.TARGET) end
 				if states[UNIT.FOCUS] and states[UNIT.FOCUS].castBar then setCastInfoFromUnit(UNIT.FOCUS) end

@@ -273,6 +273,7 @@ end
 
 local getEditor
 local refreshPanelsForSpell
+local refreshPanelsForCharges
 
 local function getLayoutKey(layout)
 	if not layout then return "" end
@@ -412,6 +413,15 @@ local function setExampleCooldown(cooldown)
 		local duration = 100
 		cooldown:SetCooldown(GetTime() - (duration * Helper.EXAMPLE_COOLDOWN_PERCENT), duration, 1)
 	end
+	cooldown._eqolPreviewCooldown = true
+	if cooldown.Pause then cooldown:Pause() end
+end
+
+local function clearPreviewCooldown(cooldown)
+	if not cooldown or not cooldown._eqolPreviewCooldown then return end
+	cooldown._eqolPreviewCooldown = nil
+	if cooldown.Clear then cooldown:Clear() end
+	if cooldown.Resume then cooldown:Resume() end
 end
 
 local getPreviewEntryIds
@@ -3705,6 +3715,7 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 	for i = 1, count do
 		local data = visible[i]
 		local icon = frame.icons[i]
+		clearPreviewCooldown(icon.cooldown)
 		entryToIcon[data.entryId] = icon
 		icon.texture:SetTexture(data.icon or Helper.PREVIEW_ICON)
 		applyIconTooltip(icon, data.entry, showTooltips)
@@ -3792,8 +3803,10 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 					local effectiveId = entrySpellId and getEffectiveSpellId(entrySpellId) or entrySpellId
 					local CCD = effectiveId and C_Spell.GetSpellChargeDuration(effectiveId)
 					if CCD and icon.cooldown.SetCooldownFromDurationObject then
+						icon.cooldown:Clear()
 						icon.cooldown:SetCooldownFromDurationObject(CCD)
 					elseif isSafeNumber(cooldownStart) and isSafeNumber(cooldownDuration) then
+						icon.cooldown:Clear()
 						icon.cooldown:SetCooldown(cooldownStart, cooldownDuration, cooldownRate)
 					else
 						icon.cooldown:Clear()
@@ -3827,33 +3840,30 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 							local entrySpellId = data.entry and data.entry.spellID
 							local effectiveId = entrySpellId and getEffectiveSpellId(entrySpellId) or entrySpellId
 							local CCD = effectiveId and C_Spell.GetSpellChargeDuration(effectiveId)
-							-- icon.cooldown:SetCooldownFromDurationObject(CCD)
+							icon.cooldown:SetCooldownFromDurationObject(CCD)
 						else
-							-- icon.cooldown:SetCooldownFromDurationObject(cooldownDurationObject)
+							icon.cooldown:SetCooldownFromDurationObject(cooldownDurationObject)
 						end
 					end
 				end
 			elseif durationActive then
-				-- icon.cooldown:SetCooldownFromDurationObject(cooldownDurationObject)
+				icon.cooldown:SetCooldownFromDurationObject(cooldownDurationObject)
 				if data.cooldownGCD then
 					icon.texture:SetDesaturation(0)
 					desaturate = false
 					setCooldownDrawState(icon.cooldown, gcdDrawEdge, gcdDrawBling, gcdDrawSwipe)
 				else
-					if icon.cooldown.SetScript then icon.cooldown:SetScript("OnCooldownDone", onCooldownDone) end
 					setCooldownDrawState(icon.cooldown, drawEdge, drawBling, drawSwipe)
-					icon.texture:SetDesaturation(cooldownDurationObject:EvaluateRemainingDuration(curveDesat))
-					if data.showChargesCooldown then
-						local entrySpellId = data.entry and data.entry.spellID
-						local effectiveId = entrySpellId and getEffectiveSpellId(entrySpellId) or entrySpellId
-						local CCD = effectiveId and C_Spell.GetSpellChargeDuration(effectiveId)
-						-- icon.cooldown:SetCooldownFromDurationObject(CCD)
-					else
-						-- icon.cooldown:SetCooldownFromDurationObject(cooldownDurationObject)
-					end
+
+					local desat = cooldownDurationObject:EvaluateRemainingDuration(curveDesat)
+					icon.texture:SetDesaturation(desat)
+				end
+				if data.cooldownGCD then
+				else
+					if icon.cooldown.SetScript then icon.cooldown:SetScript("OnCooldownDone", onCooldownDone) end
 				end
 			elseif cooldownActive then
-				-- icon.cooldown:SetCooldown(cooldownStart, cooldownDuration, cooldownRate)
+				icon.cooldown:SetCooldown(cooldownStart, cooldownDuration, cooldownRate)
 				desaturate = true
 				icon.texture:SetDesaturated(desaturate)
 				setCooldownDrawState(icon.cooldown, drawEdge, drawBling, drawSwipe)
@@ -3925,6 +3935,7 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 	for i = count + 1, #frame.icons do
 		local icon = frame.icons[i]
 		if icon then
+			clearPreviewCooldown(icon.cooldown)
 			icon.cooldown:Clear()
 			icon.cooldown._eqolSoundReady = nil
 			icon.cooldown._eqolSoundName = nil
@@ -5409,7 +5420,10 @@ local function registerEditModeCallbacks()
 	if editModeCallbacksRegistered then return end
 	if addon.EditModeLib and addon.EditModeLib.RegisterCallback then
 		addon.EditModeLib:RegisterCallback("enter", function() CooldownPanels:RefreshAllPanels() end)
-		addon.EditModeLib:RegisterCallback("exit", function() CooldownPanels:RefreshAllPanels() end)
+		addon.EditModeLib:RegisterCallback("exit", function()
+			CooldownPanels:RefreshAllPanels()
+			refreshPanelsForCharges()
+		end)
 	end
 	editModeCallbacksRegistered = true
 end
@@ -5427,12 +5441,31 @@ end
 
 local function registerCooldownPanelsSlashCommand()
 	if not SlashCmdList then return end
-	local command = "/ecd"
-	if isSlashCommandRegistered(command) then
-		local owned = SlashCmdList["EQOLCP"] and type(_G.SLASH_EQOLCP1) == "string" and _G.SLASH_EQOLCP1:lower() == command
-		if not owned then return end
+	local commands = { "/ecd", "/cpe" }
+	local assigned = false
+	local slot = 1
+	for _, command in ipairs(commands) do
+		local lower = command:lower()
+		if isSlashCommandRegistered(lower) then
+			local owned = false
+			if SlashCmdList["EQOLCP"] then
+				for i = 1, 5 do
+					local key = _G["SLASH_EQOLCP" .. i]
+					if type(key) == "string" and key:lower() == lower then
+						owned = true
+						break
+					end
+				end
+			end
+			if not owned then command = nil end
+		end
+		if command then
+			_G["SLASH_EQOLCP" .. slot] = lower
+			slot = slot + 1
+			assigned = true
+		end
 	end
-	_G.SLASH_EQOLCP1 = command
+	if not assigned then return end
 	SlashCmdList["EQOLCP"] = function()
 		local panels = addon.Aura and addon.Aura.CooldownPanels
 		if not panels then return end
@@ -5476,7 +5509,7 @@ refreshPanelsForSpell = function(spellId)
 	return refreshed
 end
 
-local function refreshPanelsForCharges()
+refreshPanelsForCharges = function()
 	local runtime = CooldownPanels.runtime
 	local chargesIndex = runtime and runtime.chargesIndex
 	if not chargesIndex or not GetSpellChargesInfo then return false end

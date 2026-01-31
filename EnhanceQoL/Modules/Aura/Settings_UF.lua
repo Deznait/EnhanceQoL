@@ -383,7 +383,6 @@ local function getVisibilityRuleOptions(unit)
 	for key, data in pairs(GetVisibilityRuleMetadata() or {}) do
 		local allowed = data.appliesTo and data.appliesTo.frame
 		if allowed and data.unitRequirement and data.unitRequirement ~= unitToken then allowed = false end
-		if allowed and unitToken == "player" and key == "PLAYER_HEALTH_NOT_FULL" then allowed = false end
 		if allowed then options[#options + 1] = { value = key, label = data.label or key, order = data.order or 999 } end
 	end
 	table.sort(options, function(a, b)
@@ -1498,6 +1497,11 @@ local function buildUnitSettings(unit)
 		refresh()
 	end, healthDef.texture or "DEFAULT", "health")
 
+	list[#list + 1] = checkbox(L["Reverse fill"] or "Reverse fill", function() return getValue(unit, { "health", "reverseFill" }, healthDef.reverseFill == true) == true end, function(val)
+		setValue(unit, { "health", "reverseFill" }, val and true or false)
+		refresh()
+	end, healthDef.reverseFill == true, "health")
+
 	list[#list + 1] = checkboxColor({
 		name = L["UFBarBackdrop"] or "Show bar backdrop",
 		parentId = "health",
@@ -1688,6 +1692,11 @@ local function buildUnitSettings(unit)
 		refreshSelf()
 		refreshSettingsUI()
 	end, powerDef.enabled ~= false, "power")
+
+	list[#list + 1] = checkbox(L["Reverse fill"] or "Reverse fill", function() return getValue(unit, { "power", "reverseFill" }, powerDef.reverseFill == true) == true end, function(val)
+		setValue(unit, { "power", "reverseFill" }, val and true or false)
+		refresh()
+	end, powerDef.reverseFill == true, "power", isPowerEnabled)
 
 	local powerHeightSetting = slider(L["UFPowerHeight"] or "Power height", 6, 60, 1, function() return getValue(unit, { "powerHeight" }, def.powerHeight or 16) end, function(val)
 		debounced(unit .. "_powerHeight", function()
@@ -2656,6 +2665,7 @@ local function buildUnitSettings(unit)
 
 		local castDurationFormatOptions = {
 			{ value = "REMAINING", label = L["UFCastDurationRemaining"] or "Remaining" },
+			{ value = "REMAINING_TOTAL", label = L["UFCastDurationRemainingTotal"] or "Remaining/Total" },
 			{ value = "ELAPSED_TOTAL", label = L["UFCastDurationElapsedTotal"] or "Elapsed/Total" },
 		}
 
@@ -3503,7 +3513,7 @@ local function buildUnitSettings(unit)
 		list[#list + 1] = combatIndicatorOffsetY
 	end
 
-	if unit == "player" or unit == "target" or isBossUnit(unit) then
+	if unit == "player" or unit == "target" or unit == "focus" or isBossUnit(unit) then
 		list[#list + 1] = { name = L["Auras"] or "Auras", kind = settingType.Collapsible, id = "auras", defaultCollapsed = true }
 		local auraDef = def.auraIcons or { enabled = true, size = 24, padding = 2, max = 16, showCooldown = true }
 		local function debuffAnchorValue() return getValue(unit, { "auraIcons", "debuffAnchor" }, getValue(unit, { "auraIcons", "anchor" }, auraDef.debuffAnchor or auraDef.anchor or "BOTTOM")) end

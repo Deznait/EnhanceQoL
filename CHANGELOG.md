@@ -1,18 +1,38 @@
 # Changelog
 
-## [7.8.0] - 2026-01-28
+## [7.8.1] - 2026-01-31
+
+### 🐛 Fixed
+
+- Missing locale fixed
+
+---
+
+## [7.8.0] - 2026-01-31
 
 ### ✨ Added
 
 - Resource Bars: Evoker Essence bars now show filling animation
 - Resource Bars: Gradiant color works horizontal now too
 - Cooldown Panels: Option to enable charge duration show
+- UF Plus: Cast duration format option for Remaining/Total.
 - Cooldown Panels: Added anchor points for ElvUI, Unhalted Unit Frames, and more MSUF frames (ToT/Focus/Pet/Boss).
 - Cooldown Panels: Edit Mode panel filters (only show panels of your class) and Copy Settings dropdown to clone layout/anchor settings (keeps entries + enabled state untouched).
+- UF Plus: Focus frame aura icons are now supported and configurable.
+- UF Plus: Health and power bars can now reverse their fill direction (right-to-left).
+- Cooldown Panels: New `/cpe` slash command alias (opens the Cooldown Panel editor).
+- Tooltips: Optional target-of-target line on unit tooltips.
+- Tooltips: Optional mount display on player tooltips.
+- Character Frame: Optional missing-enchant overlay toggle (defaults on).
+- Mover: Covenant frames are now movable (Sanctum, Mission, Renown, Preview).
 
 ### 🔁 Changed
 
 - Cooldown Panels: Switched button glow to LibButtonGlow
+
+### ❌ Removed
+
+- Visibility: Removed "Player health below 100%" rule for Action Bars/Cooldown Viewer because secret alpha values can leak into other addons and trigger comparison errors/taint (e.g. ActionBarLabels).
 
 ### 🐛 Fixed
 
@@ -20,6 +40,8 @@
 - Cooldown Panels: Spell usable checks are now evaluated correctly.
 - Cooldown Panels: Overlay glow now resolves override spell IDs (talent replacements) correctly.
 - UF Plus: Cast bar icons now fade with the interrupt animation for target/focus enemies.
+- World Map: Teleport panel tab no longer overlaps other map tabs when WorldQuestTab is enabled.
+- Combat Logging: Switched to advance api because of an issue
 
 ---
 
