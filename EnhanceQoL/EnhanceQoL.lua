@@ -5358,6 +5358,7 @@ local function setAllHooks()
 	end
 
 	local function SortApplicants(applicants)
+		if addon.functions.isRestrictedContent() then return end
 		if addon.db.lfgSortByRio then
 			local function SortApplicantsCB(applicantID1, applicantID2)
 				local applicantInfo1 = C_LFGList.GetApplicantInfo(applicantID1)
@@ -5750,7 +5751,9 @@ local eventHandlers = {
 	end,
 	["GOSSIP_SHOW"] = function()
 		if shouldAutoChooseQuest() then
-			if nil ~= UnitGUID("npc") and nil ~= addon.db["ignoredQuestNPC"][addon.functions.getIDFromGUID(UnitGUID("npc"))] then return end
+			local ignored = addon.db and addon.db["ignoredQuestNPC"]
+			local npcId = addon.functions.getIDFromGUID(UnitGUID("npc"))
+			if npcId and ignored and ignored[npcId] then return end
 
 			local options = C_GossipInfo.GetOptions()
 
@@ -6010,7 +6013,9 @@ local eventHandlers = {
 	end,
 	["QUEST_DATA_LOAD_RESULT"] = function(arg1)
 		if arg1 and addon.variables.acceptQuestID[arg1] and addon.db["autoChooseQuest"] then
-			if nil ~= UnitGUID("npc") and nil ~= addon.db["ignoredQuestNPC"][addon.functions.getIDFromGUID(UnitGUID("npc"))] then return end
+			local ignored = addon.db and addon.db["ignoredQuestNPC"]
+			local npcId = addon.functions.getIDFromGUID(UnitGUID("npc"))
+			if npcId and ignored and ignored[npcId] then return end
 			if addon.db["ignoreDailyQuests"] and addon.functions.IsQuestRepeatableType(arg1) then return end
 			if addon.db["ignoreTrivialQuests"] and C_QuestLog.IsQuestTrivial(arg1) then return end
 			if addon.db["ignoreWarbandCompleted"] and C_QuestLog.IsQuestFlaggedCompletedOnAccount(arg1) then return end
@@ -6021,7 +6026,9 @@ local eventHandlers = {
 	end,
 	["QUEST_DETAIL"] = function()
 		if shouldAutoChooseQuest() then
-			if nil ~= UnitGUID("npc") and nil ~= addon.db["ignoredQuestNPC"][addon.functions.getIDFromGUID(UnitGUID("npc"))] then return end
+			local ignored = addon.db and addon.db["ignoredQuestNPC"]
+			local npcId = addon.functions.getIDFromGUID(UnitGUID("npc"))
+			if npcId and ignored and ignored[npcId] then return end
 
 			local id = GetQuestID()
 			addon.variables.acceptQuestID[id] = true
@@ -6030,7 +6037,9 @@ local eventHandlers = {
 	end,
 	["QUEST_GREETING"] = function()
 		if shouldAutoChooseQuest() then
-			if nil ~= UnitGUID("npc") and nil ~= addon.db["ignoredQuestNPC"][addon.functions.getIDFromGUID(UnitGUID("npc"))] then return end
+			local ignored = addon.db and addon.db["ignoredQuestNPC"]
+			local npcId = addon.functions.getIDFromGUID(UnitGUID("npc"))
+			if npcId and ignored and ignored[npcId] then return end
 			for i = 1, GetNumAvailableQuests() do
 				if addon.db["ignoreTrivialQuests"] and IsAvailableQuestTrivial(i) then
 				else

@@ -114,6 +114,19 @@ local anchorOptions = {
 	{ value = "RIGHT", label = "RIGHT" },
 }
 
+local groupNumberFormatOptions = {
+	{ value = "GROUP", label = "Group 1" },
+	{ value = "G", label = "G1" },
+	{ value = "G_SPACE", label = "G 1" },
+	{ value = "NUMBER", label = "1" },
+	{ value = "PARENS", label = "(1)" },
+	{ value = "BRACKETS", label = "[1]" },
+	{ value = "BRACES", label = "{1}" },
+	{ value = "ANGLE", label = "<1>" },
+	{ value = "PIPE", label = "|| 1 ||" },
+	{ value = "HASH", label = "#1" },
+}
+
 local classResourceClasses = {
 	DEATHKNIGHT = true,
 	DRUID = true,
@@ -1171,6 +1184,35 @@ local function buildUnitSettings(unit)
 	})
 	portraitSeparatorColor.isEnabled = function() return isPortraitEnabled() and isPortraitSeparatorEnabled() end
 	list[#list + 1] = portraitSeparatorColor
+
+	if unit == "target" then
+		local rangeDef = def.rangeFade or {}
+		local function isRangeFadeEnabled() return getValue(unit, { "rangeFade", "enabled" }, rangeDef.enabled == true) == true end
+
+		list[#list + 1] = { name = L["UFRangeFade"] or "Range fade", kind = settingType.Collapsible, id = "rangeFade", defaultCollapsed = true }
+
+		list[#list + 1] = checkbox(L["UFRangeFadeEnable"] or "Enable range fade", isRangeFadeEnabled, function(val)
+			setValue(unit, { "rangeFade", "enabled" }, val and true or false)
+			refreshSelf()
+			if UFHelper and UFHelper.RangeFadeUpdateSpells then UFHelper.RangeFadeUpdateSpells() end
+		end, rangeDef.enabled == true, "rangeFade")
+
+		local rangeFadeAlpha = slider(L["UFRangeFadeAlpha"] or "Out of range opacity", 0, 100, 1, function()
+			local alpha = getValue(unit, { "rangeFade", "alpha" }, rangeDef.alpha or 0.5)
+			if type(alpha) ~= "number" then alpha = 0.5 end
+			if alpha < 0 then alpha = 0 end
+			if alpha > 1 then alpha = 1 end
+			return math.floor((alpha * 100) + 0.5)
+		end, function(val)
+			local pct = tonumber(val) or 0
+			if pct < 0 then pct = 0 end
+			if pct > 100 then pct = 100 end
+			setValue(unit, { "rangeFade", "alpha" }, pct / 100)
+			refreshSelf()
+		end, math.floor(((rangeDef.alpha or 0.5) * 100) + 0.5), "rangeFade", true, function(v) return tostring(v) .. "%" end)
+		rangeFadeAlpha.isEnabled = isRangeFadeEnabled
+		list[#list + 1] = rangeFadeAlpha
+	end
 
 	list[#list + 1] = { name = L["HealthBar"] or "Health Bar", kind = settingType.Collapsible, id = "health", defaultCollapsed = true }
 
@@ -3335,6 +3377,20 @@ local function buildUnitSettings(unit)
 			"unitStatus"
 		)
 		list[#list].isEnabled = isUnitStatusEnabled
+
+		local groupFormatSetting = checkboxDropdown(
+			L["UFUnitStatusGroupFormat"] or "Group number format",
+			groupNumberFormatOptions,
+			function() return getValue(unit, { "status", "unitStatus", "groupFormat" }, usDef.groupFormat or "GROUP") end,
+			function(val)
+				setValue(unit, { "status", "unitStatus", "groupFormat" }, val or "GROUP")
+				refresh()
+			end,
+			usDef.groupFormat or "GROUP",
+			"unitStatus"
+		)
+		groupFormatSetting.isEnabled = isGroupEnabled
+		list[#list + 1] = groupFormatSetting
 
 		list[#list + 1] = slider(
 			L["UFUnitStatusGroupSize"] or "Group number size",

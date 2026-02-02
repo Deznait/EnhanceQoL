@@ -1,5 +1,27 @@
 # Changelog
 
+## [7.9.0] - 2026-02-02
+
+### ✨ Added
+
+- Keybinding: Toggle friendly NPC nameplates (nameplateShowFriendlyNpcs)
+- UF Plus: Unit status group number format options (e.g., Group 1, (1), | 1 |, G1)
+- UF Plus: Target range fade via spell range events (configurable opacity)
+
+### 🔁 Changed
+
+- Resource Bars: Bar width min value changed to 10
+
+### 🐛 Fixed
+
+- Secret error: LFG List sorting by mythic+ score is now ignored in restricted content
+- Questing: Guard UnitGUID secret values when checking ignored quest NPCs (prevents secret conversion errors)
+- Health Text: Text was shown when unit is dead
+- Nameplates: Class colors on nameplates now work in 12.0.1 (updated CVar)
+- Cooldown Panels: Guarding against a protection state produced by anchoring protected frames to CDPanels
+
+---
+
 ## [7.8.1] - 2026-01-31
 
 ### 🐛 Fixed

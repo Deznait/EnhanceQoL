@@ -45,6 +45,41 @@ local npcColorDefaults = {
 local nameWidthCache = {}
 local DROP_SHADOW_FLAG = "DROPSHADOW"
 
+local function utf8Iter(str) return (str or ""):gmatch("[%z\1-\127\194-\244][\128-\191]*") end
+
+local function utf8Len(str)
+	local len = 0
+	for _ in utf8Iter(str) do
+		len = len + 1
+	end
+	return len
+end
+
+local function utf8Sub(str, i, j)
+	str = str or ""
+	if str == "" then return "" end
+	i = i or 1
+	j = j or -1
+	if i < 1 then i = 1 end
+	local len = utf8Len(str)
+	if j < 0 then j = len + j + 1 end
+	if j > len then j = len end
+	if i > j then return "" end
+	local pos = 1
+	local startByte, endByte
+	local idx = 0
+	for char in utf8Iter(str) do
+		idx = idx + 1
+		if idx == i then startByte = pos end
+		if idx == j then
+			endByte = pos + #char - 1
+			break
+		end
+		pos = pos + #char
+	end
+	return str:sub(startByte or 1, endByte or #str)
+end
+
 local function normalizeFontOutline(outline)
 	if outline == nil then return "OUTLINE" end
 	if outline == "" or outline == "NONE" or outline == DROP_SHADOW_FLAG then return nil end
@@ -67,9 +102,7 @@ end
 function H.getFont(path)
 	if type(path) == "string" and path ~= "" then
 		local lower = path:lower()
-		if path:find("\\") or path:find("/") or lower:find(".ttf", 1, true) or lower:find(".otf", 1, true) or lower:find(".ttc", 1, true) then
-			return path
-		end
+		if path:find("\\") or path:find("/") or lower:find(".ttf", 1, true) or lower:find(".otf", 1, true) or lower:find(".ttc", 1, true) then return path end
 		if LSM and LSM.Fetch then
 			local fetched = LSM:Fetch("font", path, true)
 			if type(fetched) == "string" and fetched ~= "" then return fetched end
@@ -83,10 +116,9 @@ function H.applyFont(fs, fontPath, size, outline)
 	if not fs then return end
 	local flags = normalizeFontOutline(outline)
 	local fontFile = H.getFont(fontPath)
+	if size == nil or size <= 0 then size = 1 end
 	local ok = fs.SetFont and fs:SetFont(fontFile, size or 14, flags)
-	if not ok and fontPath and fontPath ~= "" then
-		fs:SetFont(H.getFont(nil), size or 14, flags)
-	end
+	if not ok and fontPath and fontPath ~= "" then fs:SetFont(H.getFont(nil), size or 14, flags) end
 	if wantsDropShadow(outline) then
 		fs:SetShadowColor(0, 0, 0, 0.5)
 		fs:SetShadowOffset(0.5, -0.5)
@@ -1053,6 +1085,7 @@ function H.setupEmpowerStages(st, unit, numStages)
 end
 
 local WrapString = _G.C_StringUtil and _G.C_StringUtil.WrapString
+local TruncateWhenZero = _G.C_StringUtil and _G.C_StringUtil.TruncateWhenZero
 
 function H.formatCastName(nameText, castTarget, showTarget)
 	if not showTarget or type(castTarget) == "nil" then return nameText end
@@ -1098,6 +1131,7 @@ function H.shortValue(val)
 end
 
 function H.textModeUsesLevel(mode) return type(mode) == "string" and mode:find("LEVEL", 1, true) ~= nil end
+function H.textModeUsesDeficit(mode) return mode == "DEFICIT" end
 
 function H.getUnitLevelText(unit, levelOverride, hideClassificationText)
 	if not unit then return "??" end
@@ -1118,12 +1152,24 @@ function H.getUnitLevelText(unit, levelOverride, hideClassificationText)
 	return levelText
 end
 
-function H.formatText(mode, cur, maxv, useShort, percentValue, delimiter, delimiter2, delimiter3, hidePercentSymbol, levelText)
+function H.formatText(mode, cur, maxv, useShort, percentValue, delimiter, delimiter2, delimiter3, hidePercentSymbol, levelText, missingValue)
 	if mode == "NONE" then return "" end
 	local joinPrimary, joinSecondary, joinTertiary = H.resolveTextDelimiters(delimiter, delimiter2, delimiter3)
 	local percentSuffix = hidePercentSymbol and "" or "%"
 	if levelText == nil or levelText == "" then levelText = "??" end
 	local isPercentMode = type(mode) == "string" and mode:find("PERCENT", 1, true) ~= nil
+	if mode == "DEFICIT" then
+		if issecretvalue and issecretvalue(missingValue) then
+			if not (addon.variables and addon.variables.isMidnight) then return "" end
+			local infix = useShort and H.shortValue(missingValue) or BreakUpLargeNumbers(missingValue)
+			return "-" .. infix
+		end
+		if missingValue == nil then return "" end
+		local missNum = tonumber(missingValue) or 0
+		if missNum <= 0 then return "" end
+		local infix = useShort == false and tostring(missNum) or (AbbreviateNumbers and AbbreviateNumbers(missNum) or H.shortValue(missNum))
+		return "-" .. infix
+	end
 	local function formatPercentMode(curText, maxText, percentText)
 		if not percentText then return "" end
 		if mode == "PERCENT" then return percentText end
@@ -1220,6 +1266,37 @@ function H.applyNameCharLimit(st, scfg, defStatus)
 	if st.nameText.SetWordWrap then st.nameText:SetWordWrap(false) end
 	local width = H.getNameLimitWidth(scfg and scfg.font, scfg and scfg.fontSize or 14, scfg and scfg.fontOutline or "OUTLINE", maxChars)
 	if width and width > 0 then st.nameText:SetWidth(width) end
+end
+
+function H.truncateTextToWidth(fontPath, fontSize, fontOutline, text, maxWidth)
+	if not text or text == "" or maxWidth <= 0 then return text or "" end
+	if not nameWidthCache._measure and UIParent and UIParent.CreateFontString then
+		nameWidthCache._measure = UIParent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+		if nameWidthCache._measure then nameWidthCache._measure:Hide() end
+	end
+	local measure = nameWidthCache._measure
+	if not measure then return text end
+	local size = fontSize or 14
+	local outline = fontOutline or "OUTLINE"
+	local ok = measure.SetFont and measure:SetFont(H.getFont(fontPath), size, outline)
+	if ok == false then measure:SetFont(H.getFont(nil), size, outline) end
+	measure:SetText(text)
+	if measure:GetStringWidth() <= maxWidth then return text end
+	local length = utf8Len(text)
+	local low, high = 1, length
+	local best = ""
+	while low <= high do
+		local mid = math.floor((low + high) / 2)
+		local candidate = utf8Sub(text, 1, mid)
+		measure:SetText(candidate)
+		if measure:GetStringWidth() <= maxWidth then
+			best = candidate
+			low = mid + 1
+		else
+			high = mid - 1
+		end
+	end
+	return best
 end
 
 function H.getTextDelimiter(cfg, def)
@@ -1461,4 +1538,150 @@ function H.getNPCColor(key)
 		if override[1] then return override[1], override[2], override[3], override[4] or 1 end
 	end
 	return H.getNPCColorDefault(key)
+end
+
+local EnableSpellRangeCheck = C_Spell and C_Spell.EnableSpellRangeCheck
+local GetSpellIDForSpellIdentifier = C_Spell and C_Spell.GetSpellIDForSpellIdentifier
+local SpellBook = _G.C_SpellBook
+local SpellBookItemType = Enum and Enum.SpellBookItemType
+local SpellBookSpellBank = Enum and Enum.SpellBookSpellBank
+local wipeTable = wipe or (table and table.wipe)
+
+local rangeFadeHandlers = {}
+local rangeFadeState = {
+	activeSpells = {},
+	spellStates = {},
+	inRange = true,
+}
+local rangeFadeIgnoredSpells = {
+	[2096] = true, -- Mind Vision (unlimited range)
+}
+
+local function isRangeFadeIgnored(spellId, actionId)
+	local fn = rangeFadeHandlers.getConfig
+	if fn then
+		local _, _, ignoreUnlimited = fn()
+		if ignoreUnlimited == false then return false end
+	end
+	if spellId and rangeFadeIgnoredSpells[spellId] then return true end
+	if actionId and rangeFadeIgnoredSpells[actionId] then return true end
+	return false
+end
+
+local function clearTable(tbl)
+	if not tbl then return end
+	if wipeTable then
+		wipeTable(tbl)
+	else
+		for k in pairs(tbl) do
+			tbl[k] = nil
+		end
+	end
+end
+
+local function getRangeFadeConfig()
+	local fn = rangeFadeHandlers.getConfig
+	if not fn then return false, 1, true end
+	return fn()
+end
+
+local function applyRangeFadeAlpha(inRange, force)
+	local applyFn = rangeFadeHandlers.applyAlpha
+	if not applyFn then return end
+	local enabled, alpha = getRangeFadeConfig()
+	local targetAlpha = (enabled and not inRange) and alpha or 1
+	applyFn(targetAlpha, force)
+end
+
+local function recomputeRangeFade()
+	local anyChecked = false
+	local anyInRange = false
+	for _, inRange in pairs(rangeFadeState.spellStates) do
+		anyChecked = true
+		if inRange == true then
+			anyInRange = true
+			break
+		end
+	end
+	rangeFadeState.inRange = (not anyChecked) or anyInRange
+	applyRangeFadeAlpha(rangeFadeState.inRange)
+end
+
+local function buildRangeFadeSpellList()
+	local list = {}
+	if not (EnableSpellRangeCheck and SpellBook and SpellBook.GetNumSpellBookSkillLines and SpellBook.GetSpellBookSkillLineInfo and SpellBook.GetSpellBookItemInfo) then return list end
+	local bank = SpellBookSpellBank and SpellBookSpellBank.Player or 0
+	local spellType = (SpellBookItemType and SpellBookItemType.Spell) or 1
+	local numLines = SpellBook.GetNumSpellBookSkillLines() or 0
+	for line = 1, numLines do
+		local lineInfo = SpellBook.GetSpellBookSkillLineInfo(line)
+		local offset = lineInfo and lineInfo.itemIndexOffset or 0
+		local count = lineInfo and lineInfo.numSpellBookItems or 0
+		for slot = offset + 1, offset + count do
+			local info = SpellBook.GetSpellBookItemInfo(slot, bank)
+			if info and info.itemType == spellType and info.isPassive ~= true then
+				if not isRangeFadeIgnored(info.spellID, info.actionID) then
+					local spellId = info.spellID or info.actionID
+					if spellId then list[spellId] = true end
+				end
+			end
+		end
+	end
+	return list
+end
+
+function H.RangeFadeRegister(getConfigFn, applyAlphaFn)
+	rangeFadeHandlers.getConfig = getConfigFn
+	rangeFadeHandlers.applyAlpha = applyAlphaFn
+end
+
+function H.RangeFadeReset()
+	clearTable(rangeFadeState.spellStates)
+	rangeFadeState.inRange = true
+	applyRangeFadeAlpha(true, true)
+end
+
+function H.RangeFadeApplyCurrent(force) applyRangeFadeAlpha(rangeFadeState.inRange, force) end
+
+function H.RangeFadeUpdateFromEvent(spellIdentifier, isInRange, checksRange)
+	local enabled = getRangeFadeConfig()
+	if not enabled then return end
+	local id = tonumber(spellIdentifier)
+	if not id and GetSpellIDForSpellIdentifier then id = GetSpellIDForSpellIdentifier(spellIdentifier) end
+	if isRangeFadeIgnored(id) then return end
+	if not id or not rangeFadeState.activeSpells[id] then return end
+	if checksRange then
+		rangeFadeState.spellStates[id] = (isInRange == true)
+	else
+		rangeFadeState.spellStates[id] = nil
+	end
+	recomputeRangeFade()
+end
+
+function H.RangeFadeUpdateSpells()
+	if not EnableSpellRangeCheck then return end
+	local enabled = getRangeFadeConfig()
+	if not enabled then
+		for spellId in pairs(rangeFadeState.activeSpells) do
+			EnableSpellRangeCheck(spellId, false)
+		end
+		clearTable(rangeFadeState.activeSpells)
+		H.RangeFadeReset()
+		return
+	end
+	local wanted = buildRangeFadeSpellList()
+	for spellId in pairs(rangeFadeState.activeSpells) do
+		if not wanted[spellId] then
+			EnableSpellRangeCheck(spellId, false)
+			rangeFadeState.activeSpells[spellId] = nil
+			rangeFadeState.spellStates[spellId] = nil
+		end
+	end
+	for spellId in pairs(wanted) do
+		if not rangeFadeState.activeSpells[spellId] then
+			EnableSpellRangeCheck(spellId, true)
+			rangeFadeState.activeSpells[spellId] = true
+		end
+	end
+	recomputeRangeFade()
 end
