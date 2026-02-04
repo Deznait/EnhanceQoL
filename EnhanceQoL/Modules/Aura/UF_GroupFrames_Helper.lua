@@ -15,6 +15,25 @@ H.COLOR_LEVEL = { 1, 0.85, 0, 1 }
 H.COLOR_HEALTH_DEFAULT = { 0, 0.8, 0, 1 }
 H.COLOR_YELLOW = { 1, 1, 0, 1 }
 
+H.GROUP_ORDER = "1,2,3,4,5,6,7,8"
+H.ROLE_ORDER = "TANK,HEALER,DAMAGER"
+H.CLASS_TOKENS = {
+	"DEATHKNIGHT",
+	"DEMONHUNTER",
+	"DRUID",
+	"EVOKER",
+	"HUNTER",
+	"MAGE",
+	"MONK",
+	"PALADIN",
+	"PRIEST",
+	"ROGUE",
+	"SHAMAN",
+	"WARLOCK",
+	"WARRIOR",
+}
+H.CLASS_ORDER = table.concat(H.CLASS_TOKENS, ",")
+
 local UnitSex = UnitSex
 local GetNumClasses = GetNumClasses
 local GetClassInfo = GetClassInfo
@@ -24,6 +43,307 @@ local GetSpecializationInfoForClassID = GetSpecializationInfoForClassID
 local GetNumSpecializationsForClassID = GetNumSpecializationsForClassID
 local C_SpecializationInfo = C_SpecializationInfo
 local C_CreatureInfo = C_CreatureInfo
+local floor = math.floor
+local strlower = string.lower
+
+local function trim(value)
+	if value == nil then return "" end
+	return tostring(value):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+local function normalizeToken(token, upper)
+	local t = trim(token)
+	if t == "" then return nil end
+	if upper then t = t:upper() end
+	local num = tonumber(t)
+	if num then return num end
+	return t
+end
+
+local function fillTableFromCsv(tbl, csv, upper)
+	if type(csv) ~= "string" then return end
+	for token in csv:gmatch("[^,]+") do
+		local key = normalizeToken(token, upper)
+		if key ~= nil then tbl[key] = true end
+	end
+end
+
+local function buildOrderMap(order)
+	local map = {}
+	if type(order) ~= "string" then return map end
+	local idx = 0
+	for token in order:gmatch("[^,]+") do
+		local key = normalizeToken(token, true)
+		if key ~= nil then
+			idx = idx + 1
+			map[key] = idx
+		end
+	end
+	return map
+end
+
+local function normalizeGroupBy(value)
+	local v = trim(value):upper()
+	if v == "" then return nil end
+	if v == "GROUP" or v == "CLASS" or v == "ROLE" or v == "ASSIGNEDROLE" then return v end
+	return nil
+end
+
+local function normalizeSortMethod(value)
+	local v = trim(value):upper()
+	if v == "NAME" then return "NAME" end
+	if v == "NAMELIST" then return "NAMELIST" end
+	return "INDEX"
+end
+
+local function normalizeSortDir(value)
+	local v = trim(value):upper()
+	if v == "DESC" then return "DESC" end
+	return "ASC"
+end
+
+local function applyRoleQuotaWithLimit(list, limit, maxTanks, maxHealers)
+	local limitCount = tonumber(limit)
+	local limitT = tonumber(maxTanks) or 0
+	local limitH = tonumber(maxHealers) or 0
+	if limitCount == nil or limitCount <= 0 then return list end
+	if limitT <= 0 and limitH <= 0 then
+		if #list > limitCount then
+			local result = {}
+			for i = 1, limitCount do result[#result + 1] = list[i] end
+			return result
+		end
+		return list
+	end
+
+	-- mark required entries (first N tanks / first N healers in current order)
+	local required = {}
+	local remainingT = limitT
+	for i, entry in ipairs(list) do
+		if remainingT <= 0 then break end
+		local role = entry.sample and entry.sample.role
+		if role == "TANK" then
+			required[i] = true
+			remainingT = remainingT - 1
+		end
+	end
+	local remainingH = limitH
+	for i, entry in ipairs(list) do
+		if remainingH <= 0 then break end
+		if not required[i] then
+			local role = entry.sample and entry.sample.role
+			if role == "HEALER" then
+				required[i] = true
+				remainingH = remainingH - 1
+			end
+		end
+	end
+
+	local requiredSuffix = {}
+	local running = 0
+	for i = #list, 1, -1 do
+		if required[i] then running = running + 1 end
+		requiredSuffix[i] = running
+	end
+
+	local result = {}
+	for i, entry in ipairs(list) do
+		if #result >= limitCount then break end
+		local role = entry.sample and entry.sample.role
+		if required[i] then
+			result[#result + 1] = entry
+		else
+			if role ~= "TANK" and role ~= "HEALER" then
+				local remainingSlots = limitCount - #result
+				local requiredRemaining = requiredSuffix[i]
+				if remainingSlots > requiredRemaining then
+					result[#result + 1] = entry
+				end
+			end
+		end
+	end
+
+	return result
+end
+
+function H.BuildRaidPreviewSamples(count)
+	local samples = {}
+	local classCounts = {}
+	local function addSample(class, role)
+		classCounts[class] = (classCounts[class] or 0) + 1
+		local suffix = classCounts[class]
+		local name = (suffix > 1) and (class .. " " .. tostring(suffix)) or class
+		local idx = #samples + 1
+		samples[idx] = {
+			name = name,
+			class = class,
+			role = role,
+			group = floor((idx - 1) / 5) + 1,
+		}
+	end
+
+	local tanks = { "WARRIOR", "PALADIN" }
+	local healers = { "PRIEST", "DRUID", "SHAMAN", "MONK", "EVOKER", "PALADIN" }
+	for _, class in ipairs(tanks) do addSample(class, "TANK") end
+	for _, class in ipairs(healers) do addSample(class, "HEALER") end
+
+	local i = 1
+	while #samples < (tonumber(count) or 0) do
+		local class = H.CLASS_TOKENS[((i - 1) % #H.CLASS_TOKENS) + 1]
+		addSample(class, "DAMAGER")
+		i = i + 1
+	end
+
+	return samples
+end
+
+function H.BuildPreviewSampleList(kind, cfg, baseSamples, limit, quotaTanks, quotaHealers)
+	local base = baseSamples or {}
+	if kind ~= "raid" then return base end
+
+	local groupFilter = cfg and cfg.groupFilter
+	local roleFilter = cfg and cfg.roleFilter
+	local nameList = cfg and cfg.nameList
+	local strictFiltering = cfg and cfg.strictFiltering
+	local sortMethod = normalizeSortMethod(cfg and cfg.sortMethod)
+	local sortDir = normalizeSortDir(cfg and cfg.sortDir)
+	local groupBy = normalizeGroupBy(cfg and cfg.groupBy)
+	local groupingOrder = cfg and cfg.groupingOrder
+
+	if not groupFilter and not roleFilter and not nameList then
+		groupFilter = H.GROUP_ORDER
+	end
+
+	local list = {}
+	local nameOrder = {}
+
+	if groupFilter or roleFilter then
+		local tokenTable = {}
+		if groupFilter and not roleFilter then
+			fillTableFromCsv(tokenTable, groupFilter, true)
+			if strictFiltering then
+				fillTableFromCsv(tokenTable, "MAINTANK,MAINASSIST,TANK,HEALER,DAMAGER,NONE", true)
+			end
+		elseif roleFilter and not groupFilter then
+			fillTableFromCsv(tokenTable, roleFilter, true)
+			if strictFiltering then
+				fillTableFromCsv(tokenTable, H.GROUP_ORDER, false)
+				for _, class in ipairs(H.CLASS_TOKENS) do tokenTable[class] = true end
+			end
+		else
+			fillTableFromCsv(tokenTable, groupFilter, true)
+			fillTableFromCsv(tokenTable, roleFilter, true)
+		end
+
+		for i, sample in ipairs(base) do
+			local subgroup = tonumber(sample.group) or 1
+			local className = sample.class
+			local role = sample.role
+			local assignedRole = sample.assignedRole or role or "NONE"
+			local include
+			if not strictFiltering then
+				include = tokenTable[subgroup] or tokenTable[className] or (role and tokenTable[role]) or tokenTable[assignedRole]
+			else
+				include = tokenTable[subgroup] and tokenTable[className] and ((role and tokenTable[role]) or tokenTable[assignedRole])
+			end
+			if include then list[#list + 1] = { sample = sample, index = i } end
+		end
+	else
+		if nameList then
+			local idx = 0
+			for token in tostring(nameList):gmatch("[^,]+") do
+				local name = trim(token)
+				if name ~= "" then
+					idx = idx + 1
+					nameOrder[name] = idx
+				end
+			end
+		end
+		for i, sample in ipairs(base) do
+			if not nameList or nameOrder[sample.name or ""] then
+				list[#list + 1] = { sample = sample, index = i }
+			end
+		end
+	end
+
+	if groupBy then
+		if not groupingOrder or groupingOrder == "" then
+			if groupBy == "CLASS" then
+				groupingOrder = H.CLASS_ORDER
+			elseif groupBy == "ROLE" or groupBy == "ASSIGNEDROLE" then
+				groupingOrder = H.ROLE_ORDER
+			else
+				groupingOrder = H.GROUP_ORDER
+			end
+		end
+		local orderMap = buildOrderMap(groupingOrder)
+
+		local function groupKey(sample)
+			if groupBy == "GROUP" then
+				return tonumber(sample.group) or 1
+			elseif groupBy == "CLASS" then
+				return sample.class
+			elseif groupBy == "ROLE" then
+				return sample.role
+			elseif groupBy == "ASSIGNEDROLE" then
+				return sample.assignedRole or sample.role
+			end
+			return nil
+		end
+
+		if sortMethod == "NAME" then
+			table.sort(list, function(a, b)
+				local order1 = orderMap[groupKey(a.sample)]
+				local order2 = orderMap[groupKey(b.sample)]
+				if order1 then
+					if not order2 then return true end
+					if order1 == order2 then
+						return (a.sample.name or "") < (b.sample.name or "")
+					end
+					return order1 < order2
+				else
+					if order2 then return false end
+					return (a.sample.name or "") < (b.sample.name or "")
+				end
+			end)
+		else
+			table.sort(list, function(a, b)
+				local order1 = orderMap[groupKey(a.sample)]
+				local order2 = orderMap[groupKey(b.sample)]
+				if order1 then
+					if not order2 then return true end
+					if order1 == order2 then return a.index < b.index end
+					return order1 < order2
+				else
+					if order2 then return false end
+					return a.index < b.index
+				end
+			end)
+		end
+	elseif sortMethod == "NAME" then
+		table.sort(list, function(a, b) return (a.sample.name or "") < (b.sample.name or "") end)
+	elseif sortMethod == "NAMELIST" and next(nameOrder) then
+		table.sort(list, function(a, b)
+			return (nameOrder[a.sample.name or ""] or 0) < (nameOrder[b.sample.name or ""] or 0)
+		end)
+	end
+
+	if sortDir == "DESC" then
+		for i = 1, floor(#list / 2) do
+			local j = #list - i + 1
+			list[i], list[j] = list[j], list[i]
+		end
+	end
+	local qT = quotaTanks or 0
+	local qH = quotaHealers or 0
+	list = applyRoleQuotaWithLimit(list, limit, qT, qH)
+
+	local result = {}
+	for _, entry in ipairs(list) do
+		result[#result + 1] = entry.sample
+	end
+	return result
+end
 
 function H.ClampNumber(value, minValue, maxValue, fallback)
 	local v = tonumber(value)

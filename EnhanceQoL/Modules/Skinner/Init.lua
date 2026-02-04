@@ -47,6 +47,17 @@ local function hideSlotTexture(texture)
 	if texture.Hide then texture:Hide() end
 end
 
+local function lockTextureHidden(texture)
+	if not texture then return end
+	hideSlotTexture(texture)
+	if texture.SetColorTexture then texture:SetColorTexture(0, 0, 0, 0) end
+	if texture.SetShown then texture:SetShown(false) end
+	if texture.eqolLockedHidden then return end
+	texture.eqolLockedHidden = true
+	texture.Show = function() end
+	texture.SetShown = function() end
+end
+
 local function setTextureAlpha(texture, alpha)
 	if not texture or not texture.SetAlpha then return end
 	texture:SetAlpha(alpha)
@@ -61,6 +72,17 @@ local FLAT_TAB_BG_SELECTED = { r = 0.10, g = 0.10, b = 0.10, a = math.min(1, FLA
 local FLAT_HEADER_BG = { r = FLAT_PANEL_BG.r, g = FLAT_PANEL_BG.g, b = FLAT_PANEL_BG.b, a = FLAT_PANEL_BG.a }
 local FLAT_CLOSE_BG = { r = FLAT_HEADER_BG.r, g = FLAT_HEADER_BG.g, b = FLAT_HEADER_BG.b, a = FLAT_HEADER_BG.a }
 local FLAT_CLOSE_BG_HOVER = { r = 0.09, g = 0.09, b = 0.09, a = FLAT_HEADER_BG.a }
+local FLAT_BUTTON_BG = { r = 0.08, g = 0.08, b = 0.08, a = 0.65 }
+local FLAT_BUTTON_BG_HOVER = { r = 0.12, g = 0.12, b = 0.12, a = 0.75 }
+local FLAT_BUTTON_BG_DISABLED = { r = 0.05, g = 0.05, b = 0.05, a = 0.5 }
+local FLAT_BUTTON_TEXT_ENABLED = { r = 1, g = 0.82, b = 0 }
+local FLAT_BUTTON_TEXT_DISABLED = { r = 0.6, g = 0.6, b = 0.6 }
+local FLAT_TITLE_TEXT = { r = 0.9, g = 0.75, b = 0.2 }
+local FLAT_TITLE_TEXT_SELECTED = { r = 1, g = 0.82, b = 0 }
+local FLAT_TITLE_TEXT_HOVER = { r = 1, g = 1, b = 1 }
+local FLAT_TITLE_HOVER_BG = { r = 0.06, g = 0.06, b = 0.06, a = 0.75 }
+local FLAT_TITLE_SELECTED_BG = { r = 0.32, g = 0.24, b = 0.08, a = 0.65 }
+local FLAT_DROPDOWN_BG = { r = 0.07, g = 0.07, b = 0.07, a = 0.65 }
 local FLAT_STATS_ROW_BG = { r = 0.35, g = 0.35, b = 0.35, a = 0.62 }
 local FLAT_STATS_ROW_BG_INSET_X = 4
 local FLAT_STATS_ROW_BG_INSET_Y = 2
@@ -83,6 +105,95 @@ local function createFlatBorder(frame, key)
 	border:SetFrameLevel((frame:GetFrameLevel() or 1) + 2)
 	frame[key] = border
 	return border
+end
+
+local updateTitleButtonState
+
+local function applyTitleButtonFlatSkin(button)
+	if not button then return end
+
+	lockTextureHidden(button.BgTop)
+	lockTextureHidden(button.BgBottom)
+	lockTextureHidden(button.BgMiddle)
+	lockTextureHidden(button.Stripe)
+	lockTextureHidden(button.SelectedBar)
+
+	local highlight = button.GetHighlightTexture and button:GetHighlightTexture()
+	if highlight then lockTextureHidden(highlight) end
+
+	if not button.eqolFlatTitle then
+		button.eqolFlatTitle = true
+
+		button.eqolTitleBg = button:CreateTexture(nil, "BACKGROUND")
+		button.eqolTitleBg:SetAllPoints(button)
+		button.eqolTitleBg:SetColorTexture(0, 0, 0, 0)
+
+		button.eqolTitleSelected = button:CreateTexture(nil, "BACKGROUND")
+		button.eqolTitleSelected:SetAllPoints(button)
+		button.eqolTitleSelected:SetColorTexture(FLAT_TITLE_SELECTED_BG.r, FLAT_TITLE_SELECTED_BG.g, FLAT_TITLE_SELECTED_BG.b, FLAT_TITLE_SELECTED_BG.a)
+		button.eqolTitleSelected:Hide()
+
+		button.eqolTitleHover = button:CreateTexture(nil, "BACKGROUND")
+		button.eqolTitleHover:SetAllPoints(button)
+		button.eqolTitleHover:SetColorTexture(FLAT_TITLE_HOVER_BG.r, FLAT_TITLE_HOVER_BG.g, FLAT_TITLE_HOVER_BG.b, FLAT_TITLE_HOVER_BG.a)
+		button.eqolTitleHover:Hide()
+
+		button:HookScript("OnEnter", function(self)
+			if self.eqolTitleHover and not self.eqolTitleSelected:IsShown() then
+				self.eqolTitleHover:Show()
+				if self.text and self.text.SetTextColor then
+					self.text:SetTextColor(FLAT_TITLE_TEXT_HOVER.r, FLAT_TITLE_TEXT_HOVER.g, FLAT_TITLE_TEXT_HOVER.b)
+				end
+			end
+		end)
+		button:HookScript("OnLeave", function(self)
+			if self.eqolTitleHover then self.eqolTitleHover:Hide() end
+			if self.text and self.text.SetTextColor and not (self.eqolTitleSelected and self.eqolTitleSelected:IsShown()) then
+				self.text:SetTextColor(FLAT_TITLE_TEXT.r, FLAT_TITLE_TEXT.g, FLAT_TITLE_TEXT.b)
+			end
+		end)
+	end
+
+	if button.text and button.text.SetTextColor then
+		button.text:SetTextColor(FLAT_TITLE_TEXT.r, FLAT_TITLE_TEXT.g, FLAT_TITLE_TEXT.b)
+	end
+	if button.eqolTitleBg and button.eqolTitleBg.SetDrawLayer then
+		button.eqolTitleBg:SetDrawLayer("BACKGROUND", 0)
+	end
+	if button.eqolTitleSelected and button.eqolTitleSelected.SetDrawLayer then
+		button.eqolTitleSelected:SetDrawLayer("BACKGROUND", 1)
+	end
+	if button.eqolTitleHover and button.eqolTitleHover.SetDrawLayer then
+		button.eqolTitleHover:SetDrawLayer("BACKGROUND", 2)
+	end
+
+	local selected = false
+	if button.titleId and _G.PaperDollFrame and _G.PaperDollFrame.TitleManagerPane then
+		selected = _G.PaperDollFrame.TitleManagerPane.selected == button.titleId
+	elseif button.Check and button.Check.IsShown then
+		selected = button.Check:IsShown()
+	end
+	updateTitleButtonState(button, selected)
+end
+
+updateTitleButtonState = function(button, selected)
+	if not button or not button.eqolFlatTitle then return end
+	if button.eqolTitleSelected then
+		if selected then
+			button.eqolTitleSelected:Show()
+		else
+			button.eqolTitleSelected:Hide()
+		end
+	end
+	if button.eqolTitleHover then
+		if selected then
+			button.eqolTitleHover:Hide()
+		end
+	end
+	if button.text and button.text.SetTextColor then
+		local col = selected and FLAT_TITLE_TEXT_SELECTED or FLAT_TITLE_TEXT
+		button.text:SetTextColor(col.r, col.g, col.b)
+	end
 end
 
 local function applyFlatBackground(frame, key, color, inset)
@@ -112,6 +223,80 @@ local function applyCharacterSlotFlatSkin(slot)
 	end
 end
 
+local function applyFlatButtonSkin(button)
+	if not button or button.eqolFlatButton then return end
+	button.eqolFlatButton = true
+
+	hideSlotTexture(button:GetNormalTexture())
+	hideSlotTexture(button:GetPushedTexture())
+	hideSlotTexture(button:GetHighlightTexture())
+	hideSlotTexture(button:GetDisabledTexture())
+	hideSlotTexture(button.Left)
+	hideSlotTexture(button.Middle)
+	hideSlotTexture(button.Right)
+	hideSlotTexture(button.LeftDisabled)
+	hideSlotTexture(button.MiddleDisabled)
+	hideSlotTexture(button.RightDisabled)
+	hideSlotTexture(button.LeftHighlight)
+	hideSlotTexture(button.MiddleHighlight)
+	hideSlotTexture(button.RightHighlight)
+
+	button.eqolFlatBg = button:CreateTexture(nil, "BACKGROUND")
+	button.eqolFlatBg:SetAllPoints(button)
+	button.eqolFlatBg:SetColorTexture(FLAT_BUTTON_BG.r, FLAT_BUTTON_BG.g, FLAT_BUTTON_BG.b, FLAT_BUTTON_BG.a)
+	createFlatBorder(button, "eqolFlatBorder")
+
+	if button.SetNormalFontObject then button:SetNormalFontObject("GameFontHighlight") end
+	if button.SetHighlightFontObject then button:SetHighlightFontObject("GameFontHighlight") end
+	if button.SetDisabledFontObject then button:SetDisabledFontObject("GameFontDisable") end
+	local label = button.GetFontString and button:GetFontString()
+
+	local function setState(isEnabled)
+		if button.eqolFlatBg then
+			local col = isEnabled and FLAT_BUTTON_BG or FLAT_BUTTON_BG_DISABLED
+			button.eqolFlatBg:SetColorTexture(col.r, col.g, col.b, col.a)
+		end
+		if label and label.SetTextColor then
+			local col = isEnabled and FLAT_BUTTON_TEXT_ENABLED or FLAT_BUTTON_TEXT_DISABLED
+			label:SetTextColor(col.r, col.g, col.b)
+		end
+	end
+
+	setState(button.IsEnabled and button:IsEnabled())
+
+	button:HookScript("OnEnter", function(self)
+		if self.IsEnabled and self:IsEnabled() and self.eqolFlatBg then
+			self.eqolFlatBg:SetColorTexture(FLAT_BUTTON_BG_HOVER.r, FLAT_BUTTON_BG_HOVER.g, FLAT_BUTTON_BG_HOVER.b, FLAT_BUTTON_BG_HOVER.a)
+		end
+	end)
+	button:HookScript("OnLeave", function(self)
+		setState(self.IsEnabled and self:IsEnabled())
+	end)
+	button:HookScript("OnEnable", function() setState(true) end)
+	button:HookScript("OnDisable", function() setState(false) end)
+end
+
+local function applyFlatDropdownSkin(dropdown)
+	if not dropdown or dropdown.eqolFlatDropdown then return end
+	dropdown.eqolFlatDropdown = true
+
+	if dropdown.Background then hideSlotTexture(dropdown.Background) end
+	if dropdown.Left then hideSlotTexture(dropdown.Left) end
+	if dropdown.Middle then hideSlotTexture(dropdown.Middle) end
+	if dropdown.Right then hideSlotTexture(dropdown.Right) end
+
+	dropdown.eqolFlatBg = dropdown:CreateTexture(nil, "BACKGROUND")
+	dropdown.eqolFlatBg:SetPoint("TOPLEFT", dropdown, "TOPLEFT", -2, 2)
+	dropdown.eqolFlatBg:SetPoint("BOTTOMRIGHT", dropdown, "BOTTOMRIGHT", 2, -2)
+	dropdown.eqolFlatBg:SetColorTexture(FLAT_DROPDOWN_BG.r, FLAT_DROPDOWN_BG.g, FLAT_DROPDOWN_BG.b, FLAT_DROPDOWN_BG.a)
+	createFlatBorder(dropdown, "eqolFlatBorder")
+
+	if dropdown.Arrow and dropdown.Arrow.SetDesaturation then
+		dropdown.Arrow:SetDesaturation(1)
+		dropdown.Arrow:SetVertexColor(1, 1, 1, 0.85)
+	end
+end
+
 local function updateFlatTabState(tab, selected)
 	if not tab or not tab.eqolFlatBg then return end
 	local col = selected and FLAT_TAB_BG_SELECTED or FLAT_TAB_BG
@@ -122,7 +307,8 @@ local function updateSidebarTabState(tab, selected)
 	if not tab or not tab.eqolFlatBg then return end
 	local col = selected and FLAT_TAB_BG_SELECTED or FLAT_HEADER_BG
 	tab.eqolFlatBg:SetColorTexture(col.r, col.g, col.b, col.a)
-	if tab.Icon and tab.Icon.SetDesaturation then tab.Icon:SetDesaturation(0) end
+	if tab.Icon and tab.Icon.SetDesaturation then tab.Icon:SetDesaturation(selected and 0 or 1) end
+	if tab.Icon and tab.Icon.SetAlpha then tab.Icon:SetAlpha(selected and 1 or 0.75) end
 end
 
 local function applySidebarTabFlatSkin(tab, index)
@@ -424,6 +610,28 @@ local function applyCharacterFrameFlatSkin()
 	applyCharacterTabsFlatSkin()
 	applyCharacterSidebarTabsFlatSkin()
 	applyCharacterStatsPaneFlatSkin()
+
+	applyFlatButtonSkin(_G.PaperDollFrameEquipSet)
+	applyFlatButtonSkin(_G.PaperDollFrameSaveSet)
+	applyFlatDropdownSkin(_G.ReputationFrame and _G.ReputationFrame.filterDropdown)
+	applyFlatDropdownSkin(_G.TokenFrame and _G.TokenFrame.filterDropdown)
+
+	local titlePane = _G.PaperDollFrame and _G.PaperDollFrame.TitleManagerPane
+	if titlePane then
+		hideSlotTexture(titlePane.Background)
+		hideSlotTexture(titlePane.Bg)
+		hideSlotTexture(titlePane.Border)
+	end
+	if _G.PaperDollTitlesPane_InitButton and not (addon.variables and addon.variables.eqolTitleButtonHook) then
+		addon.variables = addon.variables or {}
+		addon.variables.eqolTitleButtonHook = true
+		hooksecurefunc("PaperDollTitlesPane_InitButton", function(button)
+			applyTitleButtonFlatSkin(button)
+		end)
+		hooksecurefunc("PaperDollTitlesPane_SetButtonSelected", function(button, selected)
+			updateTitleButtonState(button, selected)
+		end)
+	end
 end
 
 local function stripCharacterSlotNormalTexture(slot)
