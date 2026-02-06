@@ -393,12 +393,31 @@ local function getGroupNumberConfig(cfg, def)
 	return sc, us, gn, defUS, defGN
 end
 
-local function resolveGroupNumberEnabled(cfg, def)
+local function resolveGroupByValue(cfg, def)
+	local groupBy = (cfg and cfg.groupBy) or (def and def.groupBy)
+	local v = tostring(groupBy or "GROUP"):upper()
+	if v == "ROLE" then v = "ASSIGNEDROLE" end
+	if v == "GROUP" or v == "CLASS" or v == "ASSIGNEDROLE" then return v end
+	return nil
+end
+
+local function isGroupByGroup(cfg, def) return resolveGroupByValue(cfg, def) == "GROUP" end
+
+local function resolveGroupNumberSettingEnabled(cfg, def)
 	local _, us, gn, defUS, defGN = getGroupNumberConfig(cfg, def)
 	local enabled = gn.enabled
 	if enabled == nil then enabled = us.showGroup end
 	if enabled == nil then enabled = defGN.enabled end
 	if enabled == nil then enabled = defUS.showGroup end
+	return enabled == true
+end
+
+local function resolveGroupNumberEnabled(cfg, def)
+	local enabled = resolveGroupNumberSettingEnabled(cfg, def)
+	if enabled == true and cfg and cfg.groupIndicator and cfg.groupIndicator.hidePerFrame == true and isGroupByGroup(cfg, def) then
+		local custom = cfg and GFH and GFH.EnsureCustomSortConfig and GFH.EnsureCustomSortConfig(cfg)
+		if not (custom and custom.enabled == true) then return false end
+	end
 	return enabled == true
 end
 
@@ -437,6 +456,45 @@ local function resolveGroupNumberStyle(cfg, def, hc)
 	}
 end
 
+local function getGroupIndicatorConfig(cfg, def)
+	local gi = cfg and cfg.groupIndicator or {}
+	local defGI = def and def.groupIndicator or {}
+	return gi, defGI
+end
+
+local function resolveGroupIndicatorEnabled(cfg, def)
+	local gi, defGI = getGroupIndicatorConfig(cfg, def)
+	local enabled = gi.enabled
+	if enabled == nil then enabled = defGI.enabled end
+	return enabled == true
+end
+
+local function resolveGroupIndicatorFormat(cfg, def)
+	local gi, defGI = getGroupIndicatorConfig(cfg, def)
+	local fmt = gi.format or defGI.format or "GROUP"
+	return normalizeGroupNumberFormat(fmt) or "GROUP"
+end
+
+local function resolveGroupIndicatorStyle(cfg, def, hc)
+	local gi, defGI = getGroupIndicatorConfig(cfg, def)
+	local defH = (def and def.health) or {}
+	return {
+		font = gi.font or defGI.font or hc.font or defH.font,
+		fontSize = gi.fontSize or defGI.fontSize or hc.fontSize or defH.fontSize or 12,
+		fontOutline = gi.fontOutline or defGI.fontOutline or hc.fontOutline or defH.fontOutline or "OUTLINE",
+		color = gi.color or defGI.color or { 1, 1, 1, 1 },
+		anchor = gi.anchor or defGI.anchor or "TOPLEFT",
+		offset = gi.offset or defGI.offset or {},
+	}
+end
+
+local function isGroupIndicatorAvailable(cfg, def)
+	if not isGroupByGroup(cfg, def) then return false end
+	local custom = cfg and GFH and GFH.EnsureCustomSortConfig and GFH.EnsureCustomSortConfig(cfg)
+	if custom and custom.enabled == true then return false end
+	return true
+end
+
 local function resolveStatusTextAnchor(anchor)
 	local a = tostring(anchor or "CENTER"):upper()
 	if a == "LEFT" then return "LEFT", "LEFT", "LEFT" end
@@ -458,6 +516,21 @@ local function applyStatusTextAnchor(st, anchor, offset, scale, parent, fs)
 	target:ClearAllPoints()
 	target:SetPoint(point, parent, relPoint, roundToPixel(off.x or 0, scale), roundToPixel(off.y or 0, scale))
 	if justify and target.SetJustifyH then target:SetJustifyH(justify) end
+end
+
+local function applyGroupIndicatorAnchor(fs, anchor, offset, scale, parent)
+	if not (fs and parent) then return end
+	local point, relPoint
+	if GFH and GFH.GetOuterAnchorPoint then
+		point, relPoint = GFH.GetOuterAnchorPoint(anchor)
+	else
+		point, relPoint = resolveStatusTextAnchor(anchor)
+	end
+	local _, _, justify = resolveStatusTextAnchor(anchor)
+	local off = offset or {}
+	fs:ClearAllPoints()
+	fs:SetPoint(point, parent, relPoint, roundToPixel(off.x or 0, scale), roundToPixel(off.y or 0, scale))
+	if justify and fs.SetJustifyH then fs:SetJustifyH(justify) end
 end
 
 local function stopDispelGlow(frame)
@@ -857,6 +930,17 @@ local DEFAULTS = {
 				glowLines = 8,
 				glowThickness = 3,
 			},
+		},
+		groupIndicator = {
+			enabled = false,
+			hidePerFrame = false,
+			format = "GROUP",
+			font = nil,
+			fontSize = 12,
+			fontOutline = "OUTLINE",
+			color = { 1, 1, 1, 1 },
+			anchor = "TOPLEFT",
+			offset = { x = 0, y = 0 },
 		},
 		roleIcon = {
 			enabled = true,
@@ -3416,6 +3500,137 @@ function GF:UpdateStatusText(self)
 	end
 end
 
+local function hideGroupIndicators(container)
+	if not container then return end
+	local indicators = container._eqolGroupIndicators
+	if not indicators then return end
+	for _, fs in pairs(indicators) do
+		if fs then
+			fs:SetText("")
+			fs:Hide()
+		end
+	end
+end
+
+local function updateGroupIndicatorsForFrames(container, frames, cfg, def, isPreview)
+	if not container then return end
+	if not (cfg and resolveGroupIndicatorEnabled(cfg, def) and isGroupIndicatorAvailable(cfg, def)) then
+		hideGroupIndicators(container)
+		return
+	end
+	if not (frames and #frames > 0) then
+		hideGroupIndicators(container)
+		return
+	end
+
+	local sortMethod = (GFH and GFH.NormalizeSortMethod and GFH.NormalizeSortMethod(cfg.sortMethod)) or "INDEX"
+	local sortDir = (GFH and GFH.NormalizeSortDir and GFH.NormalizeSortDir(cfg.sortDir)) or "ASC"
+	local candidates = {}
+
+	for _, frame in ipairs(frames) do
+		if frame and frame.IsShown and frame:IsShown() then
+			local st = getState(frame)
+			local subgroup
+			local sortIndex
+			local name
+			if isPreview then
+				if st then
+					subgroup = st._previewGroup
+					sortIndex = st._previewIndex
+					name = st._previewName
+				end
+			else
+				local unit = getUnit(frame)
+				if unit and UnitInRaid and GetRaidRosterInfo then
+					local idx = UnitInRaid(unit)
+					if idx then
+						local _, _, raidSubgroup = GetRaidRosterInfo(idx)
+						if not (issecretvalue and issecretvalue(raidSubgroup)) then subgroup = raidSubgroup end
+						sortIndex = idx
+					end
+				end
+				if unit and UnitName then name = UnitName(unit) end
+			end
+
+			if subgroup then
+				subgroup = tonumber(subgroup) or subgroup
+				local key
+				if sortMethod == "NAME" then
+					local base = name
+					if base == nil or base == "" then base = sortIndex and tostring(sortIndex) or "" end
+					key = tostring(base):upper()
+				else
+					key = tonumber(sortIndex) or 0
+				end
+				local current = candidates[subgroup]
+				local better
+				if not current then
+					better = true
+				elseif GFH and GFH.IsBetterSortKey then
+					better = GFH.IsBetterSortKey(key, current.key, sortDir)
+				else
+					if sortDir == "DESC" then
+						better = key > current.key
+					else
+						better = key < current.key
+					end
+				end
+				if better then candidates[subgroup] = { frame = frame, key = key } end
+			end
+		end
+	end
+
+	if not next(candidates) then
+		hideGroupIndicators(container)
+		return
+	end
+
+	local indicators = container._eqolGroupIndicators
+	if not indicators then
+		indicators = {}
+		container._eqolGroupIndicators = indicators
+	end
+	local style = resolveGroupIndicatorStyle(cfg, def, (cfg and cfg.health) or {})
+	local format = resolveGroupIndicatorFormat(cfg, def)
+	local scale = GFH.GetEffectiveScale(container)
+	if not scale or scale <= 0 then scale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1 end
+	local used = {}
+
+	for subgroup, entry in pairs(candidates) do
+		local fs = indicators[subgroup]
+		if not fs and container.CreateFontString then
+			fs = container:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+			indicators[subgroup] = fs
+		end
+		if fs and entry and entry.frame then
+			local target = entry.frame
+			local st = target and getState(target)
+			local anchorTarget = (st and st.barGroup) or target
+			if anchorTarget then
+				if fs.GetParent and fs:GetParent() ~= container then fs:SetParent(container) end
+				if fs.SetDrawLayer then fs:SetDrawLayer("OVERLAY", 7) end
+				if UFHelper and UFHelper.applyFont then UFHelper.applyFont(fs, style.font, style.fontSize or 12, style.fontOutline) end
+				applyGroupIndicatorAnchor(fs, style.anchor, style.offset, scale, anchorTarget)
+				local r, g, b, a = unpackColor(style.color, GFH.COLOR_WHITE)
+				fs:SetText(formatGroupNumber(subgroup, format))
+				fs:SetTextColor(r, g, b, a)
+				fs:Show()
+				used[subgroup] = true
+			else
+				fs:SetText("")
+				fs:Hide()
+			end
+		end
+	end
+
+	for subgroup, fs in pairs(indicators) do
+		if not used[subgroup] then
+			fs:SetText("")
+			fs:Hide()
+		end
+	end
+end
+
 function GF:UpdateDispelTint(self, cache, dispelFilter, allowSample)
 	local st = getState(self)
 	if not st then return end
@@ -3639,7 +3854,14 @@ function GF:UpdatePrivateAuras(self)
 		return
 	end
 	local inEditMode = isEditModeActive()
-	UFHelper.ApplyPrivateAuras(st.privateAuras, self.unit, pcfg, st.barGroup or self, st.healthTextLayer or st.barGroup or self, inEditMode == true)
+	local showSample = inEditMode == true and GF._editModeSampleAuras ~= false
+	if inEditMode and showSample == false then
+		if UFHelper and UFHelper.RemovePrivateAuras then UFHelper.RemovePrivateAuras(st.privateAuras) end
+		if UFHelper and UFHelper.UpdatePrivateAuraSound then UFHelper.UpdatePrivateAuraSound(st.privateAuras, nil, pcfg or {}) end
+		if st.privateAuras and st.privateAuras.Hide then st.privateAuras:Hide() end
+		return
+	end
+	UFHelper.ApplyPrivateAuras(st.privateAuras, self.unit, pcfg, st.barGroup or self, st.healthTextLayer or st.barGroup or self, showSample)
 end
 
 function GF:UpdateHealthValue(self, unit, st)
@@ -4660,6 +4882,7 @@ function GF:UpdatePreviewLayout(kind)
 			end
 		end
 	end
+	if kind == "raid" then GF:RefreshGroupIndicators() end
 end
 
 function GF:ShowPreviewFrames(kind, show)
@@ -4692,6 +4915,7 @@ function GF:ShowPreviewFrames(kind, show)
 			end
 		end
 	end
+	if kind == "raid" then GF:RefreshGroupIndicators() end
 end
 
 local function getCustomSortEditor()
@@ -4830,23 +5054,28 @@ local function refreshAllAuras()
 	end
 end
 
-function GF:SetEditModeSampleAuras(show)
-	local enabled = show ~= false
-	if GF._editModeSampleAuras == enabled then return end
-	GF._editModeSampleAuras = enabled
-	if not isEditModeActive() then return end
+local function refreshAllPrivateAuras()
 	for _, header in pairs(GF.headers or {}) do
 		forEachChild(header, function(child)
-			if child then GF:UpdateAuras(child) end
+			if child then GF:UpdatePrivateAuras(child) end
 		end)
 	end
 	if GF._previewFrames then
 		for _, frames in pairs(GF._previewFrames) do
 			for _, btn in ipairs(frames) do
-				if btn then GF:UpdateAuras(btn) end
+				if btn then GF:UpdatePrivateAuras(btn) end
 			end
 		end
 	end
+end
+
+function GF:SetEditModeSampleAuras(show)
+	local enabled = show ~= false
+	if GF._editModeSampleAuras == enabled then return end
+	GF._editModeSampleAuras = enabled
+	if not isEditModeActive() then return end
+	refreshAllAuras()
+	refreshAllPrivateAuras()
 end
 
 function GF:ToggleEditModeSampleAuras() GF:SetEditModeSampleAuras(GF._editModeSampleAuras == false) end
@@ -4903,6 +5132,25 @@ function GF:RefreshStatusText()
 				if btn then GF:UpdateStatusText(btn) end
 			end
 		end
+	end
+end
+
+function GF:RefreshGroupIndicators()
+	if not isFeatureEnabled() then return end
+	local cfg = getCfg("raid")
+	if not cfg then return end
+	local def = DEFAULTS.raid or {}
+	local header = GF.headers and GF.headers.raid
+	if header then
+		local frames = {}
+		forEachChild(header, function(child)
+			if child then frames[#frames + 1] = child end
+		end)
+		updateGroupIndicatorsForFrames(header, frames, cfg, def, false)
+	end
+	if GF._previewFrames and GF._previewFrames.raid then
+		local parent = (GF.anchors and GF.anchors.raid) or header
+		if parent then updateGroupIndicatorsForFrames(parent, GF._previewFrames.raid, cfg, def, true) end
 	end
 end
 
@@ -4973,6 +5221,7 @@ function GF:RefreshTextStyles()
 			end
 		end
 	end
+	GF:RefreshGroupIndicators()
 end
 
 function GF:RefreshRaidIcons()
@@ -5220,6 +5469,8 @@ function GF:ApplyHeaderAttributes(kind)
 	else
 		header._eqolPendingLayout = true
 	end
+
+	if kind == "raid" then GF:RefreshGroupIndicators() end
 end
 
 function GF:EnsureHeaders()
@@ -5521,7 +5772,7 @@ local function buildEditModeSettings(kind, editModeId)
 	local function getGroupNumberEnabledValue()
 		local cfg = getCfg(kind)
 		local def = DEFAULTS[kind] or {}
-		return resolveGroupNumberEnabled(cfg, def)
+		return resolveGroupNumberSettingEnabled(cfg, def)
 	end
 	local function getGroupFormatValue()
 		local cfg = getCfg(kind)
@@ -5539,6 +5790,26 @@ local function buildEditModeSettings(kind, editModeId)
 		return us.enabled ~= false
 	end
 	local function isGroupNumberSettingsEnabled() return isStatusTextEnabled() and getGroupNumberEnabledValue() end
+	local function isGroupIndicatorShown()
+		if kind ~= "raid" then return false end
+		if isCustomSortingEnabled() then return false end
+		return getGroupByValue() == "GROUP"
+	end
+	local function getGroupIndicatorEnabledValue()
+		local cfg = getCfg(kind)
+		local def = DEFAULTS[kind] or {}
+		return resolveGroupIndicatorEnabled(cfg, def)
+	end
+	local function getGroupIndicatorFormatValue()
+		local cfg = getCfg(kind)
+		local def = DEFAULTS[kind] or {}
+		return resolveGroupIndicatorFormat(cfg, def)
+	end
+	local function getGroupIndicatorFormatLabel()
+		local fmt = getGroupIndicatorFormatValue()
+		return groupNumberFormatLabelByValue[fmt] or tostring(fmt)
+	end
+	local function isGroupIndicatorSettingsEnabled() return isGroupIndicatorShown() and getGroupIndicatorEnabledValue() end
 	local function getHealthTextMode(key, fallback)
 		local cfg = getCfg(kind)
 		local hc = cfg and cfg.health or {}
@@ -8334,7 +8605,7 @@ local function buildEditModeSettings(kind, editModeId)
 			isShown = function() return kind == "raid" end,
 		},
 		{
-			name = "Show group number",
+			name = "Show",
 			kind = SettingType.Checkbox,
 			field = "statusTextShowGroup",
 			parentId = "statustext",
@@ -8354,7 +8625,7 @@ local function buildEditModeSettings(kind, editModeId)
 			isShown = function() return kind == "raid" end,
 		},
 		{
-			name = "Group number format",
+			name = "Format",
 			kind = SettingType.Dropdown,
 			field = "statusTextGroupFormat",
 			parentId = "statustext",
@@ -8396,7 +8667,7 @@ local function buildEditModeSettings(kind, editModeId)
 			isShown = function() return kind == "raid" end,
 		},
 		{
-			name = "Group number color",
+			name = "Color",
 			kind = SettingType.Color,
 			field = "groupNumberColor",
 			parentId = "statustext",
@@ -8422,7 +8693,7 @@ local function buildEditModeSettings(kind, editModeId)
 			isShown = function() return kind == "raid" end,
 		},
 		{
-			name = "Group number font size",
+			name = "Font size",
 			kind = SettingType.Slider,
 			allowInput = true,
 			field = "groupNumberFontSize",
@@ -8449,7 +8720,7 @@ local function buildEditModeSettings(kind, editModeId)
 			isShown = function() return kind == "raid" end,
 		},
 		{
-			name = "Group number font",
+			name = "Font",
 			kind = SettingType.Dropdown,
 			field = "groupNumberFont",
 			parentId = "statustext",
@@ -8490,7 +8761,7 @@ local function buildEditModeSettings(kind, editModeId)
 			isShown = function() return kind == "raid" end,
 		},
 		{
-			name = "Group number font outline",
+			name = "Font outline",
 			kind = SettingType.Dropdown,
 			field = "groupNumberFontOutline",
 			parentId = "statustext",
@@ -8531,7 +8802,7 @@ local function buildEditModeSettings(kind, editModeId)
 			isShown = function() return kind == "raid" end,
 		},
 		{
-			name = "Group number anchor",
+			name = "Anchor",
 			kind = SettingType.Dropdown,
 			field = "groupNumberAnchor",
 			parentId = "statustext",
@@ -8556,7 +8827,7 @@ local function buildEditModeSettings(kind, editModeId)
 			isShown = function() return kind == "raid" end,
 		},
 		{
-			name = "Group number offset X",
+			name = "Offset X",
 			kind = SettingType.Slider,
 			allowInput = true,
 			field = "groupNumberOffsetX",
@@ -8585,7 +8856,7 @@ local function buildEditModeSettings(kind, editModeId)
 			isShown = function() return kind == "raid" end,
 		},
 		{
-			name = "Group number offset Y",
+			name = "Offset Y",
 			kind = SettingType.Slider,
 			allowInput = true,
 			field = "groupNumberOffsetY",
@@ -13061,6 +13332,297 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 			isEnabled = function() return isCustomSortingEnabled() end,
 		}
+		settings[#settings + 1] = {
+			name = "",
+			kind = SettingType.Divider,
+			parentId = "raid",
+			isShown = function() return isGroupIndicatorShown() end,
+		}
+		settings[#settings + 1] = {
+			name = "Show indicator",
+			kind = SettingType.Checkbox,
+			field = "groupIndicatorEnabled",
+			parentId = "raid",
+			get = function() return getGroupIndicatorEnabledValue() end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.groupIndicator = cfg.groupIndicator or {}
+				cfg.groupIndicator.enabled = value and true or false
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupIndicatorEnabled", cfg.groupIndicator.enabled, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isShown = function() return isGroupIndicatorShown() end,
+		}
+		settings[#settings + 1] = {
+			name = "Hide Group number per Frame",
+			kind = SettingType.Checkbox,
+			field = "groupIndicatorHidePerFrame",
+			parentId = "raid",
+			get = function()
+				local cfg = getCfg(kind)
+				local def = DEFAULTS[kind] or {}
+				local gi = cfg and cfg.groupIndicator or {}
+				local defGI = def.groupIndicator or {}
+				if gi.hidePerFrame == nil then return defGI.hidePerFrame == true end
+				return gi.hidePerFrame == true
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.groupIndicator = cfg.groupIndicator or {}
+				cfg.groupIndicator.hidePerFrame = value and true or false
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupIndicatorHidePerFrame", cfg.groupIndicator.hidePerFrame, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function() return isGroupIndicatorSettingsEnabled() end,
+			isShown = function() return isGroupIndicatorShown() end,
+		}
+		settings[#settings + 1] = {
+			name = "Format",
+			kind = SettingType.Dropdown,
+			field = "groupIndicatorFormat",
+			parentId = "raid",
+			customDefaultText = getGroupIndicatorFormatLabel(),
+			get = function() return getGroupIndicatorFormatValue() end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.groupIndicator = cfg.groupIndicator or {}
+				cfg.groupIndicator.format = normalizeGroupNumberFormat(value) or "GROUP"
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupIndicatorFormat", cfg.groupIndicator.format, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			generator = function(_, root, data)
+				for _, option in ipairs(groupNumberFormatOptions) do
+					local value = option and option.value
+					if value ~= nil then
+						local label = option.label or option.text or tostring(value)
+						root:CreateRadio(label, function() return getGroupIndicatorFormatValue() == value end, function()
+							local cfg = getCfg(kind)
+							if not cfg then return end
+							cfg.groupIndicator = cfg.groupIndicator or {}
+							cfg.groupIndicator.format = value
+							if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupIndicatorFormat", value, nil, true) end
+							data.customDefaultText = label
+							if addon.EditModeLib and addon.EditModeLib.internal and addon.EditModeLib.internal.RequestRefreshSettings then addon.EditModeLib.internal:RequestRefreshSettings() end
+							GF:ApplyHeaderAttributes(kind)
+						end)
+					end
+				end
+			end,
+			isEnabled = function() return isGroupIndicatorSettingsEnabled() end,
+			isShown = function() return isGroupIndicatorShown() end,
+		}
+		settings[#settings + 1] = {
+			name = "Color",
+			kind = SettingType.Color,
+			field = "groupIndicatorColor",
+			parentId = "raid",
+			hasOpacity = true,
+			default = (DEFAULTS[kind] and DEFAULTS[kind].groupIndicator and DEFAULTS[kind].groupIndicator.color) or { 1, 1, 1, 1 },
+			get = function()
+				local cfg = getCfg(kind)
+				local def = DEFAULTS[kind] or {}
+				local style = resolveGroupIndicatorStyle(cfg, def, (cfg and cfg.health) or {})
+				local r, g, b, a = unpackColor(style.color, GFH.COLOR_WHITE)
+				return { r = r, g = g, b = b, a = a }
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not (cfg and value) then return end
+				cfg.groupIndicator = cfg.groupIndicator or {}
+				cfg.groupIndicator.color = { value.r or 1, value.g or 1, value.b or 1, value.a or 1 }
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupIndicatorColor", cfg.groupIndicator.color, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function() return isGroupIndicatorSettingsEnabled() end,
+			isShown = function() return isGroupIndicatorShown() end,
+		}
+		settings[#settings + 1] = {
+			name = "Font size",
+			kind = SettingType.Slider,
+			allowInput = true,
+			field = "groupIndicatorFontSize",
+			parentId = "raid",
+			minValue = 8,
+			maxValue = 100,
+			valueStep = 1,
+			get = function()
+				local cfg = getCfg(kind)
+				local def = DEFAULTS[kind] or {}
+				local style = resolveGroupIndicatorStyle(cfg, def, (cfg and cfg.health) or {})
+				return style.fontSize or 12
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.groupIndicator = cfg.groupIndicator or {}
+				cfg.groupIndicator.fontSize = clampNumber(value, 8, 100, cfg.groupIndicator.fontSize or 12)
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupIndicatorFontSize", cfg.groupIndicator.fontSize, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function() return isGroupIndicatorSettingsEnabled() end,
+			isShown = function() return isGroupIndicatorShown() end,
+		}
+		settings[#settings + 1] = {
+			name = "Font",
+			kind = SettingType.Dropdown,
+			field = "groupIndicatorFont",
+			parentId = "raid",
+			get = function()
+				local cfg = getCfg(kind)
+				local def = DEFAULTS[kind] or {}
+				local style = resolveGroupIndicatorStyle(cfg, def, (cfg and cfg.health) or {})
+				return style.font or nil
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.groupIndicator = cfg.groupIndicator or {}
+				cfg.groupIndicator.font = value
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupIndicatorFont", value, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			generator = function(_, root)
+				for _, option in ipairs(fontOptions()) do
+					root:CreateRadio(option.label, function()
+						local cfg = getCfg(kind)
+						local def = DEFAULTS[kind] or {}
+						local style = resolveGroupIndicatorStyle(cfg, def, (cfg and cfg.health) or {})
+						return (style.font or nil) == option.value
+					end, function()
+						local cfg = getCfg(kind)
+						if not cfg then return end
+						cfg.groupIndicator = cfg.groupIndicator or {}
+						cfg.groupIndicator.font = option.value
+						if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupIndicatorFont", option.value, nil, true) end
+						GF:ApplyHeaderAttributes(kind)
+					end)
+				end
+			end,
+			isEnabled = function() return isGroupIndicatorSettingsEnabled() end,
+			isShown = function() return isGroupIndicatorShown() end,
+		}
+		settings[#settings + 1] = {
+			name = "Font outline",
+			kind = SettingType.Dropdown,
+			field = "groupIndicatorFontOutline",
+			parentId = "raid",
+			get = function()
+				local cfg = getCfg(kind)
+				local def = DEFAULTS[kind] or {}
+				local style = resolveGroupIndicatorStyle(cfg, def, (cfg and cfg.health) or {})
+				return style.fontOutline or "OUTLINE"
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.groupIndicator = cfg.groupIndicator or {}
+				cfg.groupIndicator.fontOutline = value
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupIndicatorFontOutline", value, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			generator = function(_, root)
+				for _, option in ipairs(outlineOptions) do
+					root:CreateRadio(option.label, function()
+						local cfg = getCfg(kind)
+						local def = DEFAULTS[kind] or {}
+						local style = resolveGroupIndicatorStyle(cfg, def, (cfg and cfg.health) or {})
+						return (style.fontOutline or "OUTLINE") == option.value
+					end, function()
+						local cfg = getCfg(kind)
+						if not cfg then return end
+						cfg.groupIndicator = cfg.groupIndicator or {}
+						cfg.groupIndicator.fontOutline = option.value
+						if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupIndicatorFontOutline", option.value, nil, true) end
+						GF:ApplyHeaderAttributes(kind)
+					end)
+				end
+			end,
+			isEnabled = function() return isGroupIndicatorSettingsEnabled() end,
+			isShown = function() return isGroupIndicatorShown() end,
+		}
+		settings[#settings + 1] = {
+			name = "Anchor",
+			kind = SettingType.Dropdown,
+			field = "groupIndicatorAnchor",
+			parentId = "raid",
+			values = anchorOptions9,
+			height = 180,
+			get = function()
+				local cfg = getCfg(kind)
+				local def = DEFAULTS[kind] or {}
+				local style = resolveGroupIndicatorStyle(cfg, def, (cfg and cfg.health) or {})
+				return style.anchor or "TOPLEFT"
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.groupIndicator = cfg.groupIndicator or {}
+				cfg.groupIndicator.anchor = value
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupIndicatorAnchor", value, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function() return isGroupIndicatorSettingsEnabled() end,
+			isShown = function() return isGroupIndicatorShown() end,
+		}
+		settings[#settings + 1] = {
+			name = "Offset X",
+			kind = SettingType.Slider,
+			allowInput = true,
+			field = "groupIndicatorOffsetX",
+			parentId = "raid",
+			minValue = -200,
+			maxValue = 200,
+			valueStep = 1,
+			get = function()
+				local cfg = getCfg(kind)
+				local def = DEFAULTS[kind] or {}
+				local style = resolveGroupIndicatorStyle(cfg, def, (cfg and cfg.health) or {})
+				local off = style.offset or {}
+				return off.x or 0
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.groupIndicator = cfg.groupIndicator or {}
+				cfg.groupIndicator.offset = cfg.groupIndicator.offset or {}
+				cfg.groupIndicator.offset.x = clampNumber(value, -200, 200, (cfg.groupIndicator.offset and cfg.groupIndicator.offset.x) or 0)
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupIndicatorOffsetX", cfg.groupIndicator.offset.x, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function() return isGroupIndicatorSettingsEnabled() end,
+			isShown = function() return isGroupIndicatorShown() end,
+		}
+		settings[#settings + 1] = {
+			name = "Offset Y",
+			kind = SettingType.Slider,
+			allowInput = true,
+			field = "groupIndicatorOffsetY",
+			parentId = "raid",
+			minValue = -200,
+			maxValue = 200,
+			valueStep = 1,
+			get = function()
+				local cfg = getCfg(kind)
+				local def = DEFAULTS[kind] or {}
+				local style = resolveGroupIndicatorStyle(cfg, def, (cfg and cfg.health) or {})
+				local off = style.offset or {}
+				return off.y or 0
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.groupIndicator = cfg.groupIndicator or {}
+				cfg.groupIndicator.offset = cfg.groupIndicator.offset or {}
+				cfg.groupIndicator.offset.y = clampNumber(value, -200, 200, (cfg.groupIndicator.offset and cfg.groupIndicator.offset.y) or 0)
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupIndicatorOffsetY", cfg.groupIndicator.offset.y, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function() return isGroupIndicatorSettingsEnabled() end,
+			isShown = function() return isGroupIndicatorShown() end,
+		}
 	end
 
 	return settings
@@ -13431,6 +13993,33 @@ local function applyEditModeData(kind, data)
 			cfg.status.groupNumber.offset = cfg.status.groupNumber.offset or {}
 			if data.groupNumberOffsetX ~= nil then cfg.status.groupNumber.offset.x = data.groupNumberOffsetX end
 			if data.groupNumberOffsetY ~= nil then cfg.status.groupNumber.offset.y = data.groupNumberOffsetY end
+		end
+	end
+	if
+		data.groupIndicatorEnabled ~= nil
+		or data.groupIndicatorHidePerFrame ~= nil
+		or data.groupIndicatorFormat ~= nil
+		or data.groupIndicatorColor ~= nil
+		or data.groupIndicatorFontSize ~= nil
+		or data.groupIndicatorFont ~= nil
+		or data.groupIndicatorFontOutline ~= nil
+		or data.groupIndicatorAnchor ~= nil
+		or data.groupIndicatorOffsetX ~= nil
+		or data.groupIndicatorOffsetY ~= nil
+	then
+		cfg.groupIndicator = cfg.groupIndicator or {}
+		if data.groupIndicatorEnabled ~= nil then cfg.groupIndicator.enabled = data.groupIndicatorEnabled and true or false end
+		if data.groupIndicatorHidePerFrame ~= nil then cfg.groupIndicator.hidePerFrame = data.groupIndicatorHidePerFrame and true or false end
+		if data.groupIndicatorFormat ~= nil then cfg.groupIndicator.format = normalizeGroupNumberFormat(data.groupIndicatorFormat) or "GROUP" end
+		if data.groupIndicatorColor ~= nil then cfg.groupIndicator.color = data.groupIndicatorColor end
+		if data.groupIndicatorFontSize ~= nil then cfg.groupIndicator.fontSize = data.groupIndicatorFontSize end
+		if data.groupIndicatorFont ~= nil then cfg.groupIndicator.font = data.groupIndicatorFont end
+		if data.groupIndicatorFontOutline ~= nil then cfg.groupIndicator.fontOutline = data.groupIndicatorFontOutline end
+		if data.groupIndicatorAnchor ~= nil then cfg.groupIndicator.anchor = data.groupIndicatorAnchor end
+		if data.groupIndicatorOffsetX ~= nil or data.groupIndicatorOffsetY ~= nil then
+			cfg.groupIndicator.offset = cfg.groupIndicator.offset or {}
+			if data.groupIndicatorOffsetX ~= nil then cfg.groupIndicator.offset.x = data.groupIndicatorOffsetX end
+			if data.groupIndicatorOffsetY ~= nil then cfg.groupIndicator.offset.y = data.groupIndicatorOffsetY end
 		end
 	end
 	if
@@ -13833,6 +14422,7 @@ function GF:EnsureEditMode()
 			local tcfg = cfg.tooltip or {}
 			local sc = cfg.status or {}
 			local gn = sc.groupNumber or {}
+			local gi = cfg.groupIndicator or {}
 			local lc = sc.leaderIcon or {}
 			local acfg = sc.assistIcon or {}
 			local hc = cfg.health or {}
@@ -13840,6 +14430,7 @@ function GF:EnsureEditMode()
 			local defStatus = def.status or {}
 			local defUS = defStatus.unitStatus or {}
 			local defGN = defStatus.groupNumber or {}
+			local defGI = def.groupIndicator or {}
 			local defTooltip = def.tooltip or {}
 			local defH = def.health or {}
 			local defP = def.power or {}
@@ -14014,6 +14605,16 @@ function GF:EnsureEditMode()
 					or (sc.unitStatus and sc.unitStatus.offset and sc.unitStatus.offset.y)
 					or (defUS.offset and defUS.offset.y)
 					or 0,
+				groupIndicatorEnabled = (gi.enabled ~= nil and gi.enabled == true) or ((gi.enabled == nil) and (defGI.enabled == true)),
+				groupIndicatorHidePerFrame = (gi.hidePerFrame ~= nil and gi.hidePerFrame == true) or ((gi.hidePerFrame == nil) and (defGI.hidePerFrame == true)),
+				groupIndicatorFormat = gi.format or defGI.format or "GROUP",
+				groupIndicatorColor = gi.color or defGI.color or { 1, 1, 1, 1 },
+				groupIndicatorFontSize = gi.fontSize or defGI.fontSize or (cfg.health and cfg.health.fontSize) or (defH and defH.fontSize) or 12,
+				groupIndicatorFont = gi.font or defGI.font or (cfg.health and cfg.health.font) or (defH and defH.font) or nil,
+				groupIndicatorFontOutline = gi.fontOutline or defGI.fontOutline or (cfg.health and cfg.health.fontOutline) or (defH and defH.fontOutline) or "OUTLINE",
+				groupIndicatorAnchor = gi.anchor or defGI.anchor or "TOPLEFT",
+				groupIndicatorOffsetX = (gi.offset and gi.offset.x) or (defGI.offset and defGI.offset.x) or 0,
+				groupIndicatorOffsetY = (gi.offset and gi.offset.y) or (defGI.offset and defGI.offset.y) or 0,
 				statusTextHideHealthTextOffline = (sc.unitStatus and sc.unitStatus.hideHealthTextWhenOffline)
 					or (def.status and def.status.unitStatus and def.status.unitStatus.hideHealthTextWhenOffline)
 					or false,
@@ -14352,7 +14953,10 @@ do
 			GF:RefreshRoleIcons()
 			GF:RefreshGroupIcons()
 			GF:RefreshCustomSortNameList()
-			if event == "GROUP_ROSTER_UPDATE" then GF:RefreshStatusText() end
+			if event == "GROUP_ROSTER_UPDATE" then
+				GF:RefreshStatusText()
+				GF:RefreshGroupIndicators()
+			end
 			local cfg = getCfg("raid")
 			local custom = cfg and GFH and GFH.EnsureCustomSortConfig and GFH.EnsureCustomSortConfig(cfg)
 			if custom and custom.enabled == true and custom.separateMeleeRanged == true and GFH and GFH.QueueInspectGroup then GFH.QueueInspectGroup() end

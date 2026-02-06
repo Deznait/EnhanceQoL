@@ -1164,6 +1164,10 @@ function H.BuildPreviewSampleList(kind, cfg, baseSamples, limit, quotaTanks, quo
 	end
 	local qT = quotaTanks or 0
 	local qH = quotaHealers or 0
+	if groupBy == "GROUP" then
+		qT = 0
+		qH = 0
+	end
 	list = applyRoleQuotaWithLimit(list, limit, qT, qH)
 
 	local result = {}
