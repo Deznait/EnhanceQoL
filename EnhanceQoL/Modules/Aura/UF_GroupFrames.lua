@@ -383,6 +383,83 @@ local function formatGroupNumber(subgroup, format)
 	return string.format(GROUP_NUMBER or "Group %d", num)
 end
 
+local function getGroupNumberConfig(cfg, def)
+	local sc = cfg and cfg.status or {}
+	local us = sc.unitStatus or {}
+	local gn = sc.groupNumber or {}
+	local defStatus = def and def.status or {}
+	local defUS = defStatus.unitStatus or {}
+	local defGN = defStatus.groupNumber or {}
+	return sc, us, gn, defUS, defGN
+end
+
+local function resolveGroupNumberEnabled(cfg, def)
+	local _, us, gn, defUS, defGN = getGroupNumberConfig(cfg, def)
+	local enabled = gn.enabled
+	if enabled == nil then enabled = us.showGroup end
+	if enabled == nil then enabled = defGN.enabled end
+	if enabled == nil then enabled = defUS.showGroup end
+	return enabled == true
+end
+
+local function resolveGroupNumberFormat(cfg, def)
+	local _, us, gn, defUS, defGN = getGroupNumberConfig(cfg, def)
+	local fmt = gn.format or us.groupFormat or defGN.format or defUS.groupFormat or "GROUP"
+	return normalizeGroupNumberFormat(fmt) or "GROUP"
+end
+
+local function resolveStatusTextStyle(cfg, def, hc)
+	local sc = cfg and cfg.status or {}
+	local us = sc.unitStatus or {}
+	local defStatus = def and def.status or {}
+	local defUS = defStatus.unitStatus or {}
+	local defH = (def and def.health) or {}
+	return {
+		font = us.font or defUS.font or hc.font or defH.font,
+		fontSize = us.fontSize or defUS.fontSize or hc.fontSize or defH.fontSize or 12,
+		fontOutline = us.fontOutline or defUS.fontOutline or hc.fontOutline or defH.fontOutline or "OUTLINE",
+		color = us.color or defUS.color or { 1, 1, 1, 1 },
+		anchor = us.anchor or defUS.anchor or "CENTER",
+		offset = us.offset or defUS.offset or {},
+	}
+end
+
+local function resolveGroupNumberStyle(cfg, def, hc)
+	local _, us, gn, defUS, defGN = getGroupNumberConfig(cfg, def)
+	local defH = (def and def.health) or {}
+	return {
+		font = gn.font or defGN.font or us.font or defUS.font or hc.font or defH.font,
+		fontSize = gn.fontSize or defGN.fontSize or us.fontSize or defUS.fontSize or hc.fontSize or defH.fontSize or 12,
+		fontOutline = gn.fontOutline or defGN.fontOutline or us.fontOutline or defUS.fontOutline or hc.fontOutline or defH.fontOutline or "OUTLINE",
+		color = gn.color or defGN.color or us.color or defUS.color or { 1, 1, 1, 1 },
+		anchor = gn.anchor or defGN.anchor or us.anchor or defUS.anchor or "CENTER",
+		offset = gn.offset or defGN.offset or us.offset or defUS.offset or {},
+	}
+end
+
+local function resolveStatusTextAnchor(anchor)
+	local a = tostring(anchor or "CENTER"):upper()
+	if a == "LEFT" then return "LEFT", "LEFT", "LEFT" end
+	if a == "RIGHT" then return "RIGHT", "RIGHT", "RIGHT" end
+	if a == "TOP" then return "TOP", "TOP", "CENTER" end
+	if a == "BOTTOM" then return "BOTTOM", "BOTTOM", "CENTER" end
+	if a == "TOPLEFT" then return "TOPLEFT", "TOPLEFT", "LEFT" end
+	if a == "TOPRIGHT" then return "TOPRIGHT", "TOPRIGHT", "RIGHT" end
+	if a == "BOTTOMLEFT" then return "BOTTOMLEFT", "BOTTOMLEFT", "LEFT" end
+	if a == "BOTTOMRIGHT" then return "BOTTOMRIGHT", "BOTTOMRIGHT", "RIGHT" end
+	return "CENTER", "CENTER", "CENTER"
+end
+
+local function applyStatusTextAnchor(st, anchor, offset, scale, parent, fs)
+	local target = fs or (st and st.statusText)
+	if not target then return end
+	local point, relPoint, justify = resolveStatusTextAnchor(anchor)
+	local off = offset or {}
+	target:ClearAllPoints()
+	target:SetPoint(point, parent, relPoint, roundToPixel(off.x or 0, scale), roundToPixel(off.y or 0, scale))
+	if justify and target.SetJustifyH then target:SetJustifyH(justify) end
+end
+
 local function stopDispelGlow(frame)
 	if not (LCG and frame) then return end
 	if LCG.PixelGlow_Stop then LCG.PixelGlow_Stop(frame, DISPEL_GLOW_KEY) end
@@ -748,6 +825,16 @@ local DEFAULTS = {
 				showGroup = false,
 				groupFormat = "GROUP",
 			},
+			groupNumber = {
+				enabled = false,
+				format = "GROUP",
+				font = nil,
+				fontSize = 12,
+				fontOutline = "OUTLINE",
+				color = { 1, 1, 1, 1 },
+				anchor = "CENTER",
+				offset = { x = 0, y = 0 },
+			},
 			rangeFade = {
 				enabled = true,
 				alpha = 0.55,
@@ -1082,6 +1169,16 @@ local DEFAULTS = {
 				hideHealthTextWhenOffline = false,
 				showGroup = false,
 				groupFormat = "GROUP",
+			},
+			groupNumber = {
+				enabled = false,
+				format = "GROUP",
+				font = nil,
+				fontSize = 12,
+				fontOutline = "OUTLINE",
+				color = { 1, 1, 1, 1 },
+				anchor = "CENTER",
+				offset = { x = 0, y = 0 },
 			},
 			rangeFade = {
 				enabled = true,
@@ -1574,6 +1671,7 @@ function GF:BuildButton(self)
 	st.name = st.nameText
 	if not st.levelText then st.levelText = st.healthTextLayer:CreateFontString(nil, "OVERLAY", "GameFontHighlight") end
 	if not st.statusText then st.statusText = st.healthTextLayer:CreateFontString(nil, "OVERLAY", "GameFontHighlight") end
+	if not st.groupNumberText then st.groupNumberText = st.healthTextLayer:CreateFontString(nil, "OVERLAY", "GameFontHighlight") end
 	if not st.privateAuras then
 		st.privateAuras = CreateFrame("Frame", nil, st.barGroup or self)
 		st.privateAuras:EnableMouse(false)
@@ -1694,40 +1792,23 @@ function GF:LayoutButton(self)
 			local us = scfg.unitStatus or {}
 			UFHelper.applyFont(st.statusText, us.font or hc.font, us.fontSize or hc.fontSize or 12, us.fontOutline or hc.fontOutline)
 		end
+		if st.groupNumberText then
+			local style = resolveGroupNumberStyle(cfg, def, hc)
+			UFHelper.applyFont(st.groupNumberText, style.font, style.fontSize or 12, style.fontOutline)
+		end
 	end
 	layoutTexts(st.health, st.healthTextLeft, st.healthTextCenter, st.healthTextRight, cfg.health, scale)
 	layoutTexts(st.power, st.powerTextLeft, st.powerTextCenter, st.powerTextRight, cfg.power, scale)
 	if st.statusText then
 		local scfg = cfg.status or {}
 		local us = scfg.unitStatus or {}
-		local anchor = (us.anchor or "CENTER"):upper()
-		local off = us.offset or {}
-
-		-- "Outside" anchors: LEFT means left *outside* the frame, so we anchor the font string's RIGHT to the bar's LEFT, etc.
-		local point, relPoint, justify = anchor, anchor, nil
-		if anchor == "LEFT" then
-			point, relPoint, justify = "RIGHT", "LEFT", "RIGHT"
-		elseif anchor == "RIGHT" then
-			point, relPoint, justify = "LEFT", "RIGHT", "LEFT"
-		elseif anchor == "TOP" then
-			point, relPoint, justify = "BOTTOM", "TOP", "CENTER"
-		elseif anchor == "BOTTOM" then
-			point, relPoint, justify = "TOP", "BOTTOM", "CENTER"
-		elseif anchor == "TOPLEFT" then
-			point, relPoint, justify = "BOTTOMRIGHT", "TOPLEFT", "RIGHT"
-		elseif anchor == "TOPRIGHT" then
-			point, relPoint, justify = "BOTTOMLEFT", "TOPRIGHT", "LEFT"
-		elseif anchor == "BOTTOMLEFT" then
-			point, relPoint, justify = "TOPRIGHT", "BOTTOMLEFT", "RIGHT"
-		elseif anchor == "BOTTOMRIGHT" then
-			point, relPoint, justify = "TOPLEFT", "BOTTOMRIGHT", "LEFT"
-		else
-			point, relPoint, justify = "CENTER", "CENTER", "CENTER"
-		end
-
-		st.statusText:ClearAllPoints()
-		st.statusText:SetPoint(point, st.barGroup or self, relPoint, roundToPixel(off.x or 0, scale), roundToPixel(off.y or 0, scale))
-		if justify and st.statusText.SetJustifyH then st.statusText:SetJustifyH(justify) end
+		local defStatus = def.status or {}
+		local defUS = defStatus.unitStatus or {}
+		applyStatusTextAnchor(st, us.anchor or defUS.anchor or "CENTER", us.offset or defUS.offset or {}, scale, st.barGroup or self)
+	end
+	if st.groupNumberText then
+		local style = resolveGroupNumberStyle(cfg, def, hc)
+		applyStatusTextAnchor(st, style.anchor, style.offset, scale, st.barGroup or self, st.groupNumberText)
 	end
 
 	local healthTexKey = getEffectiveBarTexture(cfg, hc)
@@ -3213,25 +3294,49 @@ end
 function GF:UpdateStatusText(self)
 	local st = getState(self)
 	local unit = getUnit(self)
-	if not (st and st.statusText) then return end
-	local cfg = self._eqolCfg or getCfg(self._eqolGroupKind or "party")
+	if not st then return end
+	local statusFs = st.statusText
+	local groupFs = st.groupNumberText
+	if not (statusFs or groupFs) then return end
+	local kind = self._eqolGroupKind or "party"
+	local cfg = self._eqolCfg or getCfg(kind)
+	local def = DEFAULTS[kind] or {}
 	local scfg = cfg and cfg.status or {}
 	local us = scfg.unitStatus or {}
+	local hc = cfg and cfg.health or {}
 	if st._wantsStatusText == false or us.enabled == false then
-		st.statusText:SetText("")
-		st.statusText:Hide()
+		if statusFs then
+			statusFs:SetText("")
+			statusFs:Hide()
+		end
+		if groupFs then
+			groupFs:SetText("")
+			groupFs:Hide()
+		end
 		return
 	end
 	local inEditMode = isEditModeActive()
 	if inEditMode and GF and GF._editModeSampleStatusText == false then
-		st.statusText:SetText("")
-		st.statusText:Hide()
+		if statusFs then
+			statusFs:SetText("")
+			statusFs:Hide()
+		end
+		if groupFs then
+			groupFs:SetText("")
+			groupFs:Hide()
+		end
 		return
 	end
 	local allowSample = inEditMode and self._eqolPreview
 	if UnitExists and unit and not UnitExists(unit) and not allowSample then
-		st.statusText:SetText("")
-		st.statusText:Hide()
+		if statusFs then
+			statusFs:SetText("")
+			statusFs:Hide()
+		end
+		if groupFs then
+			groupFs:SetText("")
+			groupFs:Hide()
+		end
 		return
 	end
 	local statusTag
@@ -3252,12 +3357,15 @@ function GF:UpdateStatusText(self)
 		else
 			statusTag = DEAD or "Dead"
 		end
-	elseif isAFK == true then
-		if showAFK then statusTag = DEFAULT_AFK_MESSAGE or "AFK" end
 	elseif isDND == true then
 		if showDND then statusTag = DEFAULT_DND_MESSAGE or "DND" end
 	end
-	if not statusTag and us.showGroup == true then
+	if not statusTag and isAFK == true then
+		if showAFK then statusTag = DEFAULT_AFK_MESSAGE or "AFK" end
+	end
+
+	local groupTag
+	if resolveGroupNumberEnabled(cfg, def) then
 		local subgroup
 		if unit and UnitInRaid and GetRaidRosterInfo then
 			local idx = UnitInRaid(unit)
@@ -3267,25 +3375,44 @@ function GF:UpdateStatusText(self)
 			end
 		end
 		if not subgroup and allowSample then subgroup = st._previewGroup or 1 end
-		if subgroup then statusTag = formatGroupNumber(subgroup, us.groupFormat or "GROUP") end
+		if subgroup then groupTag = formatGroupNumber(subgroup, resolveGroupNumberFormat(cfg, def)) end
 	end
 	if not statusTag and allowSample then
-		if showOffline then
-			statusTag = PLAYER_OFFLINE or "Offline"
-		elseif showAFK then
-			statusTag = DEFAULT_AFK_MESSAGE or "AFK"
-		elseif showDND then
-			statusTag = DEFAULT_DND_MESSAGE or "DND"
+		if showOffline then statusTag = PLAYER_OFFLINE or "Offline" end
+		if not statusTag and showDND then statusTag = DEFAULT_DND_MESSAGE or "DND" end
+		if not statusTag and showAFK then statusTag = DEFAULT_AFK_MESSAGE or "AFK" end
+	end
+	local scale = GFH.GetEffectiveScale(self)
+	if not scale or scale <= 0 then scale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1 end
+
+	if statusFs then
+		if statusTag then
+			local style = resolveStatusTextStyle(cfg, def, hc)
+			if UFHelper and UFHelper.applyFont then UFHelper.applyFont(statusFs, style.font, style.fontSize or 12, style.fontOutline) end
+			applyStatusTextAnchor(st, style.anchor, style.offset, scale, st.barGroup or self, statusFs)
+			local r, g, b, a = unpackColor(style.color, GFH.COLOR_WHITE)
+			statusFs:SetText(statusTag)
+			statusFs:SetTextColor(r, g, b, a)
+			statusFs:Show()
+		else
+			statusFs:SetText("")
+			statusFs:Hide()
 		end
 	end
-	if statusTag then
-		st.statusText:SetText(statusTag)
-		local col = us.color or GFH.COLOR_WHITE
-		st.statusText:SetTextColor(col[1] or 1, col[2] or 1, col[3] or 1, col[4] or 1)
-		st.statusText:Show()
-	else
-		st.statusText:SetText("")
-		st.statusText:Hide()
+
+	if groupFs then
+		if groupTag then
+			local style = resolveGroupNumberStyle(cfg, def, hc)
+			if UFHelper and UFHelper.applyFont then UFHelper.applyFont(groupFs, style.font, style.fontSize or 12, style.fontOutline) end
+			applyStatusTextAnchor(st, style.anchor, style.offset, scale, st.barGroup or self, groupFs)
+			local r, g, b, a = unpackColor(style.color, GFH.COLOR_WHITE)
+			groupFs:SetText(groupTag)
+			groupFs:SetTextColor(r, g, b, a)
+			groupFs:Show()
+		else
+			groupFs:SetText("")
+			groupFs:Hide()
+		end
 	end
 end
 
@@ -5391,17 +5518,27 @@ local function buildEditModeSettings(kind, editModeId)
 		end
 		return mode
 	end
+	local function getGroupNumberEnabledValue()
+		local cfg = getCfg(kind)
+		local def = DEFAULTS[kind] or {}
+		return resolveGroupNumberEnabled(cfg, def)
+	end
 	local function getGroupFormatValue()
 		local cfg = getCfg(kind)
-		local sc = cfg and cfg.status or {}
-		local us = sc.unitStatus or {}
-		local def = DEFAULTS[kind] and DEFAULTS[kind].status and DEFAULTS[kind].status.unitStatus or {}
-		return normalizeGroupNumberFormat(us.groupFormat or def.groupFormat or "GROUP") or "GROUP"
+		local def = DEFAULTS[kind] or {}
+		return resolveGroupNumberFormat(cfg, def)
 	end
 	local function getGroupFormatLabel()
 		local fmt = getGroupFormatValue()
 		return groupNumberFormatLabelByValue[fmt] or tostring(fmt)
 	end
+	local function isStatusTextEnabled()
+		local cfg = getCfg(kind)
+		local sc = cfg and cfg.status or {}
+		local us = sc.unitStatus or {}
+		return us.enabled ~= false
+	end
+	local function isGroupNumberSettingsEnabled() return isStatusTextEnabled() and getGroupNumberEnabledValue() end
 	local function getHealthTextMode(key, fallback)
 		local cfg = getCfg(kind)
 		local hc = cfg and cfg.health or {}
@@ -7907,79 +8044,6 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 		},
 		{
-			name = "Show group number",
-			kind = SettingType.Checkbox,
-			field = "statusTextShowGroup",
-			parentId = "statustext",
-			get = function()
-				local cfg = getCfg(kind)
-				local sc = cfg and cfg.status or {}
-				local us = sc.unitStatus or {}
-				local def = DEFAULTS[kind] and DEFAULTS[kind].status and DEFAULTS[kind].status.unitStatus or {}
-				if us.showGroup == nil then return def.showGroup == true end
-				return us.showGroup == true
-			end,
-			set = function(_, value)
-				local cfg = getCfg(kind)
-				if not cfg then return end
-				cfg.status = cfg.status or {}
-				cfg.status.unitStatus = cfg.status.unitStatus or {}
-				cfg.status.unitStatus.showGroup = value and true or false
-				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "statusTextShowGroup", cfg.status.unitStatus.showGroup, nil, true) end
-				GF:ApplyHeaderAttributes(kind)
-			end,
-			isEnabled = function()
-				local cfg = getCfg(kind)
-				local sc = cfg and cfg.status or {}
-				local us = sc.unitStatus or {}
-				return us.enabled ~= false
-			end,
-			isShown = function() return kind == "raid" end,
-		},
-		{
-			name = "Group number format",
-			kind = SettingType.Dropdown,
-			field = "statusTextGroupFormat",
-			parentId = "statustext",
-			customDefaultText = getGroupFormatLabel(),
-			get = function() return getGroupFormatValue() end,
-			set = function(_, value)
-				local cfg = getCfg(kind)
-				if not cfg then return end
-				cfg.status = cfg.status or {}
-				cfg.status.unitStatus = cfg.status.unitStatus or {}
-				cfg.status.unitStatus.groupFormat = normalizeGroupNumberFormat(value) or "GROUP"
-				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "statusTextGroupFormat", cfg.status.unitStatus.groupFormat, nil, true) end
-				GF:ApplyHeaderAttributes(kind)
-			end,
-			generator = function(_, root, data)
-				for _, option in ipairs(groupNumberFormatOptions) do
-					local value = option and option.value
-					if value ~= nil then
-						local label = option.label or option.text or tostring(value)
-						root:CreateRadio(label, function() return getGroupFormatValue() == value end, function()
-							local cfg = getCfg(kind)
-							if not cfg then return end
-							cfg.status = cfg.status or {}
-							cfg.status.unitStatus = cfg.status.unitStatus or {}
-							cfg.status.unitStatus.groupFormat = value
-							if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "statusTextGroupFormat", value, nil, true) end
-							data.customDefaultText = label
-							if addon.EditModeLib and addon.EditModeLib.internal and addon.EditModeLib.internal.RequestRefreshSettings then addon.EditModeLib.internal:RequestRefreshSettings() end
-							GF:ApplyHeaderAttributes(kind)
-						end)
-					end
-				end
-			end,
-			isEnabled = function()
-				local cfg = getCfg(kind)
-				local sc = cfg and cfg.status or {}
-				local us = sc.unitStatus or {}
-				return us.enabled ~= false and us.showGroup == true
-			end,
-			isShown = function() return kind == "raid" end,
-		},
-		{
 			name = "Hide health text when offline",
 			kind = SettingType.Checkbox,
 			field = "statusTextHideHealthTextOffline",
@@ -8262,6 +8326,292 @@ local function buildEditModeSettings(kind, editModeId)
 				local us = sc.unitStatus or {}
 				return us.enabled ~= false
 			end,
+		},
+		{
+			name = "",
+			kind = SettingType.Divider,
+			parentId = "statustext",
+			isShown = function() return kind == "raid" end,
+		},
+		{
+			name = "Show group number",
+			kind = SettingType.Checkbox,
+			field = "statusTextShowGroup",
+			parentId = "statustext",
+			get = function() return getGroupNumberEnabledValue() end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.status = cfg.status or {}
+				cfg.status.groupNumber = cfg.status.groupNumber or {}
+				cfg.status.groupNumber.enabled = value and true or false
+				cfg.status.unitStatus = cfg.status.unitStatus or {}
+				cfg.status.unitStatus.showGroup = value and true or false
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "statusTextShowGroup", cfg.status.groupNumber.enabled, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function() return isStatusTextEnabled() end,
+			isShown = function() return kind == "raid" end,
+		},
+		{
+			name = "Group number format",
+			kind = SettingType.Dropdown,
+			field = "statusTextGroupFormat",
+			parentId = "statustext",
+			customDefaultText = getGroupFormatLabel(),
+			get = function() return getGroupFormatValue() end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.status = cfg.status or {}
+				cfg.status.groupNumber = cfg.status.groupNumber or {}
+				cfg.status.groupNumber.format = normalizeGroupNumberFormat(value) or "GROUP"
+				cfg.status.unitStatus = cfg.status.unitStatus or {}
+				cfg.status.unitStatus.groupFormat = cfg.status.groupNumber.format
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "statusTextGroupFormat", cfg.status.groupNumber.format, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			generator = function(_, root, data)
+				for _, option in ipairs(groupNumberFormatOptions) do
+					local value = option and option.value
+					if value ~= nil then
+						local label = option.label or option.text or tostring(value)
+						root:CreateRadio(label, function() return getGroupFormatValue() == value end, function()
+							local cfg = getCfg(kind)
+							if not cfg then return end
+							cfg.status = cfg.status or {}
+							cfg.status.groupNumber = cfg.status.groupNumber or {}
+							cfg.status.groupNumber.format = value
+							cfg.status.unitStatus = cfg.status.unitStatus or {}
+							cfg.status.unitStatus.groupFormat = value
+							if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "statusTextGroupFormat", value, nil, true) end
+							data.customDefaultText = label
+							if addon.EditModeLib and addon.EditModeLib.internal and addon.EditModeLib.internal.RequestRefreshSettings then addon.EditModeLib.internal:RequestRefreshSettings() end
+							GF:ApplyHeaderAttributes(kind)
+						end)
+					end
+				end
+			end,
+			isEnabled = function() return isGroupNumberSettingsEnabled() end,
+			isShown = function() return kind == "raid" end,
+		},
+		{
+			name = "Group number color",
+			kind = SettingType.Color,
+			field = "groupNumberColor",
+			parentId = "statustext",
+			hasOpacity = true,
+			default = (DEFAULTS[kind] and DEFAULTS[kind].status and DEFAULTS[kind].status.groupNumber and DEFAULTS[kind].status.groupNumber.color) or { 1, 1, 1, 1 },
+			get = function()
+				local cfg = getCfg(kind)
+				local def = DEFAULTS[kind] or {}
+				local style = resolveGroupNumberStyle(cfg, def, (cfg and cfg.health) or {})
+				local r, g, b, a = unpackColor(style.color, GFH.COLOR_WHITE)
+				return { r = r, g = g, b = b, a = a }
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not (cfg and value) then return end
+				cfg.status = cfg.status or {}
+				cfg.status.groupNumber = cfg.status.groupNumber or {}
+				cfg.status.groupNumber.color = { value.r or 1, value.g or 1, value.b or 1, value.a or 1 }
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupNumberColor", cfg.status.groupNumber.color, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function() return isGroupNumberSettingsEnabled() end,
+			isShown = function() return kind == "raid" end,
+		},
+		{
+			name = "Group number font size",
+			kind = SettingType.Slider,
+			allowInput = true,
+			field = "groupNumberFontSize",
+			parentId = "statustext",
+			minValue = 8,
+			maxValue = 100,
+			valueStep = 1,
+			get = function()
+				local cfg = getCfg(kind)
+				local def = DEFAULTS[kind] or {}
+				local style = resolveGroupNumberStyle(cfg, def, (cfg and cfg.health) or {})
+				return style.fontSize or 12
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.status = cfg.status or {}
+				cfg.status.groupNumber = cfg.status.groupNumber or {}
+				cfg.status.groupNumber.fontSize = clampNumber(value, 8, 100, cfg.status.groupNumber.fontSize or 12)
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupNumberFontSize", cfg.status.groupNumber.fontSize, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function() return isGroupNumberSettingsEnabled() end,
+			isShown = function() return kind == "raid" end,
+		},
+		{
+			name = "Group number font",
+			kind = SettingType.Dropdown,
+			field = "groupNumberFont",
+			parentId = "statustext",
+			get = function()
+				local cfg = getCfg(kind)
+				local def = DEFAULTS[kind] or {}
+				local style = resolveGroupNumberStyle(cfg, def, (cfg and cfg.health) or {})
+				return style.font or nil
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.status = cfg.status or {}
+				cfg.status.groupNumber = cfg.status.groupNumber or {}
+				cfg.status.groupNumber.font = value
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupNumberFont", value, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			generator = function(_, root)
+				for _, option in ipairs(fontOptions()) do
+					root:CreateRadio(option.label, function()
+						local cfg = getCfg(kind)
+						local def = DEFAULTS[kind] or {}
+						local style = resolveGroupNumberStyle(cfg, def, (cfg and cfg.health) or {})
+						return (style.font or nil) == option.value
+					end, function()
+						local cfg = getCfg(kind)
+						if not cfg then return end
+						cfg.status = cfg.status or {}
+						cfg.status.groupNumber = cfg.status.groupNumber or {}
+						cfg.status.groupNumber.font = option.value
+						if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupNumberFont", option.value, nil, true) end
+						GF:ApplyHeaderAttributes(kind)
+					end)
+				end
+			end,
+			isEnabled = function() return isGroupNumberSettingsEnabled() end,
+			isShown = function() return kind == "raid" end,
+		},
+		{
+			name = "Group number font outline",
+			kind = SettingType.Dropdown,
+			field = "groupNumberFontOutline",
+			parentId = "statustext",
+			get = function()
+				local cfg = getCfg(kind)
+				local def = DEFAULTS[kind] or {}
+				local style = resolveGroupNumberStyle(cfg, def, (cfg and cfg.health) or {})
+				return style.fontOutline or "OUTLINE"
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.status = cfg.status or {}
+				cfg.status.groupNumber = cfg.status.groupNumber or {}
+				cfg.status.groupNumber.fontOutline = value
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupNumberFontOutline", value, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			generator = function(_, root)
+				for _, option in ipairs(outlineOptions) do
+					root:CreateRadio(option.label, function()
+						local cfg = getCfg(kind)
+						local def = DEFAULTS[kind] or {}
+						local style = resolveGroupNumberStyle(cfg, def, (cfg and cfg.health) or {})
+						return (style.fontOutline or "OUTLINE") == option.value
+					end, function()
+						local cfg = getCfg(kind)
+						if not cfg then return end
+						cfg.status = cfg.status or {}
+						cfg.status.groupNumber = cfg.status.groupNumber or {}
+						cfg.status.groupNumber.fontOutline = option.value
+						if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupNumberFontOutline", option.value, nil, true) end
+						GF:ApplyHeaderAttributes(kind)
+					end)
+				end
+			end,
+			isEnabled = function() return isGroupNumberSettingsEnabled() end,
+			isShown = function() return kind == "raid" end,
+		},
+		{
+			name = "Group number anchor",
+			kind = SettingType.Dropdown,
+			field = "groupNumberAnchor",
+			parentId = "statustext",
+			values = anchorOptions9,
+			height = 180,
+			get = function()
+				local cfg = getCfg(kind)
+				local def = DEFAULTS[kind] or {}
+				local style = resolveGroupNumberStyle(cfg, def, (cfg and cfg.health) or {})
+				return style.anchor or "CENTER"
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.status = cfg.status or {}
+				cfg.status.groupNumber = cfg.status.groupNumber or {}
+				cfg.status.groupNumber.anchor = value
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupNumberAnchor", value, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function() return isGroupNumberSettingsEnabled() end,
+			isShown = function() return kind == "raid" end,
+		},
+		{
+			name = "Group number offset X",
+			kind = SettingType.Slider,
+			allowInput = true,
+			field = "groupNumberOffsetX",
+			parentId = "statustext",
+			minValue = -200,
+			maxValue = 200,
+			valueStep = 1,
+			get = function()
+				local cfg = getCfg(kind)
+				local def = DEFAULTS[kind] or {}
+				local style = resolveGroupNumberStyle(cfg, def, (cfg and cfg.health) or {})
+				local off = style.offset or {}
+				return off.x or 0
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.status = cfg.status or {}
+				cfg.status.groupNumber = cfg.status.groupNumber or {}
+				cfg.status.groupNumber.offset = cfg.status.groupNumber.offset or {}
+				cfg.status.groupNumber.offset.x = clampNumber(value, -200, 200, (cfg.status.groupNumber.offset and cfg.status.groupNumber.offset.x) or 0)
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupNumberOffsetX", cfg.status.groupNumber.offset.x, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function() return isGroupNumberSettingsEnabled() end,
+			isShown = function() return kind == "raid" end,
+		},
+		{
+			name = "Group number offset Y",
+			kind = SettingType.Slider,
+			allowInput = true,
+			field = "groupNumberOffsetY",
+			parentId = "statustext",
+			minValue = -200,
+			maxValue = 200,
+			valueStep = 1,
+			get = function()
+				local cfg = getCfg(kind)
+				local def = DEFAULTS[kind] or {}
+				local style = resolveGroupNumberStyle(cfg, def, (cfg and cfg.health) or {})
+				local off = style.offset or {}
+				return off.y or 0
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.status = cfg.status or {}
+				cfg.status.groupNumber = cfg.status.groupNumber or {}
+				cfg.status.groupNumber.offset = cfg.status.groupNumber.offset or {}
+				cfg.status.groupNumber.offset.y = clampNumber(value, -200, 200, (cfg.status.groupNumber.offset and cfg.status.groupNumber.offset.y) or 0)
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupNumberOffsetY", cfg.status.groupNumber.offset.y, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function() return isGroupNumberSettingsEnabled() end,
+			isShown = function() return kind == "raid" end,
 		},
 		{
 			name = "Dispel indicator",
@@ -12976,6 +13326,15 @@ local function applyEditModeData(kind, data)
 		or data.statusTextAnchor ~= nil
 		or data.statusTextOffsetX ~= nil
 		or data.statusTextOffsetY ~= nil
+		or data.statusTextShowGroup ~= nil
+		or data.statusTextGroupFormat ~= nil
+		or data.groupNumberColor ~= nil
+		or data.groupNumberFontSize ~= nil
+		or data.groupNumberFont ~= nil
+		or data.groupNumberFontOutline ~= nil
+		or data.groupNumberAnchor ~= nil
+		or data.groupNumberOffsetX ~= nil
+		or data.groupNumberOffsetY ~= nil
 		or data.dispelTintEnabled ~= nil
 		or data.dispelTintAlpha ~= nil
 		or data.dispelTintFillEnabled ~= nil
@@ -13048,6 +13407,31 @@ local function applyEditModeData(kind, data)
 		if data.statusTextShowGroup ~= nil then cfg.status.unitStatus.showGroup = data.statusTextShowGroup and true or false end
 		if data.statusTextGroupFormat ~= nil then cfg.status.unitStatus.groupFormat = data.statusTextGroupFormat end
 		if data.statusTextHideHealthTextOffline ~= nil then cfg.status.unitStatus.hideHealthTextWhenOffline = data.statusTextHideHealthTextOffline and true or false end
+	end
+	if
+		data.statusTextShowGroup ~= nil
+		or data.statusTextGroupFormat ~= nil
+		or data.groupNumberColor ~= nil
+		or data.groupNumberFontSize ~= nil
+		or data.groupNumberFont ~= nil
+		or data.groupNumberFontOutline ~= nil
+		or data.groupNumberAnchor ~= nil
+		or data.groupNumberOffsetX ~= nil
+		or data.groupNumberOffsetY ~= nil
+	then
+		cfg.status.groupNumber = cfg.status.groupNumber or {}
+		if data.statusTextShowGroup ~= nil then cfg.status.groupNumber.enabled = data.statusTextShowGroup and true or false end
+		if data.statusTextGroupFormat ~= nil then cfg.status.groupNumber.format = normalizeGroupNumberFormat(data.statusTextGroupFormat) or "GROUP" end
+		if data.groupNumberColor ~= nil then cfg.status.groupNumber.color = data.groupNumberColor end
+		if data.groupNumberFontSize ~= nil then cfg.status.groupNumber.fontSize = data.groupNumberFontSize end
+		if data.groupNumberFont ~= nil then cfg.status.groupNumber.font = data.groupNumberFont end
+		if data.groupNumberFontOutline ~= nil then cfg.status.groupNumber.fontOutline = data.groupNumberFontOutline end
+		if data.groupNumberAnchor ~= nil then cfg.status.groupNumber.anchor = data.groupNumberAnchor end
+		if data.groupNumberOffsetX ~= nil or data.groupNumberOffsetY ~= nil then
+			cfg.status.groupNumber.offset = cfg.status.groupNumber.offset or {}
+			if data.groupNumberOffsetX ~= nil then cfg.status.groupNumber.offset.x = data.groupNumberOffsetX end
+			if data.groupNumberOffsetY ~= nil then cfg.status.groupNumber.offset.y = data.groupNumberOffsetY end
+		end
 	end
 	if
 		data.dispelTintEnabled ~= nil
@@ -13448,10 +13832,14 @@ function GF:EnsureEditMode()
 			local rc = cfg.roleIcon or {}
 			local tcfg = cfg.tooltip or {}
 			local sc = cfg.status or {}
+			local gn = sc.groupNumber or {}
 			local lc = sc.leaderIcon or {}
 			local acfg = sc.assistIcon or {}
 			local hc = cfg.health or {}
 			local def = DEFAULTS[kind] or {}
+			local defStatus = def.status or {}
+			local defUS = defStatus.unitStatus or {}
+			local defGN = defStatus.groupNumber or {}
 			local defTooltip = def.tooltip or {}
 			local defH = def.health or {}
 			local defP = def.power or {}
@@ -13597,8 +13985,35 @@ function GF:EnsureEditMode()
 				statusTextShowOffline = (sc.unitStatus and sc.unitStatus.showOffline) or (def.status and def.status.unitStatus and def.status.unitStatus.showOffline) or true,
 				statusTextShowAFK = (sc.unitStatus and sc.unitStatus.showAFK) or (def.status and def.status.unitStatus and def.status.unitStatus.showAFK) or false,
 				statusTextShowDND = (sc.unitStatus and sc.unitStatus.showDND) or (def.status and def.status.unitStatus and def.status.unitStatus.showDND) or false,
-				statusTextShowGroup = (sc.unitStatus and sc.unitStatus.showGroup) or (def.status and def.status.unitStatus and def.status.unitStatus.showGroup) or false,
-				statusTextGroupFormat = (sc.unitStatus and sc.unitStatus.groupFormat) or (def.status and def.status.unitStatus and def.status.unitStatus.groupFormat) or "GROUP",
+				statusTextShowGroup = (gn.enabled ~= nil and gn.enabled) or (sc.unitStatus and sc.unitStatus.showGroup) or (defGN.enabled ~= nil and defGN.enabled) or defUS.showGroup or false,
+				statusTextGroupFormat = gn.format or (sc.unitStatus and sc.unitStatus.groupFormat) or defGN.format or defUS.groupFormat or "GROUP",
+				groupNumberColor = gn.color or defGN.color or (sc.unitStatus and sc.unitStatus.color) or defUS.color or { 1, 1, 1, 1 },
+				groupNumberFontSize = gn.fontSize
+					or defGN.fontSize
+					or (sc.unitStatus and sc.unitStatus.fontSize)
+					or defUS.fontSize
+					or (cfg.health and cfg.health.fontSize)
+					or (defH and defH.fontSize)
+					or 12,
+				groupNumberFont = gn.font or defGN.font or (sc.unitStatus and sc.unitStatus.font) or defUS.font or (cfg.health and cfg.health.font) or (defH and defH.font) or nil,
+				groupNumberFontOutline = gn.fontOutline
+					or defGN.fontOutline
+					or (sc.unitStatus and sc.unitStatus.fontOutline)
+					or defUS.fontOutline
+					or (cfg.health and cfg.health.fontOutline)
+					or (defH and defH.fontOutline)
+					or "OUTLINE",
+				groupNumberAnchor = gn.anchor or defGN.anchor or (sc.unitStatus and sc.unitStatus.anchor) or defUS.anchor or "CENTER",
+				groupNumberOffsetX = (gn.offset and gn.offset.x)
+					or (defGN.offset and defGN.offset.x)
+					or (sc.unitStatus and sc.unitStatus.offset and sc.unitStatus.offset.x)
+					or (defUS.offset and defUS.offset.x)
+					or 0,
+				groupNumberOffsetY = (gn.offset and gn.offset.y)
+					or (defGN.offset and defGN.offset.y)
+					or (sc.unitStatus and sc.unitStatus.offset and sc.unitStatus.offset.y)
+					or (defUS.offset and defUS.offset.y)
+					or 0,
 				statusTextHideHealthTextOffline = (sc.unitStatus and sc.unitStatus.hideHealthTextWhenOffline)
 					or (def.status and def.status.unitStatus and def.status.unitStatus.hideHealthTextWhenOffline)
 					or false,
