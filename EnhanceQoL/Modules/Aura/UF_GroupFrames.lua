@@ -5301,10 +5301,10 @@ local function buildEditModeSettings(kind, editModeId)
 		{ value = "DESC", label = "Descending" },
 	}
 	local privateAuraPointOptions = {
-		{ value = "LEFT", label = "Left" },
-		{ value = "RIGHT", label = "Right" },
-		{ value = "TOP", label = "Top" },
-		{ value = "BOTTOM", label = "Bottom" },
+		{ value = "LEFT", label = "Left", text = "Left" },
+		{ value = "RIGHT", label = "Right", text = "Right" },
+		{ value = "TOP", label = "Top", text = "Top" },
+		{ value = "BOTTOM", label = "Bottom", text = "Bottom" },
 	}
 	local defPrivateAuras = (DEFAULTS[kind] and DEFAULTS[kind].privateAuras) or {}
 	local function ensurePrivateAuraConfig(cfg)
