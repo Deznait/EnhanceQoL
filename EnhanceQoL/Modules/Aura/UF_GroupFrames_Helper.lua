@@ -76,6 +76,31 @@ H.GROUP_NUMBER_FORMAT_OPTIONS = {
 	{ value = "HASH", label = "#1", text = "#1" },
 }
 
+function H.FormatGroupNumber(subgroup, format)
+	local num = tonumber(subgroup)
+	if not num then return nil end
+	local fmt = format or "GROUP"
+	if fmt == "NUMBER" then return tostring(num) end
+	if fmt == "PARENS" then return "(" .. num .. ")" end
+	if fmt == "BRACKETS" then return "[" .. num .. "]" end
+	if fmt == "BRACES" then return "{" .. num .. "}" end
+	if fmt == "PIPE" then return "|| " .. num .. " ||" end
+	if fmt == "ANGLE" then return "<" .. num .. ">" end
+	if fmt == "G" then return "G" .. num end
+	if fmt == "G_SPACE" then return "G " .. num end
+	if fmt == "HASH" then return "#" .. num end
+	return string.format(GROUP_NUMBER or "Group %d", num)
+end
+
+function H.GetUnitSubgroup(unit)
+	if not (unit and UnitInRaid and GetRaidRosterInfo) then return nil end
+	local idx = UnitInRaid(unit)
+	if not idx then return nil end
+	local _, _, raidSubgroup = GetRaidRosterInfo(idx)
+	if issecretvalue and issecretvalue(raidSubgroup) then return nil end
+	return raidSubgroup
+end
+
 H.MELEE_SPECS = {
 	-- Death Knight (all melee)
 	[250] = true,
@@ -200,6 +225,24 @@ function H.LayoutTexts(bar, leftFS, centerFS, rightFS, cfg, scale)
 	end
 end
 
+local OUTER_ANCHOR_MAP = {
+	TOP = "BOTTOM",
+	BOTTOM = "TOP",
+	LEFT = "RIGHT",
+	RIGHT = "LEFT",
+	TOPLEFT = "BOTTOMLEFT",
+	TOPRIGHT = "BOTTOMRIGHT",
+	BOTTOMLEFT = "TOPLEFT",
+	BOTTOMRIGHT = "TOPRIGHT",
+	CENTER = "CENTER",
+}
+
+function H.GetOuterAnchorPoint(anchor)
+	local a = (anchor or "CENTER"):upper()
+	local point = OUTER_ANCHOR_MAP[a] or "CENTER"
+	return point, a
+end
+
 function H.GetGrowthStartPoint(growth)
 	local g = (growth or "DOWN"):upper()
 	if g == "LEFT" then return "TOPRIGHT" end
@@ -265,17 +308,23 @@ local function normalizeGroupBy(value)
 	return nil
 end
 
-local function normalizeSortMethod(value)
+function H.NormalizeSortMethod(value)
 	local v = trim(value):upper()
 	if v == "NAME" then return "NAME" end
 	if v == "NAMELIST" then return "NAMELIST" end
 	return "INDEX"
 end
 
-local function normalizeSortDir(value)
+function H.NormalizeSortDir(value)
 	local v = trim(value):upper()
 	if v == "DESC" then return "DESC" end
 	return "ASC"
+end
+
+function H.IsBetterSortKey(key, currentKey, sortDir)
+	if currentKey == nil then return true end
+	if sortDir == "DESC" then return key > currentKey end
+	return key < currentKey
 end
 
 function H.ParseCsvSet(value, upper)
@@ -941,9 +990,7 @@ function H.BuildRaidPreviewSamples(count)
 	return samples
 end
 
-if not H.PREVIEW_SAMPLES.raid or #H.PREVIEW_SAMPLES.raid == 0 then
-	H.PREVIEW_SAMPLES.raid = H.BuildRaidPreviewSamples(40) or {}
-end
+if not H.PREVIEW_SAMPLES.raid or #H.PREVIEW_SAMPLES.raid == 0 then H.PREVIEW_SAMPLES.raid = H.BuildRaidPreviewSamples(40) or {} end
 
 function H.BuildPreviewSampleList(kind, cfg, baseSamples, limit, quotaTanks, quotaHealers)
 	local base = baseSamples or {}
@@ -956,7 +1003,7 @@ function H.BuildPreviewSampleList(kind, cfg, baseSamples, limit, quotaTanks, quo
 		local classOrder = H.NormalizeOrderList(customSort.classOrder, H.CLASS_TOKENS)
 		local roleMap = buildOrderMap(table.concat(roleOrder, ","))
 		local classMap = buildOrderMap(table.concat(classOrder, ","))
-		local sortDir = normalizeSortDir(cfg and cfg.sortDir)
+		local sortDir = H.NormalizeSortDir(cfg and cfg.sortDir)
 		local list = {}
 		for i, sample in ipairs(base) do
 			list[#list + 1] = { sample = sample, index = i }
@@ -994,8 +1041,8 @@ function H.BuildPreviewSampleList(kind, cfg, baseSamples, limit, quotaTanks, quo
 	local roleFilter = cfg and cfg.roleFilter
 	local nameList = cfg and cfg.nameList
 	local strictFiltering = cfg and cfg.strictFiltering
-	local sortMethod = normalizeSortMethod(cfg and cfg.sortMethod)
-	local sortDir = normalizeSortDir(cfg and cfg.sortDir)
+	local sortMethod = H.NormalizeSortMethod(cfg and cfg.sortMethod)
+	local sortDir = H.NormalizeSortDir(cfg and cfg.sortDir)
 	local groupBy = normalizeGroupBy(cfg and cfg.groupBy)
 	local groupingOrder = cfg and cfg.groupingOrder
 
