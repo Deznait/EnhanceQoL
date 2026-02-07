@@ -4768,6 +4768,15 @@ local function registerSettingsUI()
 		addon.db.ufGroupFrames[kind] = addon.db.ufGroupFrames[kind] or {}
 		return addon.db.ufGroupFrames[kind]
 	end
+	addon.functions.SettingsCreateText(
+		cUF,
+		"|cffffcc66"
+			.. (L["UFGroupFramesBetaDisclaimer"]
+				or "Group Frames are currently a beta test.\nSome parts are still missing; this is mainly for current usability checks.\nFor correct aura filtering, WoW 12.0.1 is recommended (12.0.0 may show extra auras).")
+			.. "|r",
+		{ parentSection = expandable }
+	)
+	addon.functions.SettingsCreateText(cUF, "", { parentSection = expandable })
 	addon.functions.SettingsCreateCheckbox(cUF, {
 		var = "ufEnablePartyGroupFrames",
 		text = L["UFGroupFramesPartyEnable"] or "Enable party frames",

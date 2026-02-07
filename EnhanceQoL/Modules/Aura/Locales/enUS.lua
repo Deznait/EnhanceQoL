@@ -178,6 +178,8 @@ L["UFImportProfileFailed"] = "Could not import the Unit Frame profile."
 L["UFImportProfileSuccess"] = "Unit Frames updated for: %s"
 L["UFImportProfileSuccessGeneric"] = "Unit Frame profile imported."
 L["UFGroupFramesEnable"] = "Enable party/raid group frames"
+L["UFGroupFramesBetaDisclaimer"] =
+	"Group Frames are currently a beta test.\nSome parts are still missing; this is mainly for current usability checks.\nFor correct aura filtering, WoW 12.0.1 is recommended (12.0.0 may show extra auras)."
 L["UFGroupFramesPartyEnable"] = "Enable party frames"
 L["UFGroupFramesRaidEnable"] = "Enable raid frames"
 L["UFGroupFramesMTEnable"] = "Enable Main Tank frames"
