@@ -771,7 +771,7 @@ local function updateFlyoutButtonInfo(button)
 		if not location then return end
 
 		-- TODO 12.0: EquipmentManager_UnpackLocation will change once Void Storage is removed
-		local itemLink, _, _, bags, _, slot, bag
+		local itemLink, _, _, bags, _, slot, bag, itemLevel
 		if type(button.location) == "number" then
 			local locationData = EquipmentManager_GetLocationData(location)
 			bags = locationData.isBags or false
@@ -790,7 +790,14 @@ local function updateFlyoutButtonInfo(button)
 			local eItem = Item:CreateFromItemLink(itemLink)
 			if eItem and not eItem:IsItemEmpty() then
 				eItem:ContinueOnItemLoad(function()
-					local itemLevel = eItem:GetCurrentItemLevel()
+					if bags then
+						local loc = ItemLocation:CreateFromBagAndSlot(bag, slot)
+						if loc then itemLevel = C_Item.GetCurrentItemLevel(loc) end
+					elseif slot then
+						local loc = ItemLocation:CreateFromEquipmentSlot(slot)
+						if loc then itemLevel = C_Item.GetCurrentItemLevel(loc) end
+					end
+					if not itemLevel then itemLevel = eItem:GetCurrentItemLevel() end
 					local quality = eItem:GetItemQualityColor()
 
 					if not button.ItemLevelText then
@@ -1599,7 +1606,6 @@ function addon.functions.initItemInventory()
 			value.gems[i]:Hide()
 		end
 	end
-
 end
 
 ---- END REGION
@@ -2004,6 +2010,4 @@ registerEvents(frameLoad)
 frameLoad:SetScript("OnEvent", eventHandler)
 
 -- If Blizzard_UIPanels_Game is already loaded, wire up immediately.
-if _G.PaperDollFrame then
-	ensureCharFrameOnShowHook()
-end
+if _G.PaperDollFrame then ensureCharFrameOnShowHook() end

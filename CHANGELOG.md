@@ -58,6 +58,7 @@
 - Visibility: Skyriding stance check no longer triggers for non-druids (e.g., paladin auras)
 - World Map Teleport: Mixed Alliance and Horde for Tol Barad Portal
 - Cooldown Panels: Specs were not correctly checked
+- Itemlevel in Bags and Characterpanel are now correct
 
 ---
 
