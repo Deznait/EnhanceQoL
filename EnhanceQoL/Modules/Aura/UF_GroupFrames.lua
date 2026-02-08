@@ -5445,8 +5445,6 @@ local function forEachChild(header, fn)
 	if not header or not fn then return end
 	if not header.GetAttribute then return end
 
-	-- SecureGroupHeader-managed children are exposed via child1..childN attributes.
-	-- Mirror oUF/ElvUI behavior; do not depend on raw GetChildren ordering.
 	local index = 1
 	local child = header:GetAttribute("child" .. index)
 	while child do
@@ -5465,6 +5463,7 @@ local function syncHeaderChild(child, kind, cfg)
 	GF:LayoutAuras(child)
 	if child.unit then GF:UnitButton_RegisterUnitEvents(child, child.unit) end
 	if child._eqolUFState then
+		GF:CacheUnitStatic(child)
 		GF:LayoutButton(child)
 		GF:UpdateAll(child)
 	end
