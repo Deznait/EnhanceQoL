@@ -1121,8 +1121,10 @@ local function ApplyVisibilityToUnitFrame(frameName, cbData, config, opts)
 	state.config = config
 	state.fadeAlpha = clampVisibilityAlpha(opts and opts.fadeAlpha)
 	state.isBossFrame = frameName == BOSS_FRAME_CONTAINER_NAME
-	local isPlayerUnit = (cbData.unitToken == "player")
-	state.supportsPlayerTargetRule = isPlayerUnit
+	local unitToken = cbData.unitToken
+	local isPlayerUnit = (unitToken == "player")
+	local isTargetUnit = (unitToken == "target")
+	state.supportsPlayerTargetRule = isPlayerUnit or isTargetUnit
 	state.supportsPlayerCastingRule = isPlayerUnit
 	state.supportsPlayerMountedRule = isPlayerUnit
 	state.supportsGroupRule = isPlayerUnit
@@ -3383,33 +3385,44 @@ local function initUnitFrame()
 	}
 
 	local function isCustomPlayerCastbarEnabled()
-		local cfg = addon.db and addon.db.ufFrames and addon.db.ufFrames.player
-		if not (cfg and cfg.enabled == true) then return false end
-		local castCfg = cfg.cast
-		if not castCfg then
-			local uf = addon.Aura and addon.Aura.UF
-			local defaults = uf and uf.defaults and uf.defaults.player
-			castCfg = defaults and defaults.cast
+		local castCfg = addon.db and addon.db.castbar
+		if type(castCfg) == "table" and castCfg.enabled ~= nil then return castCfg.enabled == true end
+
+		local castbarModule = addon.Aura and (addon.Aura.Castbar or addon.Aura.UFStandaloneCastbar)
+		if castbarModule and castbarModule.GetConfig then
+			local cfg = castbarModule.GetConfig()
+			if type(cfg) == "table" and cfg.enabled ~= nil then return cfg.enabled == true end
 		end
-		if not castCfg then return false end
-		return castCfg.enabled ~= false
+
+		-- Legacy fallback for older saved vars.
+		local playerCfg = addon.db and addon.db.ufFrames and addon.db.ufFrames.player
+		if not (playerCfg and playerCfg.enabled == true) then return false end
+		local legacyCast = playerCfg.cast
+		if type(legacyCast) ~= "table" then return false end
+		if legacyCast.standalone ~= nil then return legacyCast.standalone == true and legacyCast.enabled ~= false end
+		return legacyCast.enabled ~= false
 	end
 
 	local function EnsureCastbarHook(frame)
 		if not frame or frame.EQOL_CastbarHooked then return end
 		frame:HookScript("OnShow", function(self)
-			if addon.db and addon.db.hiddenCastBars and addon.db.hiddenCastBars[self:GetName()] or isCustomPlayerCastbarEnabled() then self:Hide() end
+			local frameName = self:GetName()
+			local hideByList = addon.db and addon.db.hiddenCastBars and addon.db.hiddenCastBars[frameName]
+			local hidePlayerForCustom = frameName == "PlayerCastingBarFrame" and isCustomPlayerCastbarEnabled()
+			if hideByList or hidePlayerForCustom then self:Hide() end
 		end)
 		frame.EQOL_CastbarHooked = true
 	end
 
 	function addon.functions.ApplyCastBarVisibility()
-		if not addon.db or type(addon.db.hiddenCastBars) ~= "table" then return end
+		if not addon.db then return end
+		if type(addon.db.hiddenCastBars) ~= "table" then addon.db.hiddenCastBars = {} end
+		local hidePlayerForCustom = isCustomPlayerCastbarEnabled()
 		for key, getter in pairs(castBarFrames) do
 			local frame = getter and getter() or _G[key]
 			if frame then
 				EnsureCastbarHook(frame)
-				if addon.db.hiddenCastBars[key] then frame:Hide() end
+				if addon.db.hiddenCastBars[key] or (key == "PlayerCastingBarFrame" and hidePlayerForCustom) then frame:Hide() end
 			end
 		end
 	end

@@ -2192,7 +2192,6 @@ local function copyPanelSettings(targetPanelId, sourcePanelId)
 	target.point = source.point
 	target.x = source.x
 	target.y = source.y
-	target.specFilter = copier(source.specFilter or {})
 
 	Helper.NormalizePanel(target, root.defaults)
 	CooldownPanels:RebuildSpellIndex()
@@ -2708,17 +2707,30 @@ local function ensureEditor()
 
 	slotButton:SetScript("OnClick", function(self) showSlotMenu(self, editor.selectedPanelId) end)
 
-	panelNameBox:SetScript("OnEnterPressed", function(self)
+	local function commitPanelNameChange(self)
 		local panelId = editor.selectedPanelId
 		local panel = panelId and CooldownPanels:GetPanel(panelId)
 		local text = self:GetText()
-		if panel and text and text ~= "" then
+		if panel and text and text ~= "" and text ~= panel.name then
 			panel.name = text
-			CooldownPanels:RefreshPanel(panelId)
 			local runtimePanel = CooldownPanels.runtime and CooldownPanels.runtime[panelId]
+			if runtimePanel and runtimePanel.frame then runtimePanel.frame.editModeName = text end
+			if runtimePanel and runtimePanel.editModeId and EditMode and EditMode.frames and EditMode.frames[runtimePanel.editModeId] then
+				EditMode.frames[runtimePanel.editModeId].title = text
+			end
 			if runtimePanel and runtimePanel.editModeId and EditMode and EditMode.RefreshFrame then EditMode:RefreshFrame(runtimePanel.editModeId) end
+			refreshEditModeSettings()
+			CooldownPanels:RefreshPanel(panelId)
 		end
+	end
+
+	panelNameBox:SetScript("OnEnterPressed", function(self)
+		commitPanelNameChange(self)
 		self:ClearFocus()
+		CooldownPanels:RefreshEditor()
+	end)
+	panelNameBox:SetScript("OnEditFocusLost", function(self)
+		commitPanelNameChange(self)
 		CooldownPanels:RefreshEditor()
 	end)
 	panelNameBox:SetScript("OnEscapePressed", function(self)
@@ -3239,7 +3251,8 @@ local function refreshPreview(editor, panel)
 		return
 	end
 
-	if editor.previewHintLabel then editor.previewHintLabel:Show() end
+	local hasEntries = (panel.order and #panel.order or 0) > 0
+	if editor.previewHintLabel then editor.previewHintLabel:SetShown(hasEntries) end
 	local baseLayout = (panel and panel.layout) or Helper.PANEL_LAYOUT_DEFAULTS
 	local count = getEditorPreviewCount(panel, preview, baseLayout)
 	local layout = getPreviewLayout(panel, preview, count)
@@ -3298,10 +3311,7 @@ local function refreshPreview(editor, panel)
 		end
 	end
 
-	if preview.dropHint then
-		preview.dropHint:SetText(L["CooldownPanelDropHint"] or "Drop spells or items here")
-		preview.dropHint:SetShown((panel.order and #panel.order or 0) == 0)
-	end
+	if preview.dropHint then preview.dropHint:Hide() end
 end
 
 local function layoutInspectorToggles(inspector, entry)
@@ -4309,9 +4319,7 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 			end
 		end
 		local staticTextCooldown = false
-		if data.entry and data.entry.staticTextShowOnCooldown == true then
-			staticTextCooldown = durationActive or (cooldownEnabledOk and isCooldownActive(cooldownStart, cooldownDuration))
-		end
+		if data.entry and data.entry.staticTextShowOnCooldown == true then staticTextCooldown = durationActive or (cooldownEnabledOk and isCooldownActive(cooldownStart, cooldownDuration)) end
 		applyStaticText(icon, data.entry, staticFontPath, staticFontSize, staticFontStyle, staticTextCooldown)
 		if icon.rangeOverlay then
 			if data.rangeOverlay then
@@ -4800,9 +4808,7 @@ function CooldownPanels:RegisterEditModePanel(panelId)
 	local chargesFontPath, chargesFontSize, chargesFontStyle = Helper.GetChargesFontDefaults(frame)
 	local fontOptions = Helper.GetFontOptions(countFontPath)
 	local chargesFontOptions = Helper.GetFontOptions(chargesFontPath)
-	local function hasStaticTextEntries()
-		return panel and panel.entries and next(panel.entries) ~= nil
-	end
+	local function hasStaticTextEntries() return panel and panel.entries and next(panel.entries) ~= nil end
 	local function setStaticTextEntryId(entryId)
 		local runtimePanel = getRuntime(panelId)
 		if runtimePanel then runtimePanel.editModeEntryId = normalizeId(entryId) end
