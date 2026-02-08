@@ -1,5 +1,13 @@
 # Changelog
 
+## [7.11.4] - 2026-02-08
+
+### 🐛 Fixed
+
+- Unit Frames: Power colors/textures now resolve by numeric power type first (e.g. `3` = `ENERGY`).
+
+---
+
 ## [7.11.2] - 2026-02-08
 
 ### 🐛 Fixed
