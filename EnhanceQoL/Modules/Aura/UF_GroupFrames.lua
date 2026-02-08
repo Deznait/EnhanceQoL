@@ -6900,7 +6900,7 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 		},
 		{
-			name = "Group Growth",
+			name = L["Group Growth"] or "Group Growth",
 			kind = SettingType.Dropdown,
 			field = "groupGrowth",
 			parentId = "layout",
@@ -6949,9 +6949,16 @@ local function buildEditModeSettings(kind, editModeId)
 						optionA, optionB = "RIGHT", "LEFT"
 					end
 				end
+				local function toGrowthLabel(value)
+					if value == "UP" then return L["Up"] or "Up" end
+					if value == "DOWN" then return L["Down"] or "Down" end
+					if value == "LEFT" then return L["Left"] or "Left" end
+					if value == "RIGHT" then return L["Right"] or "Right" end
+					return value
+				end
 				local options = {
-					{ value = optionA, label = optionA:sub(1, 1) .. optionA:sub(2):lower() },
-					{ value = optionB, label = optionB:sub(1, 1) .. optionB:sub(2):lower() },
+					{ value = optionA, label = toGrowthLabel(optionA) },
+					{ value = optionB, label = toGrowthLabel(optionB) },
 				}
 				for _, option in ipairs(options) do
 					root:CreateRadio(option.label, function()
