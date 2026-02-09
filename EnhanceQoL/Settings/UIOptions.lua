@@ -1152,6 +1152,7 @@ function addon.functions.initUIOptions()
 	addon.functions.InitDBValue("gcdBarAnchorOffsetX", defaults.anchorOffsetX or 0)
 	addon.functions.InitDBValue("gcdBarAnchorOffsetY", defaults.anchorOffsetY or -120)
 	addon.functions.InitDBValue("gcdBarAnchorMatchWidth", defaults.anchorMatchRelativeWidth == true)
+	addon.functions.InitDBValue("gcdBarHideInPetBattle", defaults.hideInPetBattle == true)
 
 	if addon.GCDBar and addon.GCDBar.OnSettingChanged then addon.GCDBar:OnSettingChanged(addon.db["gcdBarEnabled"]) end
 

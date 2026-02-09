@@ -962,6 +962,7 @@ local function exportResourceProfile(scopeKey, profileName)
 			if db.resourceBarsHideOutOfCombat ~= nil then globals.resourceBarsHideOutOfCombat = db.resourceBarsHideOutOfCombat and true or false end
 			if db.resourceBarsHideMounted ~= nil then globals.resourceBarsHideMounted = db.resourceBarsHideMounted and true or false end
 			if db.resourceBarsHideVehicle ~= nil then globals.resourceBarsHideVehicle = db.resourceBarsHideVehicle and true or false end
+			if db.resourceBarsHidePetBattle ~= nil then globals.resourceBarsHidePetBattle = db.resourceBarsHidePetBattle and true or false end
 			if type(db.globalResourceBarSettings) == "table" then globals.globalResourceBarSettings = CopyTable(db.globalResourceBarSettings) end
 			if next(globals) then payload.globalSettings = globals end
 		end
@@ -1054,6 +1055,8 @@ local function importResourceProfile(encoded, scopeKey)
 		if global.resourceBarsHideOutOfCombat ~= nil then addon.db.resourceBarsHideOutOfCombat = global.resourceBarsHideOutOfCombat and true or false end
 		if global.resourceBarsHideMounted ~= nil then addon.db.resourceBarsHideMounted = global.resourceBarsHideMounted and true or false end
 		if global.resourceBarsHideVehicle ~= nil then addon.db.resourceBarsHideVehicle = global.resourceBarsHideVehicle and true or false end
+		if global.resourceBarsHidePetBattle ~= nil then addon.db.resourceBarsHidePetBattle = global.resourceBarsHidePetBattle and true or false end
+		if global.resourceBarsHidePetBattle == nil and global.auraHideInPetBattle ~= nil then addon.db.resourceBarsHidePetBattle = global.auraHideInPetBattle and true or false end
 		if type(global.globalResourceBarSettings) == "table" then addon.db.globalResourceBarSettings = CopyTable(global.globalResourceBarSettings) end
 	end
 
@@ -4027,6 +4030,7 @@ addon.Aura.functions.setPowerBars = setPowerbars
 local function shouldHideResourceBarsOutOfCombat() return addon and addon.db and addon.db.resourceBarsHideOutOfCombat == true end
 local function shouldHideResourceBarsMounted() return addon and addon.db and addon.db.resourceBarsHideMounted == true end
 local function shouldHideResourceBarsInVehicle() return addon and addon.db and addon.db.resourceBarsHideVehicle == true end
+local function shouldHideResourceBarsInPetBattle() return addon and addon.db and addon.db.resourceBarsHidePetBattle == true end
 
 local function forEachResourceBarFrame(callback)
 	if type(callback) ~= "function" then return end
@@ -4083,11 +4087,13 @@ local function buildVisibilityDriverForBar(cfg)
 	local hideOOC = shouldHideResourceBarsOutOfCombat()
 	local hideMounted = shouldHideResourceBarsMounted()
 	local hideVehicle = shouldHideResourceBarsInVehicle()
+	local hidePetBattle = shouldHideResourceBarsInPetBattle()
 	cfg = cfg or {}
 	local druidExpr = buildDruidVisibilityExpression(cfg, hideOOC)
-	if not hideOOC and not hideMounted and not hideVehicle and not druidExpr then return nil, false end
+	if not hideOOC and not hideMounted and not hideVehicle and not hidePetBattle and not druidExpr then return nil, false end
 
 	local clauses = {}
+	if hidePetBattle then clauses[#clauses + 1] = "[petbattle] hide" end
 	if hideVehicle then clauses[#clauses + 1] = "[vehicleui] hide" end
 	if hideMounted then
 		clauses[#clauses + 1] = "[mounted] hide"

@@ -5,6 +5,10 @@
 ### ✨ Added
 
 - GCD Bar: Added `Match relative frame width` for anchored layouts, including live width sync with the selected relative frame.
+- GCD Bar: Anchor target list now focuses on supported EQoL anchors (legacy ActionBar/StanceBar entries removed).
+- Unit Frames: Added per-frame `Hide in vehicles` visibility option.
+- Cooldown Panels: Added per-panel `Hide in vehicles` display option.
+- Aura: Added per-module `Hide in pet battles` options for Unit Frames, Cooldown Panels, Resource Bars, and GCD Bar.
 
 ---
 

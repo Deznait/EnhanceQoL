@@ -4463,11 +4463,22 @@ end
 
 function CooldownPanels:IsInEditMode() return EditMode and EditMode.IsInEditMode and EditMode:IsInEditMode() end
 
+local function playerHasVehicleUI()
+	if UnitHasVehicleUI then return UnitHasVehicleUI("player") == true end
+	if UnitInVehicle then return UnitInVehicle("player") == true end
+	return false
+end
+
+local function isPetBattleActive() return C_PetBattles and C_PetBattles.IsInBattle and C_PetBattles.IsInBattle() == true end
+
 function CooldownPanels:ShouldShowPanel(panelId)
 	local panel = self:GetPanel(panelId)
 	if not panel or panel.enabled == false then return false end
 	if not panelAllowsSpec(panel) then return false end
 	if self:IsInEditMode() == true then return true end
+	panel.layout = panel.layout or Helper.CopyTableShallow(Helper.PANEL_LAYOUT_DEFAULTS)
+	if panel.layout.hideInPetBattle == true and isPetBattleActive() then return false end
+	if panel.layout.hideInVehicle == true and playerHasVehicleUI() then return false end
 	local runtime = getRuntime(panelId)
 	return runtime.visibleCount and runtime.visibleCount > 0
 end
@@ -4708,6 +4719,10 @@ local function applyEditLayout(panelId, field, value, skipRefresh)
 	elseif field == "showOnCooldown" then
 		layout.showOnCooldown = value == true
 		if layout.showOnCooldown then layout.hideOnCooldown = false end
+	elseif field == "hideInVehicle" then
+		layout.hideInVehicle = value == true
+	elseif field == "hideInPetBattle" then
+		layout.hideInPetBattle = value == true
 	elseif field == "cooldownTextFont" then
 		if type(value) == "string" and value ~= "" then layout.cooldownTextFont = value end
 	elseif field == "cooldownTextSize" then
@@ -4819,6 +4834,8 @@ function CooldownPanels:ApplyEditMode(panelId, data)
 	applyEditLayout(panelId, "showIconTexture", data.showIconTexture, true)
 	applyEditLayout(panelId, "hideOnCooldown", data.hideOnCooldown, true)
 	applyEditLayout(panelId, "showOnCooldown", data.showOnCooldown, true)
+	applyEditLayout(panelId, "hideInVehicle", data.hideInVehicle, true)
+	applyEditLayout(panelId, "hideInPetBattle", data.hideInPetBattle, true)
 	applyEditLayout(panelId, "cooldownTextFont", data.cooldownTextFont, true)
 	applyEditLayout(panelId, "cooldownTextSize", data.cooldownTextSize, true)
 	applyEditLayout(panelId, "cooldownTextStyle", data.cooldownTextStyle, true)
@@ -5593,6 +5610,24 @@ function CooldownPanels:RegisterEditModePanel(panelId)
 				set = function(_, value) applyEditLayout(panelId, "showOnCooldown", value) end,
 			},
 			{
+				name = L["CooldownPanelHideInVehicle"] or "Hide in vehicles",
+				kind = SettingType.Checkbox,
+				field = "hideInVehicle",
+				parentId = "cooldownPanelDisplay",
+				default = layout.hideInVehicle == true,
+				get = function() return layout.hideInVehicle == true end,
+				set = function(_, value) applyEditLayout(panelId, "hideInVehicle", value) end,
+			},
+			{
+				name = L["CooldownPanelHideInPetBattle"] or "Hide in pet battles",
+				kind = SettingType.Checkbox,
+				field = "hideInPetBattle",
+				parentId = "cooldownPanelDisplay",
+				default = layout.hideInPetBattle == true,
+				get = function() return layout.hideInPetBattle == true end,
+				set = function(_, value) applyEditLayout(panelId, "hideInPetBattle", value) end,
+			},
+			{
 				name = L["CooldownPanelOpacityOutOfCombat"] or "Opacity (out of combat)",
 				kind = SettingType.Slider,
 				field = "opacityOutOfCombat",
@@ -6337,6 +6372,8 @@ function CooldownPanels:RegisterEditModePanel(panelId)
 			showIconTexture = layout.showIconTexture ~= false,
 			hideOnCooldown = layout.hideOnCooldown == true,
 			showOnCooldown = layout.showOnCooldown == true,
+			hideInVehicle = layout.hideInVehicle == true,
+			hideInPetBattle = layout.hideInPetBattle == true,
 			cooldownTextFont = layout.cooldownTextFont,
 			cooldownTextSize = layout.cooldownTextSize or 12,
 			cooldownTextStyle = Helper.NormalizeFontStyleChoice(layout.cooldownTextStyle, "NONE"),
@@ -6882,6 +6919,10 @@ local UPDATE_FRAME_EVENTS = {
 	"SPELL_RANGE_CHECK_UPDATE",
 	"PLAYER_REGEN_DISABLED",
 	"PLAYER_REGEN_ENABLED",
+	"UNIT_ENTERED_VEHICLE",
+	"UNIT_EXITED_VEHICLE",
+	"PET_BATTLE_OPENING_START",
+	"PET_BATTLE_CLOSE",
 }
 
 local function hasEnabledPanels()
@@ -7043,6 +7084,10 @@ local function ensureUpdateFrame()
 			updateItemCountCache()
 			scheduleSpecAwareRebuild(event)
 			return
+		end
+		if event == "UNIT_ENTERED_VEHICLE" or event == "UNIT_EXITED_VEHICLE" then
+			local unit = ...
+			if unit and unit ~= "player" then return end
 		end
 		if event == "BAG_UPDATE_DELAYED" or event == "PLAYER_EQUIPMENT_CHANGED" or event == "PLAYER_ENTERING_WORLD" then updateItemCountCache() end
 		CooldownPanels:RequestUpdate("Event:" .. event)

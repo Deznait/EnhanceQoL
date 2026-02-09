@@ -785,6 +785,30 @@ local function buildUnitSettings(unit)
 		cfg.visibilityFade = pct / 100
 		if UF and UF.ApplyVisibilityRules then UF.ApplyVisibilityRules(unit) end
 	end
+	local function isHideInVehicleEnabled()
+		local cfg = ensureConfig(unit)
+		local value = cfg and cfg.hideInVehicle
+		if value == nil then value = def.hideInVehicle end
+		return value == true
+	end
+	local function setHideInVehicleEnabled(value)
+		local cfg = ensureConfig(unit)
+		cfg.hideInVehicle = value and true or false
+		refreshSelf()
+		refreshSettingsUI()
+	end
+	local function isHideInPetBattleEnabled()
+		local cfg = ensureConfig(unit)
+		local value = cfg and cfg.hideInPetBattle
+		if value == nil then value = def.hideInPetBattle end
+		return value == true
+	end
+	local function setHideInPetBattleEnabled(value)
+		local cfg = ensureConfig(unit)
+		cfg.hideInPetBattle = value and true or false
+		refreshSelf()
+		refreshSettingsUI()
+	end
 
 	list[#list + 1] = { name = SETTINGS or "Settings", kind = settingType.Collapsible, id = "utility", defaultCollapsed = true }
 
@@ -820,6 +844,8 @@ local function buildUnitSettings(unit)
 		"frame",
 		isTooltipEnabled
 	)
+	list[#list + 1] = checkbox(L["UFHideInVehicle"] or "Hide in vehicles", isHideInVehicleEnabled, setHideInVehicleEnabled, def.hideInVehicle == true, "frame")
+	if not isPlayer then list[#list + 1] = checkbox(L["UFHideInPetBattle"] or "Hide in pet battles", isHideInPetBattleEnabled, setHideInPetBattleEnabled, def.hideInPetBattle == true, "frame") end
 
 	if #visibilityOptions > 0 then
 		list[#list + 1] = multiDropdown(L["Show when"] or "Show when", visibilityOptions, isVisibilityRuleSelected, setVisibilityRule, nil, "frame")
@@ -1246,7 +1272,11 @@ local function buildUnitSettings(unit)
 		list[#list + 1] = checkbox(L["UFRangeFadeEnable"] or "Enable range fade", isRangeFadeEnabled, function(val)
 			setValue(unit, { "rangeFade", "enabled" }, val and true or false)
 			refreshSelf()
-			if UFHelper and UFHelper.RangeFadeUpdateSpells then UFHelper.RangeFadeUpdateSpells() end
+			if UFHelper then
+				if UFHelper.RangeFadeMarkConfigDirty then UFHelper.RangeFadeMarkConfigDirty() end
+				if UFHelper.RangeFadeMarkSpellListDirty then UFHelper.RangeFadeMarkSpellListDirty() end
+				if UFHelper.RangeFadeUpdateSpells then UFHelper.RangeFadeUpdateSpells() end
+			end
 		end, rangeDef.enabled == true, "rangeFade")
 
 		local rangeFadeAlpha = slider(L["UFRangeFadeAlpha"] or "Out of range opacity", 0, 100, 1, function()
@@ -1261,6 +1291,10 @@ local function buildUnitSettings(unit)
 			if pct > 100 then pct = 100 end
 			setValue(unit, { "rangeFade", "alpha" }, pct / 100)
 			refreshSelf()
+			if UFHelper then
+				if UFHelper.RangeFadeMarkConfigDirty then UFHelper.RangeFadeMarkConfigDirty() end
+				if UFHelper.RangeFadeApplyCurrent then UFHelper.RangeFadeApplyCurrent(true) end
+			end
 		end, math.floor(((rangeDef.alpha or 0.5) * 100) + 0.5), "rangeFade", true, function(v) return tostring(v) .. "%" end)
 		rangeFadeAlpha.isEnabled = isRangeFadeEnabled
 		list[#list + 1] = rangeFadeAlpha
@@ -4125,24 +4159,17 @@ local function buildUnitSettings(unit)
 			{ value = "EDGE", label = L["Edge"] or "Edge" },
 			{ value = "OVERLAY", label = L["Overlay"] or "Overlay" },
 		}
-		list[#list + 1] = radioDropdown(
-			L["Aura border render mode"] or "Aura border render mode",
-			borderRenderModeOptions,
-			function()
-				local mode = (getValue(unit, { "auraIcons", "borderRenderMode" }, auraDef.borderRenderMode or "EDGE") or "EDGE"):upper()
-				if mode == "OVERLAY" then return "OVERLAY" end
-				return "EDGE"
-			end,
-			function(val)
-				local mode = tostring(val or "EDGE"):upper()
-				if mode ~= "OVERLAY" then mode = "EDGE" end
-				setValue(unit, { "auraIcons", "borderRenderMode" }, mode)
-				refresh()
-				refreshAuras()
-			end,
-			((auraDef.borderRenderMode or "EDGE"):upper() == "OVERLAY") and "OVERLAY" or "EDGE",
-			"auras"
-		)
+		list[#list + 1] = radioDropdown(L["Aura border render mode"] or "Aura border render mode", borderRenderModeOptions, function()
+			local mode = (getValue(unit, { "auraIcons", "borderRenderMode" }, auraDef.borderRenderMode or "EDGE") or "EDGE"):upper()
+			if mode == "OVERLAY" then return "OVERLAY" end
+			return "EDGE"
+		end, function(val)
+			local mode = tostring(val or "EDGE"):upper()
+			if mode ~= "OVERLAY" then mode = "EDGE" end
+			setValue(unit, { "auraIcons", "borderRenderMode" }, mode)
+			refresh()
+			refreshAuras()
+		end, ((auraDef.borderRenderMode or "EDGE"):upper() == "OVERLAY") and "OVERLAY" or "EDGE", "auras")
 		list[#list].isEnabled = isAuraEnabled
 		list[#list + 1] = { name = "", kind = settingType.Divider, parentId = "auras" }
 

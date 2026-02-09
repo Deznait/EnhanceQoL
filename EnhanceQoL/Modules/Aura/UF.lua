@@ -218,6 +218,7 @@ end
 local defaults = {
 	player = {
 		enabled = false,
+		hideInPetBattle = false,
 		showTooltip = false,
 		tooltipUseEditMode = false,
 		smoothFill = false,
@@ -755,6 +756,13 @@ if UFHelper and UFHelper.RangeFadeRegister then
 			st.frame:SetAlpha(targetAlpha)
 		end
 	end)
+end
+
+local function refreshRangeFadeSpells(rebuildSpellList)
+	if not UFHelper then return end
+	if UFHelper.RangeFadeMarkConfigDirty then UFHelper.RangeFadeMarkConfigDirty() end
+	if rebuildSpellList and UFHelper.RangeFadeMarkSpellListDirty then UFHelper.RangeFadeMarkSpellListDirty() end
+	if UFHelper.RangeFadeUpdateSpells then UFHelper.RangeFadeUpdateSpells() end
 end
 
 local function copySettings(fromUnit, toUnit, opts)
@@ -2426,23 +2434,49 @@ local function getFrameInfo(frameName)
 	return nil
 end
 
+local function shouldHideInVehicle(cfg, def)
+	local value = cfg and cfg.hideInVehicle
+	if value == nil then value = def and def.hideInVehicle end
+	return value == true
+end
+
+local function shouldHideInPetBattle(cfg, def)
+	local value = cfg and cfg.hideInPetBattle
+	if value == nil then value = def and def.hideInPetBattle end
+	return value == true
+end
+
 local function applyVisibilityDriver(unit, enabled)
 	if InCombatLockdown() then return end
 	local st = states[unit]
 	if not st or not st.frame or not RegisterStateDriver then return end
+	local cfg = ensureDB(unit)
+	local def = defaultsFor(unit)
+	local hideInVehicle = enabled and shouldHideInVehicle(cfg, def)
+	local hideInPetBattle = enabled and unit ~= UNIT.PLAYER and shouldHideInPetBattle(cfg, def)
 	local cond
+	local baseCond
 	if not enabled then
 		cond = "hide"
 	elseif unit == UNIT.TARGET then
-		cond = "[@target,exists] show; hide"
+		baseCond = "[@target,exists] show; hide"
 	elseif unit == UNIT.TARGET_TARGET then
-		cond = "[@targettarget,exists] show; hide"
+		baseCond = "[@targettarget,exists] show; hide"
 	elseif unit == UNIT.FOCUS then
-		cond = "[@focus,exists] show; hide"
+		baseCond = "[@focus,exists] show; hide"
 	elseif unit == UNIT.PET then
-		cond = "[@pet,exists] show; hide"
+		baseCond = "[@pet,exists] show; hide"
 	elseif isBossUnit(unit) then
-		cond = ("[@%s,exists] show; hide"):format(unit)
+		baseCond = ("[@%s,exists] show; hide"):format(unit)
+	end
+	if enabled then
+		if hideInPetBattle or hideInVehicle or baseCond then
+			local clauses = {}
+			if hideInPetBattle then clauses[#clauses + 1] = "[petbattle] hide" end
+			if hideInVehicle then clauses[#clauses + 1] = "[vehicleui] hide" end
+			clauses[#clauses + 1] = baseCond or "show"
+			cond = table.concat(clauses, "; ")
+		end
 	end
 	if cond == st._visibilityCond then return end
 	if not cond then
@@ -5667,7 +5701,7 @@ local function onEvent(self, event, unit, ...)
 		return
 	end
 	if event == "SPELLS_CHANGED" or event == "PLAYER_TALENT_UPDATE" or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED" or event == "TRAIT_CONFIG_UPDATED" then
-		if UFHelper and UFHelper.RangeFadeUpdateSpells then UFHelper.RangeFadeUpdateSpells() end
+		refreshRangeFadeSpells(true)
 		return
 	end
 	if event == "PLAYER_ENTERING_WORLD" then
@@ -5677,7 +5711,7 @@ local function onEvent(self, event, unit, ...)
 		local petCfg = getCfg(UNIT.PET)
 		local focusCfg = getCfg(UNIT.FOCUS)
 		local bossCfg = getCfg("boss")
-		if UFHelper and UFHelper.RangeFadeUpdateSpells then UFHelper.RangeFadeUpdateSpells() end
+		refreshRangeFadeSpells(true)
 		refreshMainPower(UNIT.PLAYER)
 		applyConfig("player")
 		applyConfig("target")
@@ -6149,7 +6183,7 @@ local function ensureEventHandling()
 	rebuildAllowedEventUnits()
 	if not anyUFEnabled() then
 		hideBossFrames()
-		if UFHelper and UFHelper.RangeFadeUpdateSpells then UFHelper.RangeFadeUpdateSpells() end
+		refreshRangeFadeSpells(true)
 		if UFHelper and UFHelper.disableCombatFeedbackAll then UFHelper.disableCombatFeedbackAll(states) end
 		if eventFrame and eventFrame.UnregisterAllEvents then eventFrame:UnregisterAllEvents() end
 		if eventFrame then eventFrame:SetScript("OnEvent", nil) end
@@ -6181,7 +6215,7 @@ local function ensureEventHandling()
 				if states[UNIT.PLAYER] and states[UNIT.PLAYER].castBar then setCastInfoFromUnit(UNIT.PLAYER) end
 				if states[UNIT.TARGET] and states[UNIT.TARGET].castBar then setCastInfoFromUnit(UNIT.TARGET) end
 				if states[UNIT.FOCUS] and states[UNIT.FOCUS].castBar then setCastInfoFromUnit(UNIT.FOCUS) end
-				if UFHelper and UFHelper.RangeFadeUpdateSpells then UFHelper.RangeFadeUpdateSpells() end
+				refreshRangeFadeSpells(false)
 			end)
 
 			addon.EditModeLib:RegisterCallback("exit", function()
@@ -6198,7 +6232,7 @@ local function ensureEventHandling()
 				if states[UNIT.PLAYER] and states[UNIT.PLAYER].castBar then setCastInfoFromUnit(UNIT.PLAYER) end
 				if states[UNIT.TARGET] and states[UNIT.TARGET].castBar then setCastInfoFromUnit(UNIT.TARGET) end
 				if states[UNIT.FOCUS] and states[UNIT.FOCUS].castBar then setCastInfoFromUnit(UNIT.FOCUS) end
-				if UFHelper and UFHelper.RangeFadeUpdateSpells then UFHelper.RangeFadeUpdateSpells() end
+				refreshRangeFadeSpells(false)
 				if UFHelper and UFHelper.stopCombatFeedbackSample then
 					for _, st in pairs(states) do
 						UFHelper.stopCombatFeedbackSample(st)
@@ -6208,7 +6242,7 @@ local function ensureEventHandling()
 		end
 	end
 	updatePortraitEventRegistration()
-	if UFHelper and UFHelper.RangeFadeUpdateSpells then UFHelper.RangeFadeUpdateSpells() end
+	refreshRangeFadeSpells(false)
 end
 
 local function refreshStandaloneCastbar()
