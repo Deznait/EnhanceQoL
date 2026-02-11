@@ -73,6 +73,7 @@ local BAR_TEX_INHERIT = "__PER_BAR__"
 local EDIT_MODE_SAMPLE_MAX = 100
 local AURA_FILTERS = GFH.AuraFilters
 local SECRET_TEXT_UPDATE_INTERVAL = 0.1
+local FONT_DROPDOWN_SCROLL_HEIGHT = 220
 
 local function queryAuraSlots(unit, filter, maxCount)
 	if not filter then return nil end
@@ -8354,6 +8355,7 @@ local function buildEditModeSettings(kind, editModeId)
 			name = "Name font",
 			kind = SettingType.Dropdown,
 			field = "nameFont",
+			height = FONT_DROPDOWN_SCROLL_HEIGHT,
 			parentId = "text",
 			get = function()
 				local cfg = getCfg(kind)
@@ -8687,6 +8689,7 @@ local function buildEditModeSettings(kind, editModeId)
 			name = "Font",
 			kind = SettingType.Dropdown,
 			field = "healthFont",
+			height = FONT_DROPDOWN_SCROLL_HEIGHT,
 			parentId = "health",
 			get = function()
 				local cfg = getCfg(kind)
@@ -9602,6 +9605,7 @@ local function buildEditModeSettings(kind, editModeId)
 			name = "Level font",
 			kind = SettingType.Dropdown,
 			field = "levelFont",
+			height = FONT_DROPDOWN_SCROLL_HEIGHT,
 			parentId = "level",
 			get = function()
 				local cfg = getCfg(kind)
@@ -9981,6 +9985,7 @@ local function buildEditModeSettings(kind, editModeId)
 			name = "Font",
 			kind = SettingType.Dropdown,
 			field = "statusTextFont",
+			height = FONT_DROPDOWN_SCROLL_HEIGHT,
 			parentId = "statustext",
 			get = function()
 				local cfg = getCfg(kind)
@@ -10293,6 +10298,7 @@ local function buildEditModeSettings(kind, editModeId)
 			name = "Font",
 			kind = SettingType.Dropdown,
 			field = "groupNumberFont",
+			height = FONT_DROPDOWN_SCROLL_HEIGHT,
 			parentId = "statustext",
 			get = function()
 				local cfg = getCfg(kind)
@@ -12032,6 +12038,7 @@ local function buildEditModeSettings(kind, editModeId)
 			name = "Font",
 			kind = SettingType.Dropdown,
 			field = "powerFont",
+			height = FONT_DROPDOWN_SCROLL_HEIGHT,
 			parentId = "power",
 			get = function()
 				local cfg = getCfg(kind)
@@ -12659,6 +12666,7 @@ local function buildEditModeSettings(kind, editModeId)
 			name = "Cooldown text font",
 			kind = SettingType.Dropdown,
 			field = "buffCooldownTextFont",
+			height = FONT_DROPDOWN_SCROLL_HEIGHT,
 			parentId = "buffs",
 			get = function()
 				local cfg = getCfg(kind)
@@ -12847,6 +12855,7 @@ local function buildEditModeSettings(kind, editModeId)
 			name = "Stack font",
 			kind = SettingType.Dropdown,
 			field = "buffStackFont",
+			height = FONT_DROPDOWN_SCROLL_HEIGHT,
 			parentId = "buffs",
 			get = function()
 				local cfg = getCfg(kind)
@@ -13252,6 +13261,7 @@ local function buildEditModeSettings(kind, editModeId)
 			name = "Cooldown text font",
 			kind = SettingType.Dropdown,
 			field = "debuffCooldownTextFont",
+			height = FONT_DROPDOWN_SCROLL_HEIGHT,
 			parentId = "debuffs",
 			get = function()
 				local cfg = getCfg(kind)
@@ -13440,6 +13450,7 @@ local function buildEditModeSettings(kind, editModeId)
 			name = "Stack font",
 			kind = SettingType.Dropdown,
 			field = "debuffStackFont",
+			height = FONT_DROPDOWN_SCROLL_HEIGHT,
 			parentId = "debuffs",
 			get = function()
 				local cfg = getCfg(kind)
@@ -13825,6 +13836,7 @@ local function buildEditModeSettings(kind, editModeId)
 			name = "Cooldown text font",
 			kind = SettingType.Dropdown,
 			field = "externalCooldownTextFont",
+			height = FONT_DROPDOWN_SCROLL_HEIGHT,
 			parentId = "externals",
 			get = function()
 				local cfg = getCfg(kind)
@@ -14013,6 +14025,7 @@ local function buildEditModeSettings(kind, editModeId)
 			name = "Stack font",
 			kind = SettingType.Dropdown,
 			field = "externalStackFont",
+			height = FONT_DROPDOWN_SCROLL_HEIGHT,
 			parentId = "externals",
 			get = function()
 				local cfg = getCfg(kind)
@@ -14215,6 +14228,7 @@ local function buildEditModeSettings(kind, editModeId)
 			name = "DR font",
 			kind = SettingType.Dropdown,
 			field = "externalDrFont",
+			height = FONT_DROPDOWN_SCROLL_HEIGHT,
 			parentId = "externals",
 			get = function()
 				local cfg = getCfg(kind)
@@ -15154,6 +15168,7 @@ local function buildEditModeSettings(kind, editModeId)
 			name = "Font",
 			kind = SettingType.Dropdown,
 			field = "groupIndicatorFont",
+			height = FONT_DROPDOWN_SCROLL_HEIGHT,
 			parentId = "raid",
 			get = function()
 				local cfg = getCfg(kind)
