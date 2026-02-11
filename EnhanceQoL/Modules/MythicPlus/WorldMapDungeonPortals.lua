@@ -297,8 +297,9 @@ local function LeaveDisplayModeIfNeeded()
 	if QuestMapFrame:GetDisplayMode() ~= DISPLAY_MODE then return end
 	if InCombatLockdown and InCombatLockdown() then return end
 
-	if QuestMapFrame.SetDisplayMode and QuestLogDisplayMode and QuestLogDisplayMode.MapLegend then
-		QuestMapFrame:SetDisplayMode(QuestLogDisplayMode.MapLegend)
+	local questLogDisplayMode = _G.QuestLogDisplayMode
+	if QuestMapFrame.SetDisplayMode and questLogDisplayMode and questLogDisplayMode.MapLegend then
+		QuestMapFrame:SetDisplayMode(questLogDisplayMode.MapLegend)
 		return
 	end
 	if QuestMapFrame.MapLegendTab and QuestMapFrame.MapLegendTab.Click then

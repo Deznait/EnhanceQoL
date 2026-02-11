@@ -596,6 +596,7 @@ end
 
 local FRAME_VISIBILITY_FADE_DURATION = 0.15
 local FRAME_VISIBILITY_FADE_THRESHOLD = 0.01
+local FRAME_VISIBILITY_FADE_DISABLED = (_G.EQOL_ENABLE_FRAME_VISIBILITY_FADE ~= true)
 
 local function StopFrameFade(target)
 	local group = target and target.EQOL_FadeGroup
@@ -604,7 +605,7 @@ local function StopFrameFade(target)
 end
 
 local function ApplyAlphaToRegion(target, alpha, useFade)
-	if true then return end
+	if FRAME_VISIBILITY_FADE_DISABLED then return end
 	if not target or not target.SetAlpha then return end
 	if not useFade or not target.CreateAnimationGroup then
 		StopFrameFade(target)

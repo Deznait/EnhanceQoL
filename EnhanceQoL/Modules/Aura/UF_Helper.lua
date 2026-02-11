@@ -2577,7 +2577,6 @@ local IsHelpfulSpell = _G.IsHelpfulSpell
 local IsHarmfulSpell = _G.IsHarmfulSpell
 local C_CreatureInfo = _G.C_CreatureInfo
 local wipeTable = wipe or (table and table.wipe)
-local floor = math.floor
 local tinsert = table.insert
 local tsort = table.sort
 
@@ -2695,7 +2694,8 @@ local function clearTable(tbl)
 end
 
 local function getRangeFadeClassInfo()
-	local _, classToken, classID = UnitClass and UnitClass("player")
+	if not UnitClass then return nil, nil end
+	local _, classToken, classID = UnitClass("player")
 	return classToken, classID
 end
 
