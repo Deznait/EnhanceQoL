@@ -2183,6 +2183,44 @@ function H.updateRoleIndicator(st, unit, cfg, def, skipDisabled)
 	end
 end
 
+function H.updateLeaderIndicator(st, unit, cfg, def, skipDisabled)
+	if unit ~= "player" and unit ~= "target" and unit ~= "focus" then return end
+	if not st or not st.leaderIcon then return end
+	def = def or {}
+	local lcfg = (cfg and cfg.leaderIcon) or (def and def.leaderIcon) or {}
+	local enabled = lcfg.enabled == true and not (cfg and cfg.enabled == false)
+	if not enabled and skipDisabled then return end
+
+	local offsetDef = def and def.leaderIcon and def.leaderIcon.offset or {}
+	local sizeDef = def and def.leaderIcon and def.leaderIcon.size or 12
+	local size = H.clamp(lcfg.size or sizeDef or 12, 8, 40)
+	local ox = (lcfg.offset and lcfg.offset.x) or offsetDef.x or 0
+	local oy = (lcfg.offset and lcfg.offset.y) or offsetDef.y or 0
+	local anchor = st.health or st.frame
+	st.leaderIcon:ClearAllPoints()
+	if anchor then
+		st.leaderIcon:SetPoint("TOPLEFT", anchor, "TOPLEFT", ox, oy)
+	else
+		st.leaderIcon:SetPoint("TOPLEFT", st.frame, "TOPLEFT", ox, oy)
+	end
+	st.leaderIcon:SetSize(size, size)
+
+	if not enabled then
+		st.leaderIcon:Hide()
+		return
+	end
+
+	local inEditMode = addon.EditModeLib and addon.EditModeLib:IsInEditMode()
+	local showLeader = UnitIsGroupLeader and UnitIsGroupLeader(unit)
+	if not showLeader and inEditMode then showLeader = true end
+	if showLeader then
+		st.leaderIcon:SetAtlas("UI-HUD-UnitFrame-Player-Group-LeaderIcon", false)
+		st.leaderIcon:Show()
+	else
+		st.leaderIcon:Hide()
+	end
+end
+
 function H.updateClassificationIndicator(st, unit, cfg, def, skipDisabled)
 	if unit == "player" then
 		if st and st.classificationIcon then st.classificationIcon:Hide() end
