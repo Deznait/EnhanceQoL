@@ -1963,21 +1963,34 @@ local function getState(self)
 	return st
 end
 
+local function isTooltipModifierPressed(modifier)
+	local mod = tostring(modifier or "ALT"):upper()
+	if mod == "SHIFT" then return IsShiftKeyDown and IsShiftKeyDown() end
+	if mod == "CTRL" or mod == "CONTROL" then return IsControlKeyDown and IsControlKeyDown() end
+	return IsAltKeyDown and IsAltKeyDown()
+end
+
 local function shouldShowTooltip(self)
-	local kind = (self and self._eqolGroupKind) or "party"
-	local cfg = (self and (self._eqolCfg or getCfg(kind))) or getCfg(kind)
-	local tc = cfg and cfg.tooltip or nil
-	local def = (DEFAULTS[kind] and DEFAULTS[kind].tooltip) or (DEFAULTS.party and DEFAULTS.party.tooltip) or nil
-	local mode = (tc and tc.mode) or (def and def.mode) or "OFF"
+	local st = self and self._eqolUFState or nil
+	local mode = st and st._tooltipMode or nil
+	local modifier = st and st._tooltipModifier or nil
+
+	if not mode then
+		local kind = (self and self._eqolGroupKind) or "party"
+		local cfg = (self and (self._eqolCfg or getCfg(kind))) or getCfg(kind)
+		local tc = cfg and cfg.tooltip or nil
+		local def = (DEFAULTS[kind] and DEFAULTS[kind].tooltip) or (DEFAULTS.party and DEFAULTS.party.tooltip) or nil
+		mode = tostring((tc and tc.mode) or (def and def.mode) or "OFF"):upper()
+		modifier = tostring((tc and tc.modifier) or (def and def.modifier) or "ALT"):upper()
+	else
+		mode = tostring(mode):upper()
+		modifier = tostring(modifier or "ALT"):upper()
+	end
+
 	if mode == "OFF" then return false end
 	if mode == "ALWAYS" then return true end
-	if mode == "MODIFIER" then
-		local mod = (tc and tc.modifier) or (def and def.modifier) or "ALT"
-		mod = tostring(mod):upper()
-		if mod == "SHIFT" then return IsShiftKeyDown and IsShiftKeyDown() end
-		if mod == "CTRL" or mod == "CONTROL" then return IsControlKeyDown and IsControlKeyDown() end
-		return IsAltKeyDown and IsAltKeyDown()
-	end
+	if mode == "OUT_OF_COMBAT" or mode == "OOC" then return not (InCombatLockdown and InCombatLockdown()) end
+	if mode == "MODIFIER" then return isTooltipModifierPressed(modifier) end
 	return false
 end
 
@@ -2013,6 +2026,13 @@ local function updateButtonConfig(self, cfg)
 	st._wantsStatusText = scfg and scfg.unitStatus and scfg.unitStatus.enabled ~= false
 	st._wantsRangeFade = scfg and scfg.rangeFade and scfg.rangeFade.enabled ~= false
 	st._wantsDispelTint = resolveDispelIndicatorEnabled(cfg, self._eqolGroupKind or "party")
+
+	local tooltipCfg = cfg.tooltip or {}
+	local tooltipDef = (DEFAULTS[self._eqolGroupKind or "party"] and DEFAULTS[self._eqolGroupKind or "party"].tooltip) or (DEFAULTS.party and DEFAULTS.party.tooltip) or {}
+	local tooltipMode = tostring(tooltipCfg.mode or tooltipDef.mode or "OFF"):upper()
+	if tooltipMode == "OOC" then tooltipMode = "OUT_OF_COMBAT" end
+	st._tooltipMode = tooltipMode
+	st._tooltipModifier = tostring(tooltipCfg.modifier or tooltipDef.modifier or "ALT"):upper()
 
 	local wantsPower = true
 	local powerHeight = cfg.powerHeight
@@ -7027,6 +7047,7 @@ local function buildEditModeSettings(kind, editModeId)
 	local tooltipModeOptions = {
 		{ value = "OFF", label = "Off" },
 		{ value = "ALWAYS", label = "Always" },
+		{ value = "OUT_OF_COMBAT", label = "Out of combat" },
 		{ value = "MODIFIER", label = "Only with modifier" },
 	}
 	local tooltipModifierOptions = {
