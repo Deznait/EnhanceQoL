@@ -1053,7 +1053,7 @@ function checkCooldown()
 	for _, button in pairs(frameAnchor.buttons or {}) do
 		if isKnown[button.spellID] then
 			local cooldownData, isSecret = GetCooldownData(button)
-			if isSecret then
+			if isSecret and button.cooldownFrame.SetCooldownFromDuration then
 				if cooldownData then button.cooldownFrame:SetCooldownFromDuration(cooldownData) end
 			elseif cooldownData and cooldownData.isEnabled then
 				button.cooldownFrame:SetCooldown(cooldownData.startTime, cooldownData.duration, cooldownData.modRate)

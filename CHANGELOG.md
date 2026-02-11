@@ -13,6 +13,8 @@
 - Aura: Added per-module `Hide in pet battles` options for Unit Frames, Cooldown Panels, Resource Bars, and GCD Bar.
 - Aura: Added `Hide in client scenes` (e.g. minigames) for Unit Frames, Cooldown Panels, and Resource Bars (default enabled).
 - Resource Bars: Added per-bar `Click-through` option in Edit Mode
+- World Map Teleport: Added Ever-Shifting Mirror
+- Vendor: Added configurable auto-sell rules for `Poor` items (including `Ignore BoE`), hide crafting-expansion filtering for `Poor`, and disable global `Automatically sell all junk items` when `Poor` auto-sell is enabled.
 
 ### ⚡ Performance
 

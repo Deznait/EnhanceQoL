@@ -2015,7 +2015,15 @@ function GF:CacheUnitStatic(self)
 	if not (unit and st) then return end
 
 	local guid = UnitGUID and UnitGUID(unit)
-	if st._guid == guid and st._unitToken == unit then
+	if issecretvalue and issecretvalue(guid) then guid = nil end
+
+	local cachedGuid = st._guid
+	if issecretvalue and issecretvalue(cachedGuid) then
+		cachedGuid = nil
+		st._guid = nil
+	end
+
+	if cachedGuid == guid and st._unitToken == unit then
 		if st._class and not (self._eqolPreview and isEditModeActive()) then return end
 	end
 	st._guid = guid
@@ -6777,7 +6785,13 @@ function GF:DidRosterStateChange()
 	local function visit(unit)
 		present[unit] = true
 		local guid = UnitGUID and UnitGUID(unit) or nil
-		if guids[unit] ~= guid then
+		if issecretvalue and issecretvalue(guid) then guid = nil end
+		local cachedGuid = guids[unit]
+		if issecretvalue and issecretvalue(cachedGuid) then
+			cachedGuid = nil
+			guids[unit] = nil
+		end
+		if cachedGuid ~= guid then
 			guids[unit] = guid
 			changed = true
 		end
@@ -6854,7 +6868,13 @@ function GF:RefreshChangedUnitButtons()
 		end
 
 		local guid = UnitGUID and UnitGUID(unit) or nil
-		if st._guid == guid and st._unitToken == unit and child.unit == unit then
+		if issecretvalue and issecretvalue(guid) then guid = nil end
+		local cachedGuid = st._guid
+		if issecretvalue and issecretvalue(cachedGuid) then
+			cachedGuid = nil
+			st._guid = nil
+		end
+		if cachedGuid == guid and st._unitToken == unit and child.unit == unit then
 			local cfg = child._eqolCfg or getCfg(child._eqolGroupKind or "party")
 			if st._classR == nil and GF:NeedsClassColor(child, st, cfg) then
 				GF:CacheUnitStatic(child)

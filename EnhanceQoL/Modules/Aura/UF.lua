@@ -762,6 +762,11 @@ local function syncTargetRangeFadeConfig(cfg, def)
 	st._rangeFadeBlockedByVisibility = blockedByVisibility
 	st._rangeFadeAlphaCfg = alpha
 	st._rangeFadeIgnoreUnlimited = ignoreUnlimited
+	if UFHelper and UFHelper.RangeFadeBuildSpellListForConfig then
+		st._rangeFadeSpellListCfg = UFHelper.RangeFadeBuildSpellListForConfig(rcfg, UFHelper.RangeFadeGetCurrentSpecId and UFHelper.RangeFadeGetCurrentSpecId() or nil)
+	else
+		st._rangeFadeSpellListCfg = nil
+	end
 end
 
 if UFHelper and UFHelper.RangeFadeRegister then
@@ -787,11 +792,16 @@ if UFHelper and UFHelper.RangeFadeRegister then
 			st._rangeFadeAlpha = targetAlpha
 			st.frame:SetAlpha(targetAlpha)
 		end
+	end, function()
+		local st = states[UNIT.TARGET]
+		if not st then return nil end
+		return st._rangeFadeSpellListCfg
 	end)
 end
 
 local function refreshRangeFadeSpells(rebuildSpellList)
 	if not UFHelper then return end
+	syncTargetRangeFadeConfig(ensureDB(UNIT.TARGET), defaultsFor(UNIT.TARGET))
 	if UFHelper.RangeFadeMarkConfigDirty then UFHelper.RangeFadeMarkConfigDirty() end
 	if rebuildSpellList and UFHelper.RangeFadeMarkSpellListDirty then UFHelper.RangeFadeMarkSpellListDirty() end
 	if UFHelper.RangeFadeUpdateSpells then UFHelper.RangeFadeUpdateSpells() end
@@ -1492,6 +1502,30 @@ function AuraUtil.removeAuraFromOrder(cache, auraInstanceID)
 	return idx
 end
 
+function AuraUtil.compactAuraOrderInPlace(order, indexById, auras)
+	if not (order and indexById and auras) then return false end
+	local write = 1
+	local changed = false
+	for read = 1, #order do
+		local auraId = order[read]
+		if auraId and auras[auraId] then
+			if write ~= read then
+				order[write] = auraId
+				changed = true
+			end
+			if indexById[auraId] ~= write then indexById[auraId] = write end
+			write = write + 1
+		else
+			if auraId and indexById[auraId] ~= nil then indexById[auraId] = nil end
+			changed = true
+		end
+	end
+	for i = write, #order do
+		order[i] = nil
+	end
+	return changed
+end
+
 function AuraUtil.updateAuraCacheFromEvent(cache, unit, updateInfo, opts)
 	if not (cache and unit and updateInfo) then return nil end
 	local auras = cache.auras
@@ -2068,8 +2102,15 @@ function AuraUtil.anchorAuraButton(btn, container, index, ac, perRow, primary, s
 	local xSign = horizontalDir == "RIGHT" and 1 or -1
 	local ySign = verticalDir == "UP" and 1 or -1
 	local basePoint = (ySign == 1 and "BOTTOM" or "TOP") .. (xSign == 1 and "LEFT" or "RIGHT")
+	local x = col * (ac.size + ac.padding) * xSign
+	local y = row * (ac.size + ac.padding) * ySign
+	if btn._eqolAuraAnchorContainer == container and btn._eqolAuraAnchorPoint == basePoint and btn._eqolAuraAnchorX == x and btn._eqolAuraAnchorY == y then return end
+	btn._eqolAuraAnchorContainer = container
+	btn._eqolAuraAnchorPoint = basePoint
+	btn._eqolAuraAnchorX = x
+	btn._eqolAuraAnchorY = y
 	btn:ClearAllPoints()
-	btn:SetPoint(basePoint, container, basePoint, col * (ac.size + ac.padding) * xSign, row * (ac.size + ac.padding) * ySign)
+	btn:SetPoint(basePoint, container, basePoint, x, y)
 end
 
 function AuraUtil.updateAuraContainerSize(container, shown, ac, perRow, primary)
@@ -2236,9 +2277,25 @@ function AuraUtil.updateTargetAuraIcons(startIndex, unit)
 	local buffSize = ac.size
 	local debuffSize = ac.debuffSize or buffSize
 	local padding = ac.padding or 0
-	local buffLayout = { size = buffSize, padding = padding, perRow = ac.perRow }
+	local buffLayout = st._auraBuffLayout
+	if not buffLayout then
+		buffLayout = {}
+		st._auraBuffLayout = buffLayout
+	end
+	buffLayout.size = buffSize
+	buffLayout.padding = padding
+	buffLayout.perRow = ac.perRow
 	local debuffLayout = buffLayout
-	if debuffSize ~= buffSize then debuffLayout = { size = debuffSize, padding = padding, perRow = ac.perRow } end
+	if debuffSize ~= buffSize then
+		debuffLayout = st._auraDebuffLayout
+		if not debuffLayout then
+			debuffLayout = {}
+			st._auraDebuffLayout = debuffLayout
+		end
+		debuffLayout.size = debuffSize
+		debuffLayout.padding = padding
+		debuffLayout.perRow = ac.perRow
+	end
 	local combinedLayout = buffLayout
 	if debuffSize > buffSize then combinedLayout = debuffLayout end
 	if showBuffs and not showDebuffs then combinedLayout = buffLayout end
@@ -2252,27 +2309,39 @@ function AuraUtil.updateTargetAuraIcons(startIndex, unit)
 		end
 		return aura.isHarmful == true
 	end
-	local removed
-	for i = #order, 1, -1 do
-		local auraId = order[i]
-		if not auraId or not auras[auraId] then
-			table.remove(order, i)
-			if auraId then indexById[auraId] = nil end
-			removed = true
-		end
+	AuraUtil.compactAuraOrderInPlace(order, indexById, auras)
+	local visibleIds = st._auraVisibleIds
+	if not visibleIds then
+		visibleIds = {}
+		st._auraVisibleIds = visibleIds
 	end
-	if removed then AuraUtil.reindexTargetAuraOrder(1, unit) end
-	local visible = {}
-	for _, auraId in ipairs(order) do
+	local visibleIsDebuff = st._auraVisibleIsDebuff
+	if not visibleIsDebuff then
+		visibleIsDebuff = {}
+		st._auraVisibleIsDebuff = visibleIsDebuff
+	end
+	local visibleCount = 0
+	for i = 1, #order do
+		local auraId = order[i]
 		local aura = auras[auraId]
 		if aura then
 			local isDebuff = isAuraDebuff(aura)
 			if (isDebuff and showDebuffs) or (not isDebuff and showBuffs) then
-				visible[#visible + 1] = { id = auraId, isDebuff = isDebuff }
-				if #visible >= ac.max then break end
+				visibleCount = visibleCount + 1
+				visibleIds[visibleCount] = auraId
+				visibleIsDebuff[visibleCount] = isDebuff == true
+				if visibleCount >= ac.max then break end
 			end
 		end
 	end
+	local oldVisibleCount = st._auraVisibleCount or 0
+	if oldVisibleCount > visibleCount then
+		for i = visibleCount + 1, oldVisibleCount do
+			visibleIds[i] = nil
+			visibleIsDebuff[i] = nil
+		end
+	end
+	st._auraVisibleCount = visibleCount
 
 	local width = (st.auraContainer and st.auraContainer:GetWidth()) or (st.barGroup and st.barGroup:GetWidth()) or (st.frame and st.frame:GetWidth()) or 0
 	local useSeparateDebuffs = ac.separateDebuffAnchor == true
@@ -2286,16 +2355,15 @@ function AuraUtil.updateTargetAuraIcons(startIndex, unit)
 	if not useSeparateDebuffs then
 		local icons = st.auraButtons or {}
 		st.auraButtons = icons
-		local shown = #visible
+		local shown = visibleCount
 		startIndex = startIndex or 1
 		if startIndex < 1 then startIndex = 1 end
 
 		for i = startIndex, shown do
-			local entry = visible[i]
-			local auraId = entry and entry.id
+			local auraId = visibleIds[i]
 			local aura = auraId and auras[auraId]
 			if aura then
-				local isDebuff = entry.isDebuff
+				local isDebuff = visibleIsDebuff[i] == true
 				local layout = isDebuff and debuffLayout or buffLayout
 				local btn
 				btn, st.auraButtons = AuraUtil.ensureAuraButton(st.auraContainer, st.auraButtons, i, layout)
@@ -2328,14 +2396,13 @@ function AuraUtil.updateTargetAuraIcons(startIndex, unit)
 	local debAnchor = ac.debuffAnchor or ac.anchor or "BOTTOM"
 	local debPrimary, debSecondary = auraLayout.resolveGrowth(ac, debAnchor, ac.debuffGrowth)
 	local perRowDebuff = auraLayout.calcPerRow(st, debuffLayout, width, debPrimary)
-	for i = 1, #visible do
+	for i = 1, visibleCount do
 		if shownTotal >= ac.max then break end
-		local entry = visible[i]
-		local auraId = entry and entry.id
+		local auraId = visibleIds[i]
 		local aura = auraId and auras[auraId]
 		if aura then
 			shownTotal = shownTotal + 1
-			if entry.isDebuff then
+			if visibleIsDebuff[i] == true then
 				debuffCount = debuffCount + 1
 				local btn
 				btn, debuffButtons = AuraUtil.ensureAuraButton(st.debuffContainer, debuffButtons, debuffCount, debuffLayout)
@@ -3763,7 +3830,12 @@ local function updateHealth(cfg, unit)
 	st.health:SetStatusBarColor(hr or 0, hg or 0.8, hb or 0, ha or 1)
 	if allowAbsorb and (st.absorb or st.healAbsorb) then
 		local cacheGuid = UnitGUID and UnitGUID(unit) or unit
-		if st._absorbCacheGuid ~= cacheGuid then
+		local guidComparable = not (issecretvalue and issecretvalue(cacheGuid))
+		if not guidComparable then
+			st._absorbCacheGuid = nil
+			st._absorbAmount = UnitGetTotalAbsorbs and UnitGetTotalAbsorbs(unit) or 0
+			st._healAbsorbAmount = UnitGetTotalHealAbsorbs and UnitGetTotalHealAbsorbs(unit) or 0
+		elseif st._absorbCacheGuid ~= cacheGuid then
 			st._absorbCacheGuid = cacheGuid
 			st._absorbAmount = UnitGetTotalAbsorbs and UnitGetTotalAbsorbs(unit) or 0
 			st._healAbsorbAmount = UnitGetTotalHealAbsorbs and UnitGetTotalHealAbsorbs(unit) or 0
@@ -6172,13 +6244,23 @@ local function onEvent(self, event, unit, ...)
 		if event == "UNIT_ABSORB_AMOUNT_CHANGED" and unit then
 			local st = states[unit]
 			if st then
-				st._absorbCacheGuid = UnitGUID and UnitGUID(unit) or unit
+				local guid = UnitGUID and UnitGUID(unit) or unit
+				if issecretvalue and issecretvalue(guid) then
+					st._absorbCacheGuid = nil
+				else
+					st._absorbCacheGuid = guid
+				end
 				st._absorbAmount = UnitGetTotalAbsorbs and UnitGetTotalAbsorbs(unit) or 0
 			end
 		elseif event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" and unit then
 			local st = states[unit]
 			if st then
-				st._absorbCacheGuid = UnitGUID and UnitGUID(unit) or unit
+				local guid = UnitGUID and UnitGUID(unit) or unit
+				if issecretvalue and issecretvalue(guid) then
+					st._absorbCacheGuid = nil
+				else
+					st._absorbCacheGuid = guid
+				end
 				st._healAbsorbAmount = UnitGetTotalHealAbsorbs and UnitGetTotalHealAbsorbs(unit) or 0
 			end
 		end
