@@ -5,6 +5,7 @@
 ### 🐛 Fixed
 
 - Unit Frames: Border settings not working
+- Unit Frames: Removed raid-style party leader icon hooks (`showLeaderIconRaidFrame`) to prevent taint involving `secureexecuterange`.
 
 ---
 
