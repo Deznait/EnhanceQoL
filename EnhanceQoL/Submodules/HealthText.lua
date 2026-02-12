@@ -59,17 +59,17 @@ local function fmt(mode, cur, max, unit)
 	cur = cur or 0
 	max = max or 0
 	if mode == "PERCENT" then
-		return string.format("%s%%", AbbreviateNumbers(healthPercent(unit, cur, max)))
+		return string.format("%s%%", AbbreviateLargeNumbers(healthPercent(unit, cur, max)))
 	elseif mode == "ABS" then
 		return AbbreviateNumbers(cur)
 	elseif mode == "BOTH" then
 		local pct = healthPercent(unit, cur, max)
-		return string.format("%s%% (%s)", AbbreviateNumbers(pct), AbbreviateNumbers(cur))
+		return string.format("%s%% (%s)", AbbreviateLargeNumbers(pct), AbbreviateNumbers(cur))
 	elseif mode == "CURMAX" then
 		return string.format("%s / %s", AbbreviateNumbers(cur), AbbreviateNumbers(max))
 	elseif mode == "CURMAXPERCENT" then
 		local pct = healthPercent(unit, cur, max)
-		return string.format("%s / %s (%s%%)", AbbreviateNumbers(cur), AbbreviateNumbers(max), AbbreviateNumbers(pct))
+		return string.format("%s / %s (%s%%)", AbbreviateNumbers(cur), AbbreviateNumbers(max), AbbreviateLargeNumbers(pct))
 	else
 		return ""
 	end
@@ -198,17 +198,25 @@ local function ensureBarHook(hb, ctx)
 end
 
 function HealthText:HookBars()
-	-- Player
-	local hb = getPlayerHB()
-	if hb then ensureBarHook(hb, { kind = "player" }) end
-	-- Target
-	hb = getTargetHB()
-	if hb then ensureBarHook(hb, { kind = "target" }) end
-	-- Bosses
-	local n = _G.MAX_BOSS_FRAMES or 5
-	for i = 1, n do
-		hb = getBossHB(i)
-		if hb then ensureBarHook(hb, { kind = "boss", idx = i }) end
+	local hb
+
+	-- Only hook bars for modes that are actively controlled by this module.
+	if shouldApply("player") then
+		hb = getPlayerHB()
+		if hb then ensureBarHook(hb, { kind = "player" }) end
+	end
+
+	if shouldApply("target") then
+		hb = getTargetHB()
+		if hb then ensureBarHook(hb, { kind = "target" }) end
+	end
+
+	if shouldApply("boss") then
+		local n = _G.MAX_BOSS_FRAMES or 5
+		for i = 1, n do
+			hb = getBossHB(i)
+			if hb then ensureBarHook(hb, { kind = "boss", idx = i }) end
+		end
 	end
 
 	-- Post-hook: ensure our text after default updates for any TargetFrameHealthBarMixin
@@ -246,6 +254,7 @@ local function anyEnabled()
 	for _, v in pairs(HealthText.modes) do
 		if v and v ~= "OFF" then return true end
 	end
+	return false
 end
 
 local function updateEventRegistration()
@@ -269,10 +278,17 @@ end
 
 function HealthText:SetMode(kind, mode)
 	if not kind then return end
-	self.modes[kind] = mode or "OFF"
+	local previousMode = self.modes[kind] or "OFF"
+	local nextMode = mode or "OFF"
+	self.modes[kind] = nextMode
 	updateEventRegistration()
-	self:HookBars()
+	if anyEnabled() then self:HookBars() end
 	self:UpdateAll()
+	if nextMode == "OFF" and previousMode ~= "OFF" then
+		addon.variables = addon.variables or {}
+		addon.variables.requireReload = true
+		if addon.functions and addon.functions.checkReloadFrame then addon.functions.checkReloadFrame() end
+	end
 end
 
 -- No explicit CVar override controls: OFF = respect Blizzard; others = override
@@ -318,8 +334,10 @@ local function initFromDB()
 	end
 
 	updateEventRegistration()
-	HealthText:HookBars()
-	HealthText:UpdateAll()
+	if anyEnabled() then
+		HealthText:HookBars()
+		HealthText:UpdateAll()
+	end
 end
 
 initFromDB()
