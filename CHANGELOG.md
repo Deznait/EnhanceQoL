@@ -1,5 +1,13 @@
 # Changelog
 
+## [7.12.1] - 2026-02-12
+
+### 🐛 Fixed
+
+- Unit Frames: Border settings not working
+
+---
+
 ## [7.12.0] - 2026-02-11
 
 ### ✨ Added
