@@ -1,5 +1,17 @@
 # Changelog
 
+## [7.14.0] - 2026-02-13
+
+### ✨ Added
+
+- Resource Bars: Added a new text option `Hide percent (%)` for percentage display across health/power/resource bars.
+
+### 🐛 Fixed
+
+- CVar persistence: Removed forced persistence handling for `raidFramesDisplayClassColor` and `pvpFramesDisplayClassColor` to avoid UI update errors while Blizzard unit/nameplate frames refresh.
+
+---
+
 ## [7.13.2] - 2026-02-13
 
 ### 🐛 Fixed
