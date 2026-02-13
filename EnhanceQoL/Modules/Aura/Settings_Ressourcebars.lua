@@ -2766,7 +2766,8 @@ local function registerEditModeBars()
 	end
 
 	registerBar("HEALTH", "EQOLHealthBar", "HEALTH", ResourceBars.DEFAULT_HEALTH_WIDTH, ResourceBars.DEFAULT_HEALTH_HEIGHT)
-	for _, pType in ipairs(ResourceBars.classPowerTypes or {}) do
+	local classTypes = (ResourceBars.GetClassPowerTypes and ResourceBars.GetClassPowerTypes(addon.variables.unitClass)) or ResourceBars.classPowerTypes or {}
+	for _, pType in ipairs(classTypes) do
 		local frameName = "EQOL" .. pType .. "Bar"
 		registerBar(pType, frameName, pType, ResourceBars.DEFAULT_POWER_WIDTH, ResourceBars.DEFAULT_POWER_HEIGHT)
 	end

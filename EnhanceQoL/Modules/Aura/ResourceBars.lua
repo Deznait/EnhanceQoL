@@ -679,6 +679,35 @@ local function getSpecInfo(specIndex)
 	return powertypeClasses[class] and powertypeClasses[class][spec]
 end
 
+function ResourceBars.IsSpecBarTypeSupported(specInfo, barType)
+	if barType == "HEALTH" then return true end
+	if not specInfo then return true end
+	return specInfo.MAIN == barType or specInfo[barType] == true
+end
+
+function ResourceBars.IsBarTypeSupportedForClass(barType, classTag, specIndex)
+	if barType == "HEALTH" then return true end
+	local class = classTag or addon.variables.unitClass
+	if not class or not powertypeClasses or not powertypeClasses[class] then return false end
+	local classTbl = powertypeClasses[class]
+	local spec = specIndex or addon.variables.unitSpec
+	if spec and classTbl[spec] then return ResourceBars.IsSpecBarTypeSupported(classTbl[spec], barType) end
+	for _, specInfo in pairs(classTbl) do
+		if type(specInfo) == "table" and ResourceBars.IsSpecBarTypeSupported(specInfo, barType) then return true end
+	end
+	return false
+end
+
+function ResourceBars.GetClassPowerTypes(classTag)
+	local class = classTag or addon.variables.unitClass
+	local list = {}
+	if not class then return list end
+	for _, pType in ipairs(classPowerTypes or {}) do
+		if ResourceBars.IsBarTypeSupportedForClass(pType, class, nil) then list[#list + 1] = pType end
+	end
+	return list
+end
+
 local function specSecondaries(specInfo)
 	local list = {}
 	if not specInfo then return list end
@@ -2572,6 +2601,8 @@ function getBarSettings(pType)
 	local class = addon.variables.unitClass
 	local spec = addon.variables.unitSpec
 	local specInfo = getSpecInfo(spec)
+	if class and not ResourceBars.IsBarTypeSupportedForClass(pType, class, spec) then return nil end
+	if not ResourceBars.IsSpecBarTypeSupported(specInfo, pType) then return nil end
 	if addon.db.personalResourceBarSettings and addon.db.personalResourceBarSettings[class] and addon.db.personalResourceBarSettings[class][spec] then
 		local cfg = addon.db.personalResourceBarSettings[class][spec][pType]
 		if cfg then

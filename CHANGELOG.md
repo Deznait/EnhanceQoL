@@ -1,6 +1,6 @@
 # Changelog
 
-## [7.14.1] - 2026-02-13
+## [7.15.0] - 2026-02-13
 
 ### 🐛 Fixed
 
@@ -8,6 +8,7 @@
 - Resource Bars: New class/spec bars now keep the position and size from your saved global profile.
 - Resource Bars: Edit Mode layouts are now separated by class, so switching classes/profiles no longer mixes bar positions and sizes.
 - Resource Bars: Removed legacy layout fallback to prevent old shared layout data from overriding current class-specific settings.
+- Action Bars: Added `Always hidden` to action bar visibility rules (including Stance Bar) and fixed Pet Action Bar/Stance Bar visibility resolution so both bars are reliably affected by visibility settings.
 
 ---
 
