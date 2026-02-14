@@ -1,5 +1,13 @@
 # Changelog
 
+## [7.15.4] - 2026-02-14
+
+### 🐛 Fixed
+
+- Cooldown Panels: Anchors to other Cooldown Panels now resolve reliably after reload/login.
+
+---
+
 ## [7.15.3] - 2026-02-14
 
 ### 🐛 Fixed

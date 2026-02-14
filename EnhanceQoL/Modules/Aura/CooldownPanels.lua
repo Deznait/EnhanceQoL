@@ -4944,11 +4944,28 @@ function CooldownPanels:RefreshAllPanels()
 		end
 	end
 	syncRootOrderIfDirty(root)
+	local panelIds = {}
+	local seen = {}
 	for _, panelId in ipairs(root.order) do
-		self:RefreshPanel(panelId)
+		if root.panels[panelId] and not seen[panelId] then
+			seen[panelId] = true
+			panelIds[#panelIds + 1] = panelId
+		end
 	end
 	for panelId in pairs(root.panels) do
-		if not containsId(root.order, panelId) then self:RefreshPanel(panelId) end
+		if not seen[panelId] then
+			seen[panelId] = true
+			panelIds[#panelIds + 1] = panelId
+		end
+	end
+	for _, panelId in ipairs(panelIds) do
+		self:EnsurePanelFrame(panelId)
+	end
+	for _, panelId in ipairs(panelIds) do
+		self:ApplyPanelPosition(panelId)
+	end
+	for _, panelId in ipairs(panelIds) do
+		self:RefreshPanel(panelId)
 	end
 	self:UpdateCursorAnchorState()
 end
