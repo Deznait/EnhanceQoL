@@ -304,7 +304,7 @@ local function onInspect(arg1)
 
 		pdElement.ilvl = pdElement:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
 		pdElement.ilvl:SetPoint("TOPRIGHT", pdElement.ilvlBackground, "TOPRIGHT", -1, -1) -- Position des Textes im Zentrum des Hintergrunds
-		pdElement.ilvl:SetFont(addon.variables.defaultFont, 16, "OUTLINE") -- Setzt die Schriftart, -größe und -stil (OUTLINE)
+		pdElement.ilvl:SetFont(addon.db["inspectframeDisplayFont"], 16, "OUTLINE") -- Setzt die Schriftart, -größe und -stil (OUTLINE)
 
 		if C_PaperDollInfo and C_PaperDollInfo.GetInspectItemLevel then
 			local ilvl = C_PaperDollInfo.GetInspectItemLevel(unit)
@@ -400,13 +400,20 @@ local function onInspect(arg1)
 								end
 							end
 
-							if InspectOpt("ilvl") then
-								if not element.ilvlBackground then
-									element.ilvlBackground = element:CreateTexture(nil, "BACKGROUND")
-									element.ilvlBackground:SetColorTexture(0, 0, 0, 0.8) -- Schwarzer Hintergrund mit 80% Transparenz
-									element.ilvl = element:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
-									element.ilvl:SetFont(addon.variables.defaultFont, 14, "OUTLINE") -- Setzt die Schriftart, -größe und -stil (OUTLINE)
-								end
+						if InspectOpt("ilvl") then
+							local double = false
+							if key == 16 then
+								local offhandLink = GetInventoryItemLink(unit, 17)
+								local _, _, _, itemEquipLoc = C_Item.GetItemInfoInstant(itemLink)
+								if not offhandLink and twoHandLocs[itemEquipLoc] then double = true end
+							end
+							itemCount = itemCount + (double and 2 or 1)
+							if not element.ilvlBackground then
+								element.ilvlBackground = element:CreateTexture(nil, "BACKGROUND")
+								element.ilvlBackground:SetColorTexture(0, 0, 0, 0.8) -- Schwarzer Hintergrund mit 80% Transparenz
+								element.ilvl = element:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+								element.ilvl:SetFont(addon.db["inspectframeDisplayFont"], 14, "OUTLINE") -- Setzt die Schriftart, -größe und -stil (OUTLINE)
+							end
 
 								applyCharIlvlPosition(element)
 								element.ilvlBackground:SetSize(30, 16) -- Größe des Hintergrunds (muss ggf. angepasst werden)
@@ -426,38 +433,38 @@ local function onInspect(arg1)
 								element.ilvl:SetFormattedText(itemLevelText)
 								element.ilvl:SetTextColor(color.r, color.g, color.b, 1)
 
-								local textWidth = element.ilvl:GetStringWidth()
-								element.ilvlBackground:SetSize(textWidth + 6, element.ilvl:GetStringHeight() + 4) -- Mehr Padding für bessere Lesbarkeit
-							end
-							if InspectOpt("enchants") then
-								if not element.enchant then
-									element.enchant = element:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
-									if addon.variables.itemSlotSide[key] == 0 then
-										element.enchant:SetPoint("BOTTOMLEFT", element, "BOTTOMRIGHT", 2, 1)
-									elseif addon.variables.itemSlotSide[key] == 2 then
-										element.enchant:SetPoint("TOPLEFT", element, "TOPRIGHT", 2, -1)
-									else
-										element.enchant:SetPoint("BOTTOMRIGHT", element, "BOTTOMLEFT", -2, 1)
-									end
-									if addon.variables.shouldEnchanted[key] or addon.variables.shouldEnchantedChecks[key] then
-										element.borderGradient = element:CreateTexture(nil, "ARTWORK")
-										element.borderGradient:SetPoint("TOPLEFT", element, "TOPLEFT", -2, 2)
-										element.borderGradient:SetPoint("BOTTOMRIGHT", element, "BOTTOMRIGHT", 2, -2)
-										applyMissingEnchantOverlayStyle(element.borderGradient)
-										element.borderGradient:Hide()
-									end
-									element.enchant:SetFont(addon.variables.defaultFont, 12, "OUTLINE")
+							local textWidth = element.ilvl:GetStringWidth()
+							element.ilvlBackground:SetSize(textWidth + 6, element.ilvl:GetStringHeight() + 4) -- Mehr Padding für bessere Lesbarkeit
+						end
+						if InspectOpt("enchants") then
+							if not element.enchant then
+								element.enchant = element:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+								if addon.variables.itemSlotSide[key] == 0 then
+									element.enchant:SetPoint("BOTTOMLEFT", element, "BOTTOMRIGHT", 2, 1)
+								elseif addon.variables.itemSlotSide[key] == 2 then
+									element.enchant:SetPoint("TOPLEFT", element, "TOPRIGHT", 2, -1)
+								else
+									element.enchant:SetPoint("BOTTOMRIGHT", element, "BOTTOMLEFT", -2, 1)
 								end
-								if element.borderGradient then
-									applyMissingEnchantOverlayStyle(element.borderGradient)
+								if addon.variables.shouldEnchanted[key] or addon.variables.shouldEnchantedChecks[key] then
+									element.borderGradient = element:CreateTexture(nil, "ARTWORK")
+									element.borderGradient:SetPoint("TOPLEFT", element, "TOPLEFT", -2, 2)
+									element.borderGradient:SetPoint("BOTTOMRIGHT", element, "BOTTOMRIGHT", 2, -2)
+									element.borderGradient:SetColorTexture(1, 0, 0, 0.6) -- Grundfarbe Rot
+									element.borderGradient:SetGradient("VERTICAL", CreateColor(1, 0, 0, 1), CreateColor(1, 0.3, 0.3, 0.5))
 									element.borderGradient:Hide()
-									local showMissingOverlay = addon.db["showMissingEnchantOverlayOnCharframe"] ~= false
-									local enchantText = getTooltipInfoFromLink(itemLink)
-									local foundEnchant = enchantText ~= nil
-									if foundEnchant then
-										element.enchant:SetFormattedText(enchantText)
-										if element.borderGradient then element.borderGradient:Hide() end
-									end
+								end
+								element.enchant:SetFont(addon.db["inspectframeDisplayFont"], 12, "OUTLINE")
+							end
+							if element.borderGradient then
+								element.borderGradient:Hide()
+								local showMissingOverlay = addon.db["showMissingEnchantOverlayOnCharframe"] ~= false
+								local enchantText = getTooltipInfoFromLink(itemLink)
+								local foundEnchant = enchantText ~= nil
+								if foundEnchant then
+									element.enchant:SetFormattedText(enchantText)
+									if element.borderGradient then element.borderGradient:Hide() end
+								end
 
 									if not foundEnchant and UnitLevel(inspectUnit) == addon.variables.maxLevel then
 										element.enchant:SetText("")
@@ -620,6 +627,7 @@ local function setIlvlText(element, slot)
 
 					applyCharIlvlPosition(element)
 
+					element.ilvl:SetFont(addon.db["charframeDisplayFont"] or addon.variables.defaultFont, 14, "OUTLINE")
 					element.ilvl:SetFormattedText(itemLevelText)
 					element.ilvl:SetTextColor(color.r, color.g, color.b, 1)
 
@@ -643,6 +651,7 @@ local function setIlvlText(element, slot)
 							nil == addon.variables.shouldEnchantedChecks[slot]
 							or (nil ~= addon.variables.shouldEnchantedChecks[slot] and addon.variables.shouldEnchantedChecks[slot].func(eItem:GetCurrentItemLevel()))
 						then
+							element.enchant:SetFont(addon.db["charframeDisplayFont"], 12, "OUTLINE")
 							if slot == 17 then
 								local _, _, _, _, _, _, _, _, itemEquipLoc = C_Item.GetItemInfoInstant(link)
 								if addon.variables.allowedEnchantTypesForOffhand[itemEquipLoc] then
@@ -717,6 +726,7 @@ local function calculateDurability()
 	local durValue = currentDura / maxDur * 100
 
 	addon.variables.durabilityCount = tonumber(string.format("%." .. 0 .. "f", durValue)) .. "%"
+	addon.general.durabilityIconFrame.count:SetFont(addon.db["charframeDisplayFont"], 12, "OUTLINE")
 	addon.general.durabilityIconFrame.count:SetText(addon.variables.durabilityCount)
 
 	if tonumber(string.format("%." .. 0 .. "f", durValue)) > 80 then
@@ -763,6 +773,7 @@ local function setCharFrame()
 	if not addon.general.iconFrame then addon.functions.catalystChecks() end
 	if addon.db["showCatalystChargesOnCharframe"] and addon.variables.catalystID and addon.general.iconFrame and not addon.functions.IsTimerunner() then
 		local cataclystInfo = C_CurrencyInfo.GetCurrencyInfo(addon.variables.catalystID)
+		addon.general.iconFrame.count:SetFont(addon.db["charframeDisplayFont"], 14, "OUTLINE")
 		addon.general.iconFrame.count:SetText(cataclystInfo.quantity)
 	end
 	if addon.db["showDurabilityOnCharframe"] and not addon.functions.IsTimerunner() then calculateDurability() end
@@ -790,7 +801,7 @@ function addon.functions.createCatalystFrame()
 
 			addon.general.iconFrame.count = addon.general.iconFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
 			addon.general.iconFrame.count:SetPoint("BOTTOMRIGHT", addon.general.iconFrame, "BOTTOMRIGHT", 1, 2)
-			addon.general.iconFrame.count:SetFont(addon.variables.defaultFont, 14, "OUTLINE")
+			addon.general.iconFrame.count:SetFont(addon.db["charframeDisplayFont"], 14, "OUTLINE")
 			addon.general.iconFrame.count:SetText(cataclystInfo.quantity)
 			addon.general.iconFrame.count:SetTextColor(1, 0.82, 0)
 			if addon.db["showCatalystChargesOnCharframe"] == false then addon.general.iconFrame:Hide() end
@@ -1515,6 +1526,8 @@ function addon.functions.initItemInventory()
 	addon.functions.InitDBValue("bagIlvlPosition", "TOPRIGHT")
 	addon.functions.InitDBValue("bagUpgradeIconPosition", "BOTTOMRIGHT")
 	addon.functions.InitDBValue("charIlvlPosition", "TOPRIGHT")
+	addon.functions.InitDBValue("charframeDisplayFont", addon.variables.defaultFont)
+	addon.functions.InitDBValue("inspectframeDisplayFont", addon.variables.defaultFont)
 	addon.functions.InitDBValue("fadeBagQualityIcons", false)
 	addon.functions.InitDBValue("enhancedRarityGlow", false)
 	addon.functions.InitDBValue("showGemsOnCharframe", false)
@@ -1587,7 +1600,7 @@ function addon.functions.initItemInventory()
 
 	addon.general.durabilityIconFrame.count = addon.general.durabilityIconFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
 	addon.general.durabilityIconFrame.count:SetPoint("BOTTOMRIGHT", addon.general.durabilityIconFrame, "BOTTOMRIGHT", 1, 2)
-	addon.general.durabilityIconFrame.count:SetFont(addon.variables.defaultFont, 12, "OUTLINE")
+	addon.general.durabilityIconFrame.count:SetFont(addon.db["charframeDisplayFont"], 12, "OUTLINE")
 
 	if addon.db["showDurabilityOnCharframe"] == false or (addon.functions and addon.functions.IsTimerunner and addon.functions.IsTimerunner()) then addon.general.durabilityIconFrame:Hide() end
 
@@ -1609,7 +1622,7 @@ function addon.functions.initItemInventory()
 		-- Text für das Item-Level
 		value.ilvl = value:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
 		value.ilvl:SetPoint("TOPRIGHT", value.ilvlBackground, "TOPRIGHT", -1, -2) -- Position des Textes im Zentrum des Hintergrunds
-		value.ilvl:SetFont(addon.variables.defaultFont, 14, "OUTLINE") -- Setzt die Schriftart, -größe und -stil (OUTLINE)
+		value.ilvl:SetFont(addon.db["charframeDisplayFont"], 14, "OUTLINE") -- Setzt die Schriftart, -größe und -stil (OUTLINE)
 
 		value.enchant = value:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
 		if addon.variables.itemSlotSide[key] == 0 then
@@ -1619,7 +1632,7 @@ function addon.functions.initItemInventory()
 		else
 			value.enchant:SetPoint("BOTTOMRIGHT", value, "BOTTOMLEFT", -2, 1)
 		end
-		value.enchant:SetFont(addon.variables.defaultFont, 12, "OUTLINE")
+		value.enchant:SetFont(addon.db["charframeDisplayFont"], 12, "OUTLINE")
 
 		value.gems = {}
 		for i = 1, 3 do
