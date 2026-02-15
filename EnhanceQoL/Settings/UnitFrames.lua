@@ -148,19 +148,6 @@ addon.functions.SettingsCreateHeadline(cUnitFrame, (L["UnitFrameUFExplain"]:form
 
 data = {
 	{
-		var = "showLeaderIconRaidFrame",
-		text = L["showLeaderIconRaidFrame"],
-		func = function(v)
-			addon.db["showLeaderIconRaidFrame"] = v
-			if v then
-				addon.functions.setLeaderIcon()
-			else
-				addon.functions.removeLeaderIcon()
-			end
-		end,
-		parentSection = expandable,
-	},
-	{
 		var = "raidFramesDisplayClassColor",
 		text = L["raidFramesDisplayClassColor"],
 		get = function() return getCVarOptionState("raidFramesDisplayClassColor") end,
@@ -193,38 +180,6 @@ data = {
 			if addon.functions.ApplyRestingVisuals then addon.functions.ApplyRestingVisuals() end
 		end,
 		parentSection = expandable,
-	},
-	{
-		var = "unitFrameTruncateNames",
-		text = L["unitFrameTruncateNames"],
-		func = function(v)
-			addon.db["unitFrameTruncateNames"] = v
-			addon.functions.updateUnitFrameNames()
-		end,
-		parentSection = expandable,
-		children = {
-			{
-				var = "unitFrameMaxNameLength",
-				text = L["unitFrameMaxNameLength"],
-				get = function() return addon.db and addon.db.unitFrameMaxNameLength or 6 end,
-				set = function(val)
-					addon.db["unitFrameMaxNameLength"] = val
-					addon.functions.updateUnitFrameNames()
-				end,
-				min = 1,
-				max = 20,
-				step = 1,
-				default = 6,
-				sType = "slider",
-				parent = true,
-				parentCheck = function()
-					return addon.SettingsLayout.elements["unitFrameTruncateNames"]
-						and addon.SettingsLayout.elements["unitFrameTruncateNames"].setting
-						and addon.SettingsLayout.elements["unitFrameTruncateNames"].setting:GetValue() == true
-				end,
-				parentSection = expandable,
-			},
-		},
 	},
 	{
 		var = "unitFrameScaleEnabled",

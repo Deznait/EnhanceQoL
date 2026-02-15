@@ -281,6 +281,13 @@ end
 local function resolveFrameByName(name)
 	if type(name) ~= "string" or name == "" then return nil end
 	local obj = _G[name]
+	if not obj then
+		if name == "PetActionBar" then
+			obj = _G.PetActionBarFrame
+		elseif name == "StanceBar" then
+			obj = _G.StanceBarFrame
+		end
+	end
 	if not obj or type(obj) ~= "table" then return nil end
 	if obj.IsForbidden and obj:IsForbidden() then return nil end
 	if obj.IsObjectType and not obj:IsObjectType("Frame") then return nil end
@@ -330,9 +337,7 @@ local function ensureMouseoverWatcher(runtime)
 		for _, entry in ipairs(state.mouseoverStates or {}) do
 			local frame = entry and entry.frame
 			local over = false
-			if frame and frame.IsShown and frame:IsShown() then
-				over = MouseIsOver and MouseIsOver(frame) or false
-			end
+			if frame and frame.IsShown and frame:IsShown() then over = MouseIsOver and MouseIsOver(frame) or false end
 			if over ~= entry.isMouseOver then
 				entry.isMouseOver = over
 				changed = true
@@ -449,7 +454,12 @@ local function ensureSkyridingDriver()
 	driver:SetScript("OnShow", function() update(true) end)
 	driver:SetScript("OnHide", function() update(false) end)
 
-	local expr = "[advflyable, mounted] show; [advflyable, stance:3] show; hide"
+	local expr
+	if addon.variables.unitClass == "DRUID" then
+		expr = "[advflyable, mounted] show; [advflyable, stance:3] show; hide"
+	else
+		expr = "[advflyable, mounted] show; hide"
+	end
 	local function registerDriver()
 		if runtime.skyridingDriverRegistered then return end
 		if RegisterStateDriver then
@@ -760,9 +770,7 @@ local function getSortedRuleDefinitions()
 	table.sort(defs, function(a, b)
 		local la = (a.label or a.key or ""):lower()
 		local lb = (b.label or b.key or ""):lower()
-		if la == lb then
-			return (a.key or "") < (b.key or "")
-		end
+		if la == lb then return (a.key or "") < (b.key or "") end
 		return la < lb
 	end)
 	return defs

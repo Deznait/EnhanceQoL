@@ -94,6 +94,8 @@ local MANAGER_TOGGLE_PANEL_PADDING = 12
 local MANAGER_TOGGLE_CATEGORY_SPACING = 8
 local MANAGER_TOGGLE_SECTION_SPACING = 4
 local MANAGER_TOGGLE_COLUMN_SPACING = 12
+local MANAGER_TOGGLE_EXPANDER_HEIGHT = 24
+local MANAGER_TOGGLE_EXPANDER_SPACING = 2
 local DEFAULT_MANAGER_TOGGLE_CATEGORY_ID = "_default"
 local DEFAULT_MANAGER_TOGGLE_CATEGORY_LABEL = "Other"
 
@@ -279,6 +281,7 @@ Internal.managerExtraFrames = Internal.managerExtraFrames
 	}
 Internal.managerHiddenFrames = Internal.managerHiddenFrames or {}
 Internal.managerToggleMaxHeight = Internal.managerToggleMaxHeight or DEFAULT_MANAGER_TOGGLE_MAX_HEIGHT
+Internal.managerToggleExpanded = Internal.managerToggleExpanded ~= false
 Internal.managerEyeLocales = Internal.managerEyeLocales
 	or {
 		enUS = {
@@ -381,6 +384,8 @@ local select = _G.select
 local next = _G.next
 local table = _G.table
 local UIErrorsFrame = _G.UIErrorsFrame
+local HUD_EDIT_MODE_COLLAPSE_OPTIONS = _G.HUD_EDIT_MODE_COLLAPSE_OPTIONS
+local HUD_EDIT_MODE_EXPAND_OPTIONS = _G.HUD_EDIT_MODE_EXPAND_OPTIONS
 
 local C_EditMode = _G.C_EditMode
 local C_EditMode_GetLayouts = C_EditMode and C_EditMode.GetLayouts
@@ -388,19 +393,50 @@ local C_EditMode_ConvertLayoutInfoToString = C_EditMode and C_EditMode.ConvertLa
 local C_SpecializationInfo = _G.C_SpecializationInfo
 local GetSpecialization = C_SpecializationInfo and C_SpecializationInfo.GetSpecialization
 
--- layout names are lazily resolved so we do not need early API availability
+-- layout names are lazily resolved and cached to avoid repeated C_EditMode.GetLayouts calls.
 local layoutNames = lib.layoutNames
 	or setmetatable({ _G.LAYOUT_STYLE_MODERN or "Modern", _G.LAYOUT_STYLE_CLASSIC or "Classic" }, {
 		__index = function(t, key)
-			if key <= 2 then return rawget(t, key) end
+			if type(key) ~= "number" or key <= 2 then return rawget(t, key) end
+			local idx = key - 2
+			local snapshot = State.layoutSnapshot or Internal.layoutNameSnapshot
+			local cached = snapshot and snapshot[idx]
+			if cached and cached ~= "" then
+				rawset(t, key, cached)
+				return cached
+			end
 			local layouts = C_EditMode_GetLayouts and C_EditMode_GetLayouts()
 			layouts = layouts and layouts.layouts
 			if not layouts then return nil end
-			local idx = key - 2
-			return layouts[idx] and layouts[idx].layoutName
+			local name = layouts[idx] and layouts[idx].layoutName
+			if name and name ~= "" then rawset(t, key, name) end
+			return name
 		end,
 	})
 lib.layoutNames = layoutNames
+
+local function syncLayoutNameCache(snapshot)
+	snapshot = snapshot or {}
+	for key in pairs(layoutNames) do
+		if type(key) == "number" and key > 2 then
+			local idx = key - 2
+			local name = snapshot[idx]
+			if name and name ~= "" then
+				rawset(layoutNames, key, name)
+			else
+				rawset(layoutNames, key, nil)
+			end
+		end
+	end
+	for idx, name in ipairs(snapshot) do
+		local uiIndex = idx + 2
+		if name and name ~= "" then
+			rawset(layoutNames, uiIndex, name)
+		else
+			rawset(layoutNames, uiIndex, nil)
+		end
+	end
+end
 
 -- Setting types: we keep Blizzard enums but extend for custom widgets
 lib.SettingType = lib.SettingType or CopyTable(Enum.EditModeSettingDisplayType)
@@ -981,6 +1017,10 @@ end
 local function updateManagerEyeButton()
 	local button = Internal.managerEyeButton
 	if not button then return end
+	if not lib.isEditing then
+		button:Hide()
+		return
+	end
 	local allHidden, hasSelections = areAllOverlayTogglesHidden()
 	button:SetShown(hasSelections)
 	if not hasSelections then return end
@@ -1213,6 +1253,11 @@ local function createManagerToggleButton(parent)
 	return button
 end
 
+local function getManagerToggleExpanderLabel(expanded)
+	if expanded then return HUD_EDIT_MODE_COLLAPSE_OPTIONS or "Collapse options" end
+	return HUD_EDIT_MODE_EXPAND_OPTIONS or "Expand options"
+end
+
 local function ensureManagerTogglePanel()
 	if Internal.managerTogglePanel or not EditModeManagerFrame then return Internal.managerTogglePanel end
 
@@ -1234,29 +1279,61 @@ local function ensureManagerTogglePanel()
 	scroll:SetHeight(1)
 	scroll:EnableMouseWheel(true)
 	if scroll.ScrollBar and scroll.ScrollBar.SetHideIfUnscrollable then scroll.ScrollBar:SetHideIfUnscrollable(true) end
+	FixScrollBarInside(scroll)
 
 	local list = CreateFrame("Frame", nil, scroll, "VerticalLayoutFrame")
 	list:SetWidth(1)
 	list.spacing = MANAGER_TOGGLE_CATEGORY_SPACING
 	scroll:SetScrollChild(list)
 
+	local expander = CreateFrame("Frame", nil, panel, "ResizeLayoutFrame")
+	expander.ignoreInLayout = true
+	expander:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", MANAGER_TOGGLE_PANEL_PADDING, MANAGER_TOGGLE_PANEL_PADDING)
+	expander:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -MANAGER_TOGGLE_PANEL_PADDING, MANAGER_TOGGLE_PANEL_PADDING)
+	expander:SetHeight(MANAGER_TOGGLE_EXPANDER_HEIGHT)
+	expander:EnableMouse(true)
+
+	local divider = expander:CreateTexture(nil, "ARTWORK")
+	divider:SetTexture([[Interface\FriendsFrame\UI-FriendsFrame-OnlineDivider]])
+	divider:SetPoint("TOPLEFT", expander, "TOPLEFT", 0, 0)
+	divider:SetPoint("TOPRIGHT", expander, "TOPRIGHT", 0, 0)
+	divider:SetHeight(16)
+	expander.Divider = divider
+
+	local label = expander:CreateFontString(nil, "ARTWORK", "GameFontHighlightMedium")
+	label:SetPoint("TOP", divider, "BOTTOM", 0, 4)
+	expander.Label = label
+
+	expander:SetScript("OnMouseUp", function() panel:ToggleExpandedState() end)
+
 	panel.Scroll = scroll
 	panel.List = list
+	panel.Expander = expander
 	panel.padding = MANAGER_TOGGLE_PANEL_PADDING
 	panel.maxHeight = Internal.managerToggleMaxHeight or DEFAULT_MANAGER_TOGGLE_MAX_HEIGHT
+	panel.expanderHeight = MANAGER_TOGGLE_EXPANDER_HEIGHT
+	panel.expanderSpacing = MANAGER_TOGGLE_EXPANDER_SPACING
+	panel.expanded = Internal.managerToggleExpanded ~= false
 
 	function panel:ApplyScrollLimit()
-		if list.Layout then list:Layout() end
-
-		local contentHeight = list:GetHeight() or 1
-		local targetHeight = contentHeight
+		local isExpanded = self.expanded ~= false
+		scroll:SetShown(isExpanded)
+		local targetHeight = 0
 		local needsScroll = false
-		local maxHeight = self.maxHeight
-		if maxHeight and contentHeight > maxHeight then
-			targetHeight = maxHeight
-			needsScroll = true
+
+		if isExpanded then
+			if scroll.UpdateScrollChildRect then scroll:UpdateScrollChildRect() end
+			if list.Layout then list:Layout() end
+
+			local contentHeight = list:GetHeight() or 1
+			targetHeight = contentHeight
+			local maxHeight = self.maxHeight
+			if maxHeight and contentHeight > maxHeight then
+				targetHeight = maxHeight
+				needsScroll = true
+			end
+			if targetHeight < 1 then targetHeight = 1 end
 		end
-		if targetHeight < 1 then targetHeight = 1 end
 
 		if scroll._eqolLastHeight ~= targetHeight then
 			scroll._eqolLastHeight = targetHeight
@@ -1264,26 +1341,46 @@ local function ensureManagerTogglePanel()
 			scroll.fixedHeight = targetHeight
 		end
 
-		local panelHeight = targetHeight + (self.padding * 2)
+		local panelHeight = self.expanderHeight + (self.padding * 2)
+		if isExpanded then panelHeight = panelHeight + targetHeight + self.expanderSpacing end
 		if panel._eqolLastHeight ~= panelHeight then
 			panel._eqolLastHeight = panelHeight
 			panel:SetHeight(panelHeight)
 		end
 
-		if scroll.ScrollBar and scroll.ScrollBar.SetShown then scroll.ScrollBar:SetShown(needsScroll) end
+		if scroll.ScrollBar and scroll.ScrollBar.SetShown then scroll.ScrollBar:SetShown(isExpanded and needsScroll) end
 
-		if scroll.UpdateScrollChildRect then scroll:UpdateScrollChildRect() end
+		if isExpanded and scroll.UpdateScrollChildRect then scroll:UpdateScrollChildRect() end
 
-		UpdateScrollChildWidthFor(scroll, list)
-		if Internal.UpdateManagerToggleLayout then Internal:UpdateManagerToggleLayout() end
+		if isExpanded then
+			UpdateScrollChildWidthFor(scroll, list)
+			if Internal.UpdateManagerToggleLayout then Internal:UpdateManagerToggleLayout() end
+		end
 
-		if not needsScroll then
+		if (not isExpanded) or not needsScroll then
 			scroll:SetVerticalScroll(0)
 		else
 			local maxScroll = scroll:GetVerticalScrollRange()
 			scroll:SetVerticalScroll(math.min(scroll:GetVerticalScroll(), maxScroll))
 		end
 	end
+
+	function panel:SetExpandedState(expanded)
+		local wasExpanded = self.expanded ~= false
+		self.expanded = not not expanded
+		Internal.managerToggleExpanded = self.expanded
+		self.Expander.Label:SetText(getManagerToggleExpanderLabel(self.expanded))
+		self:ApplyScrollLimit()
+		if self.expanded and not wasExpanded and C_Timer and C_Timer.After then
+			C_Timer.After(0, function()
+				if self and self.expanded and self.ApplyScrollLimit and self:IsShown() then self:ApplyScrollLimit() end
+			end)
+		end
+	end
+
+	function panel:ToggleExpandedState() self:SetExpandedState(not self.expanded) end
+
+	panel:SetExpandedState(panel.expanded)
 
 	Internal.managerTogglePanel = panel
 	return panel
@@ -1509,6 +1606,7 @@ local function updateActiveLayoutFromAPI()
 	end
 	State.layoutSnapshot = snapshotLayoutNames(layouts)
 	Internal.layoutNameSnapshot = State.layoutSnapshot
+	syncLayoutNameCache(State.layoutSnapshot)
 end
 
 if not lib.activeLayoutName and C_EditMode and C_EditMode.GetLayouts then
@@ -1519,9 +1617,11 @@ if not lib.activeLayoutName and C_EditMode and C_EditMode.GetLayouts then
 	end
 	State.layoutSnapshot = snapshotLayoutNames(layouts)
 	Internal.layoutNameSnapshot = State.layoutSnapshot
+	syncLayoutNameCache(State.layoutSnapshot)
 end
 
 function Layout:HandleLayoutsChanged(_, layoutInfo)
+	-- if not lib.isEditing then return end
 	local layoutIndex = layoutInfo and layoutInfo.activeLayout
 	if not layoutIndex then updateActiveLayoutFromAPI() end
 	layoutIndex = layoutIndex or lib.activeLayoutIndex
@@ -1529,18 +1629,24 @@ function Layout:HandleLayoutsChanged(_, layoutInfo)
 
 	local newSnapshot = snapshotLayoutNames(layoutInfo)
 	local oldSnapshot = State.layoutSnapshot or {}
-	for index, newName in pairs(newSnapshot) do
-		local oldName = oldSnapshot[index]
-		if oldName and newName and oldName ~= newName then
-			local uiIndex = index + 2
-			for _, callback in next, lib.eventHandlersLayoutRenamed do
-				securecallfunction(callback, oldName, newName, uiIndex)
+	local didLayoutCountShrink = #newSnapshot < #oldSnapshot
+	-- Blizzard shifts custom layout indices on delete, which makes unchanged names
+	-- look like rename diffs across the remaining entries.
+	if not didLayoutCountShrink then
+		for index, newName in ipairs(newSnapshot) do
+			local oldName = oldSnapshot[index]
+			if oldName and newName and oldName ~= newName then
+				local uiIndex = index + 2
+				for _, callback in next, lib.eventHandlersLayoutRenamed do
+					securecallfunction(callback, oldName, newName, uiIndex)
+				end
 			end
 		end
 	end
 	if layoutInfo and layoutInfo.layouts then recordDeletedLayouts(oldSnapshot, newSnapshot) end
 	State.layoutSnapshot = newSnapshot
 	Internal.layoutNameSnapshot = State.layoutSnapshot
+	syncLayoutNameCache(State.layoutSnapshot)
 
 	if layoutName and layoutIndex and (layoutName ~= lib.activeLayoutName or layoutIndex ~= lib.activeLayoutIndex) then
 		lib.activeLayoutName = layoutName
@@ -1552,6 +1658,7 @@ function Layout:HandleLayoutsChanged(_, layoutInfo)
 end
 
 function Layout:HandleSpecChanged()
+	-- if not lib.isEditing then return end
 	if C_EditMode and C_EditMode.GetLayouts then
 		local layouts = C_EditMode.GetLayouts()
 		self:HandleLayoutsChanged(nil, layouts)
@@ -1754,7 +1861,7 @@ local function buildDropdown()
 					rootDescription:CreateRadio(value.text, dropdownGet, dropdownSet, {
 						get = data.get,
 						set = data.set,
-						value = value.text,
+						value = value.value or value.text,
 					})
 				end
 			end)
@@ -2319,7 +2426,7 @@ local function buildDropdownColor()
 			end
 			if data.values then
 				for _, value in next, data.values do
-					rootDescription:CreateRadio(value.text, function() return getCurrent() == value.text end, makeSetter(value.text))
+					rootDescription:CreateRadio(value.text, function() return getCurrent() == value.text end, makeSetter(value.value or value.text))
 				end
 			end
 		end
@@ -2616,7 +2723,22 @@ local function buildSlider()
 			self.fixedHeight = sliderHeight
 			self:SetHeight(sliderHeight)
 		end
-		self.formatters[MinimalSliderWithSteppersMixin.Label.Right] = CreateMinimalSliderFormatter(MinimalSliderWithSteppersMixin.Label.Right, data.formatter)
+		local formatter = data.formatter
+		if not formatter then
+			local stepHint = tonumber(data.valueStep)
+			if stepHint and stepHint >= 1 and stepHint == math.floor(stepHint) then
+				formatter = function(value)
+					local n = tonumber(value) or 0
+					if n >= 0 then
+						n = math.floor(n + 0.5)
+					else
+						n = math.ceil(n - 0.5)
+					end
+					return tostring(n)
+				end
+			end
+		end
+		self.formatters[MinimalSliderWithSteppersMixin.Label.Right] = CreateMinimalSliderFormatter(MinimalSliderWithSteppersMixin.Label.Right, formatter)
 
 		local minV = tonumber(data.minValue) or 0
 		local maxV = tonumber(data.maxValue) or 1
@@ -2738,7 +2860,12 @@ local function buildSlider()
 
 		input:SetScript("OnEnterPressed", commitInput)
 		input:SetScript("OnEscapePressed", function(box)
-			if box:GetParent() and box:GetParent().currentValue then box:SetText(tostring(box:GetParent().currentValue)) end
+			local owner = box:GetParent()
+			local currentValue = owner and owner.currentValue
+			if currentValue ~= nil then
+				local fmt = owner and owner.formatters and owner.formatters[MinimalSliderWithSteppersMixin.Label.Right]
+				box:SetText(fmt and fmt(currentValue) or tostring(currentValue))
+			end
 			box:ClearFocus()
 		end)
 		input:SetScript("OnEditFocusLost", function(box)
@@ -3347,7 +3474,8 @@ local function adjustPosition(frame, dx, dy)
 	Internal:TriggerCallback(frame, point, roundOffset(x), roundOffset(y))
 end
 
-local function resetSelectionIndicators()
+local function resetSelectionIndicators(force)
+	if not force and not lib.isEditing then return end
 	if Internal.dialog then Internal.dialog:Hide() end
 	for frame, selection in next, State.selectionRegistry do
 		if selection.isSelected then frame:SetMovable(false) end
@@ -3546,7 +3674,7 @@ end
 
 local function onEditModeExit()
 	lib.isEditing = false
-	resetSelectionIndicators()
+	resetSelectionIndicators(true)
 	hideOverlapMenu()
 	updateManagerEyeButton()
 	for _, callback in next, lib.eventHandlersExit do
@@ -3656,7 +3784,7 @@ function lib:AddFrame(frame, callback, default)
 		local combatWatcher = CreateFrame("Frame")
 		combatWatcher:RegisterEvent("PLAYER_REGEN_DISABLED")
 		combatWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
-		combatWatcher:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+		combatWatcher:RegisterUnitEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
 		combatWatcher:SetScript("OnEvent", function(_, event)
 			if event == "PLAYER_REGEN_DISABLED" then
 				resetSelectionIndicators()

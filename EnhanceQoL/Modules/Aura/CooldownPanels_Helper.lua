@@ -15,13 +15,88 @@ local Helper = CooldownPanels.helper
 local L = LibStub("AceLocale-3.0"):GetLocale("EnhanceQoL_Aura")
 local LSM = LibStub("LibSharedMedia-3.0", true)
 
+Helper.Api = Helper.Api or {}
+local Api = Helper.Api
+
+Api.GetItemInfoInstantFn = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
+Api.GetItemIconByID = C_Item and C_Item.GetItemIconByID
+Api.GetItemCooldownFn = (C_Item and C_Item.GetItemCooldown) or GetItemCooldown
+Api.GetItemSpell = C_Item and C_Item.GetItemSpell
+Api.GetInventoryItemID = GetInventoryItemID
+Api.GetInventoryItemCooldown = GetInventoryItemCooldown
+Api.GetInventorySlotInfo = GetInventorySlotInfo
+Api.GetActionInfo = GetActionInfo
+Api.GetCursorInfo = GetCursorInfo
+Api.GetCursorPosition = GetCursorPosition
+Api.ClearCursor = ClearCursor
+Api.DoesSpellExist = C_Spell and C_Spell.DoesSpellExist
+Api.GetSpellInfoFn = GetSpellInfo
+Api.GetSpellCooldownInfo = C_Spell and C_Spell.GetSpellCooldown or GetSpellCooldown
+Api.GetSpellCooldownDuration = C_Spell and C_Spell.GetSpellCooldownDuration
+Api.GetSpellChargesInfo = C_Spell and C_Spell.GetSpellCharges
+Api.GetBaseSpell = C_Spell and C_Spell.GetBaseSpell
+Api.GetOverrideSpell = C_Spell and C_Spell.GetOverrideSpell
+Api.GetSpellPowerCost = C_Spell and C_Spell.GetSpellPowerCost
+Api.EnableSpellRangeCheck = C_Spell and C_Spell.EnableSpellRangeCheck
+Api.IsSpellUsableFn = C_Spell and C_Spell.IsSpellUsable or IsUsableSpell
+Api.IsSpellPassiveFn = C_Spell and C_Spell.IsSpellPassive or IsPassiveSpell
+Api.IsSpellKnown = C_SpellBook.IsSpellInSpellBook
+Api.IsEquippedItem = C_Item.IsEquippedItem
+Api.GetTime = GetTime
+Api.MenuUtil = MenuUtil
+Api.issecretvalue = _G.issecretvalue
+Api.DurationModifierRealTime = Enum and Enum.DurationTimeModifier and Enum.DurationTimeModifier.RealTime
+
+function Api.GetItemCount(itemID, includeBank, includeUses, includeReagentBank, includeAccountBank)
+	if not itemID then return 0 end
+	if C_Item and C_Item.GetItemCount then return C_Item.GetItemCount(itemID, includeBank, includeUses, includeReagentBank, includeAccountBank) end
+	if GetItemCount then return GetItemCount(itemID, includeBank) end
+	return 0
+end
+
+Helper.DirectionOptions = {
+	{ value = "LEFT", label = _G.HUD_EDIT_MODE_SETTING_BAGS_DIRECTION_LEFT or _G.LEFT or "Left" },
+	{ value = "RIGHT", label = _G.HUD_EDIT_MODE_SETTING_BAGS_DIRECTION_RIGHT or _G.RIGHT or "Right" },
+	{ value = "UP", label = _G.HUD_EDIT_MODE_SETTING_BAGS_DIRECTION_UP or _G.UP or "Up" },
+	{ value = "DOWN", label = _G.HUD_EDIT_MODE_SETTING_BAGS_DIRECTION_DOWN or _G.DOWN or "Down" },
+}
+Helper.LayoutModeOptions = {
+	{ value = "GRID", label = L["CooldownPanelLayoutModeGrid"] or "Grid" },
+	{ value = "RADIAL", label = L["CooldownPanelLayoutModeRadial"] or "Radial" },
+}
+Helper.AnchorOptions = {
+	{ value = "TOPLEFT", label = L["Top Left"] or "Top Left" },
+	{ value = "TOP", label = L["Top"] or "Top" },
+	{ value = "TOPRIGHT", label = L["Top Right"] or "Top Right" },
+	{ value = "LEFT", label = L["Left"] or "Left" },
+	{ value = "CENTER", label = L["Center"] or "Center" },
+	{ value = "RIGHT", label = L["Right"] or "Right" },
+	{ value = "BOTTOMLEFT", label = L["Bottom Left"] or "Bottom Left" },
+	{ value = "BOTTOM", label = L["Bottom"] or "Bottom" },
+	{ value = "BOTTOMRIGHT", label = L["Bottom Right"] or "Bottom Right" },
+}
+Helper.GrowthPointOptions = {
+	{ value = "TOPLEFT", label = L["Left"] or "Left" },
+	{ value = "TOP", label = L["Center"] or "Center" },
+	{ value = "TOPRIGHT", label = L["Right"] or "Right" },
+}
+Helper.FontStyleOptions = {
+	{ value = "NONE", label = L["None"] or "None" },
+	{ value = "OUTLINE", label = L["Outline"] or "Outline" },
+	{ value = "THICKOUTLINE", label = L["Thick Outline"] or "Thick Outline" },
+	{ value = "MONOCHROMEOUTLINE", label = L["Monochrome Outline"] or "Monochrome Outline" },
+}
+
 Helper.PANEL_LAYOUT_DEFAULTS = {
 	iconSize = 36,
 	spacing = 2,
+	layoutMode = "GRID",
 	direction = "RIGHT",
 	wrapCount = 0,
 	wrapDirection = "DOWN",
 	growthPoint = "TOPLEFT",
+	radialRadius = 80,
+	radialRotation = 0,
 	strata = "MEDIUM",
 	rangeOverlayEnabled = false,
 	rangeOverlayColor = { 1, 0.1, 0.1, 0.35 },
@@ -30,6 +105,12 @@ Helper.PANEL_LAYOUT_DEFAULTS = {
 	unusableTintColor = { 0.6, 0.6, 0.6, 1 },
 	opacityOutOfCombat = 1,
 	opacityInCombat = 1,
+	hideInVehicle = false,
+	hideInPetBattle = false,
+	hideInClientScene = true,
+	hideOnCooldown = false,
+	showOnCooldown = false,
+	showIconTexture = true,
 	stackAnchor = "BOTTOMRIGHT",
 	stackX = -1,
 	stackY = 1,
@@ -70,6 +151,14 @@ Helper.ENTRY_DEFAULTS = {
 	glowDuration = 0,
 	soundReady = false,
 	soundReadyFile = "None",
+	staticText = "",
+	staticTextShowOnCooldown = false,
+	staticTextFont = "",
+	staticTextSize = 12,
+	staticTextStyle = "OUTLINE",
+	staticTextAnchor = "CENTER",
+	staticTextX = 0,
+	staticTextY = 0,
 }
 
 Helper.DEFAULT_PREVIEW_COUNT = 6
@@ -78,12 +167,18 @@ Helper.PREVIEW_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
 Helper.PREVIEW_ICON_SIZE = 36
 Helper.PREVIEW_COUNT_FONT_MIN = 12
 Helper.OFFSET_RANGE = 200
+Helper.RADIAL_RADIUS_RANGE = 600
+Helper.RADIAL_ROTATION_RANGE = 360
 Helper.EXAMPLE_COOLDOWN_PERCENT = 0.55
 Helper.VALID_DIRECTIONS = {
 	RIGHT = true,
 	LEFT = true,
 	UP = true,
 	DOWN = true,
+}
+Helper.VALID_LAYOUT_MODES = {
+	GRID = true,
+	RADIAL = true,
 }
 local STRATA_ORDER = { "BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN", "FULLSCREEN_DIALOG", "TOOLTIP" }
 Helper.STRATA_ORDER = STRATA_ORDER
@@ -187,6 +282,18 @@ function Helper.NormalizeDirection(direction, fallback)
 	if direction and Helper.VALID_DIRECTIONS[direction] then return direction end
 	if fallback and Helper.VALID_DIRECTIONS[fallback] then return fallback end
 	return "RIGHT"
+end
+
+function Helper.NormalizeLayoutMode(value, fallback)
+	if type(value) == "string" then
+		local upper = string.upper(value)
+		if Helper.VALID_LAYOUT_MODES[upper] then return upper end
+	end
+	if type(fallback) == "string" then
+		local upper = string.upper(fallback)
+		if Helper.VALID_LAYOUT_MODES[upper] then return upper end
+	end
+	return "GRID"
 end
 
 function Helper.NormalizeStrata(strata, fallback)
@@ -357,7 +464,7 @@ function Helper.GetFontOptions(defaultPath)
 			add(path, tostring(name))
 		end
 	end
-	if defaultPath then add(defaultPath, L["Default"] or "Default") end
+	if defaultPath then add(defaultPath, DEFAULT) end
 	table.sort(list, function(a, b) return tostring(a.label) < tostring(b.label) end)
 	return list
 end
@@ -644,6 +751,14 @@ function Helper.NormalizeEntry(entry, defaults)
 	entry.glowDuration = math.floor(duration + 0.5)
 	if type(entry.soundReady) ~= "boolean" then entry.soundReady = Helper.ENTRY_DEFAULTS.soundReady end
 	if type(entry.soundReadyFile) ~= "string" or entry.soundReadyFile == "" then entry.soundReadyFile = Helper.ENTRY_DEFAULTS.soundReadyFile end
+	if type(entry.staticText) ~= "string" then entry.staticText = Helper.ENTRY_DEFAULTS.staticText end
+	if type(entry.staticTextShowOnCooldown) ~= "boolean" then entry.staticTextShowOnCooldown = Helper.ENTRY_DEFAULTS.staticTextShowOnCooldown end
+	if type(entry.staticTextFont) ~= "string" then entry.staticTextFont = Helper.ENTRY_DEFAULTS.staticTextFont end
+	entry.staticTextSize = Helper.ClampInt(entry.staticTextSize, 6, 64, Helper.ENTRY_DEFAULTS.staticTextSize or 12)
+	entry.staticTextStyle = Helper.NormalizeFontStyleChoice(entry.staticTextStyle, Helper.ENTRY_DEFAULTS.staticTextStyle or "OUTLINE")
+	entry.staticTextAnchor = Helper.NormalizeAnchor(entry.staticTextAnchor, Helper.ENTRY_DEFAULTS.staticTextAnchor or "CENTER")
+	entry.staticTextX = Helper.ClampInt(entry.staticTextX, -Helper.OFFSET_RANGE, Helper.OFFSET_RANGE, Helper.ENTRY_DEFAULTS.staticTextX or 0)
+	entry.staticTextY = Helper.ClampInt(entry.staticTextY, -Helper.OFFSET_RANGE, Helper.OFFSET_RANGE, Helper.ENTRY_DEFAULTS.staticTextY or 0)
 end
 
 function Helper.SyncOrder(order, map)

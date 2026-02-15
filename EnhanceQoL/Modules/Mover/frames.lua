@@ -247,6 +247,13 @@ local frames = {
 		defaultEnabled = true,
 	},
 	{
+		id = "LFGListInviteDialog",
+		label = L["LFG List Invite Dialog"] or "LFG List Invite Dialog",
+		group = "activities",
+		names = { "LFGListInviteDialog" },
+		defaultEnabled = true,
+	},
+	{
 		id = "ReadyCheckFrame",
 		label = L["Ready Check"] or "Ready Check",
 		group = "activities",
@@ -343,53 +350,19 @@ local frames = {
 		defaultEnabled = true,
 	},
 	{
-		id = "ContainerFrame1",
-		label = (L["Bag"] or "Bag") .. " 1",
-		group = "bags",
-		names = { "ContainerFrame1" },
-		defaultEnabled = true,
-	},
-	{
-		id = "ContainerFrame2",
-		label = (L["Bag"] or "Bag") .. " 2",
-		group = "bags",
-		names = { "ContainerFrame2" },
-		defaultEnabled = true,
-	},
-	{
-		id = "ContainerFrame3",
-		label = (L["Bag"] or "Bag") .. " 3",
-		group = "bags",
-		names = { "ContainerFrame3" },
-		defaultEnabled = true,
-	},
-	{
-		id = "ContainerFrame4",
-		label = (L["Bag"] or "Bag") .. " 4",
-		group = "bags",
-		names = { "ContainerFrame4" },
-		defaultEnabled = true,
-	},
-	{
-		id = "ContainerFrame5",
-		label = (L["Bag"] or "Bag") .. " 5",
-		group = "bags",
-		names = { "ContainerFrame5" },
-		defaultEnabled = true,
-	},
-	{
-		id = "ContainerFrame6",
-		label = (L["Bag"] or "Bag") .. " 6",
-		group = "bags",
-		names = { "ContainerFrame6" },
-		defaultEnabled = true,
-	},
-	{
 		id = "ItemUpgradeFrame",
 		label = L["Item Upgrade"] or "Item Upgrade",
 		group = "vendors",
 		names = { "ItemUpgradeFrame" },
 		addon = "Blizzard_ItemUpgradeUI",
+		defaultEnabled = true,
+	},
+	{
+		id = "ItemSocketingFrame",
+		label = ITEM_SOCKETING,
+		group = "vendors",
+		names = { "ItemSocketingFrame" },
+		addon = "Blizzard_ItemSocketingUI",
 		defaultEnabled = true,
 	},
 	{
@@ -705,7 +678,7 @@ local frames = {
 		addon = "Blizzard_CovenantSanctum",
 		defaultEnabled = true,
 	},
-  {
+	{
 		id = "CovenantMissionFrame",
 		label = L["Covenant Mission Frame"] or "Covenant Mission Frame",
 		group = "activities",
@@ -721,12 +694,20 @@ local frames = {
 		addon = "Blizzard_CovenantRenown",
 		defaultEnabled = true,
 	},
-  {
+	{
 		id = "CovenantPreviewFrame",
 		label = L["Covenant Preview Frame"] or "Covenant Preview Frame",
 		group = "activities",
 		names = { "CovenantPreviewFrame" },
 		addon = "Blizzard_CovenantPreviewUI",
+		defaultEnabled = true,
+	},
+	{
+		id = "GarrisonLandingPage",
+		label = L["Garrison Landing Page"] or "Garrison Landing Page",
+		group = "activities",
+		names = { "GarrisonLandingPage" },
+		addon = "Blizzard_GarrisonUI",
 		defaultEnabled = true,
 	},
 }

@@ -100,54 +100,18 @@ function addon.functions.updateRaidToolsHook()
 	end
 end
 
-local function safeUnitHealthPercent(unit, usePredicted, curve)
-	if not UnitHealthPercent or not unit then return nil end
-	local predicted = usePredicted
-	if predicted == nil then predicted = true end
-	curve = curve or (CurveConstants and CurveConstants.ScaleTo100)
-	if curve then
-		local ok, pct = pcall(UnitHealthPercent, unit, predicted, curve)
-		if ok and pct ~= nil then return pct end
-	end
-	local ok, pct = pcall(UnitHealthPercent, unit, predicted)
-	if ok and pct ~= nil then return pct end
-	return nil
-end
-
 function addon.functions.GetHealthPercent(unit, cur, max, usePredicted, curve)
 	if not unit then return 0 end
-	local pct = safeUnitHealthPercent(unit, usePredicted, curve)
-	if pct ~= nil then return pct end
-	cur = cur or (UnitHealth and UnitHealth(unit)) or 0
-	max = max or (UnitHealthMax and UnitHealthMax(unit)) or 0
-	if max > 0 then return (cur / max) * 100 end
-	return 0
-end
-
-local function safeUnitPowerPercent(unit, powerType, useUnmodified, curve)
-	if not UnitPowerPercent or not unit then return nil end
-	local unmodified = useUnmodified
-	if unmodified == nil then unmodified = true end
-	powerType = powerType or 0
 	curve = curve or (CurveConstants and CurveConstants.ScaleTo100)
-	if curve then
-		local ok, pct = pcall(UnitPowerPercent, unit, powerType, unmodified, curve)
-		if ok and pct ~= nil then return pct end
-	end
-	local ok, pct = pcall(UnitPowerPercent, unit, powerType, unmodified)
-	if ok and pct ~= nil then return pct end
-	return nil
+	return UnitHealthPercent(unit, usePredicted, curve)
 end
 
 function addon.functions.GetPowerPercent(unit, powerType, cur, max, useUnmodified, curve)
 	if not unit then return 0 end
 	powerType = powerType or 0
-	local pct = safeUnitPowerPercent(unit, powerType, useUnmodified, curve)
-	if pct ~= nil then return pct end
-	cur = cur or (UnitPower and UnitPower(unit, powerType)) or 0
-	max = max or (UnitPowerMax and UnitPowerMax(unit, powerType)) or 0
-	if max > 0 then return (cur / max) * 100 end
-	return 0
+
+	curve = curve or (CurveConstants and CurveConstants.ScaleTo100)
+	return UnitPowerPercent(unit, powerType, useUnmodified, curve)
 end
 
 local GOLD_ICON = "|TInterface\\MoneyFrame\\UI-GoldIcon:0:0:2:0|t"
@@ -431,82 +395,6 @@ function addon.functions.createWrapperData(data, container, L)
 	scroll:DoLayout()
 	scrollInner:DoLayout()
 	return wrapper
-end
-
-function addon.functions.addToTree(parentValue, newElement, noSort)
-	-- Sortiere die Knoten alphabetisch nach `text`, rekursiv für alle Kinder
-	local function sortChildrenRecursively(children)
-		if noSort then return end
-		table.sort(children, function(a, b) return string.lower(a.text) < string.lower(b.text) end)
-		for _, child in ipairs(children) do
-			if child.children then sortChildrenRecursively(child.children) end
-		end
-	end
-
-	-- Hilfsfunktion: finde einen Knoten per Pfad (value1\001value2 ...)
-	local function findNodeByPath(tree, path)
-		local segments = {}
-		for seg in string.gmatch(path, "[^\001]+") do
-			table.insert(segments, seg)
-		end
-		if #segments == 0 then return nil end
-
-		local function findIn(children, idx)
-			for _, node in ipairs(children) do
-				if node.value == segments[idx] then
-					if idx == #segments then
-						return node
-					elseif node.children then
-						local found = findIn(node.children, idx + 1)
-						if found then return found end
-					end
-				end
-			end
-			return nil
-		end
-
-		return findIn(tree, 1)
-	end
-
-	-- Durchlaufe die Baumstruktur, um den Parent-Knoten zu finden (mit optionalem Pfad)
-	local function addToTreeSimple(tree)
-		for _, node in ipairs(tree) do
-			if node.value == parentValue then
-				node.children = node.children or {}
-				table.insert(node.children, newElement)
-				sortChildrenRecursively(node.children)
-				return true
-			elseif node.children then
-				if addToTreeSimple(node.children) then return true end
-			end
-		end
-		return false
-	end
-
-	-- Prüfen, ob parentValue `nil` ist (neuer Parent wird benötigt)
-	if not parentValue then
-		table.insert(addon.treeGroupData, newElement)
-		sortChildrenRecursively(addon.treeGroupData)
-		addon.treeGroup:SetTree(addon.treeGroupData)
-		addon.treeGroup:RefreshTree()
-		return
-	end
-
-	-- Versuche zuerst, per Pfad exakten Knoten zu finden
-	local parentNode
-	if string.find(parentValue, "\001", 1, true) then parentNode = findNodeByPath(addon.treeGroupData, parentValue) end
-	if parentNode then
-		parentNode.children = parentNode.children or {}
-		table.insert(parentNode.children, newElement)
-		sortChildrenRecursively(parentNode.children)
-	else
-		-- Fallback: alte Logik (suche ersten Treffer per value)
-		addToTreeSimple(addon.treeGroupData)
-	end
-
-	sortChildrenRecursively(addon.treeGroupData)
-	addon.treeGroup:SetTree(addon.treeGroupData)
-	addon.treeGroup:RefreshTree()
 end
 
 local tooltipCache = {}
@@ -881,7 +769,7 @@ local function updateButtonInfo(itemButton, bag, slot, frameName)
 			addon.functions.ApplyBagItemLevelPosition(itemButton.ItemLevelText, itemButton, pos)
 			if nil ~= addon.variables.allowedEquipSlotsBagIlvl[itemEquipLoc] then
 				local r, g, b = C_Item.GetItemQualityColor(itemQuality)
-				local itemLevelText = C_Item.GetDetailedItemLevelInfo(itemLink)
+				local itemLevelText = C_Item.GetCurrentItemLevel(ItemLocation:CreateFromBagAndSlot(bag, slot))
 
 				itemButton.ItemLevelText:SetFormattedText(itemLevelText)
 				itemButton.ItemLevelText:SetTextColor(r, g, b, 1)
@@ -1581,6 +1469,16 @@ function addon.functions.registerQuickKeybindSlashCommand()
 	SlashCmdList["EQOLKB"] = function() toggleQuickKeybindMode() end
 end
 
+function addon.functions.registerReloadUISlashCommand()
+	if not SlashCmdList then return end
+	local function canClaim(command) return isSlashCommandOwnedByEQOL(command, "EQOLRL", "EQOLRL", 1) or not isSlashCommandRegistered(command) end
+	if not canClaim("/rl") then return end
+	_G.SLASH_EQOLRL1 = "/rl"
+	SlashCmdList["EQOLRL"] = function()
+		if ReloadUI then ReloadUI() end
+	end
+end
+
 function addon.functions.catalystChecks()
 	-- No catalyst charges exist for Timerunners; ensure hidden
 	if addon.functions.IsTimerunner() then
@@ -1630,12 +1528,14 @@ addon.functions.FindBindingIndex = function(data)
 	return found
 end
 
-function addon.functions.isRestrictedContent()
+function addon.functions.isRestrictedContent(ignoreMap)
 	local restrictionTypes = Enum and Enum.AddOnRestrictionType
 	local restrictedActions = _G.C_RestrictedActions
 	if not (restrictionTypes and restrictedActions and restrictedActions.GetAddOnRestrictionState) then return false end
 	for _, v in pairs(restrictionTypes) do
-		if restrictedActions.GetAddOnRestrictionState(v) == 2 then return true end
+		if ignoreMap and v ~= 4 or not ignoreMap then
+			if restrictedActions.GetAddOnRestrictionState(v) == 2 then return true end
+		end
 	end
 	return false
 end

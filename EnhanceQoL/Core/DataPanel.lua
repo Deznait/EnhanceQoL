@@ -10,12 +10,21 @@ local LSM = LibStub("LibSharedMedia-3.0", true)
 local DEFAULT_TEXT_ALPHA = 100
 local DEFAULT_BACKDROP_ALPHA = 0.5
 local DEFAULT_BORDER_ALPHA = 1
+local DEFAULT_BORDER_SIZE = 16
+local DEFAULT_BORDER_OFFSET = 0
 local DEFAULT_FONT_OUTLINE = true
 local DEFAULT_FONT_SHADOW = false
 local DEFAULT_STREAM_GAP = 5
+local DEFAULT_STREAM_FONT_SCALE = 100
 local SHADOW_OFFSET_X = 1
 local SHADOW_OFFSET_Y = -1
 local SHADOW_ALPHA = 0.8
+local DEFAULT_BACKGROUND_TEXTURE = "Interface/Tooltips/UI-Tooltip-Background"
+local DEFAULT_BORDER_TEXTURE = "Interface/Tooltips/UI-Tooltip-Border"
+local SOLID_TEXTURE = "Interface\\Buttons\\WHITE8x8"
+local DEFAULT_BACKDROP_COLOR = { r = 0, g = 0, b = 0, a = DEFAULT_BACKDROP_ALPHA }
+local DEFAULT_BORDER_COLOR = { r = 1, g = 1, b = 1, a = DEFAULT_BORDER_ALPHA }
+local BACKDROP_INSET = 4
 
 local DELETE_BUTTON_LABEL = L["DataPanelDelete"] or "Delete panel"
 local DELETE_CONFIRM_TEXT = L["DataPanelDeleteConfirm"] or 'Are you sure you want to delete "%s"? This cannot be undone.'
@@ -67,6 +76,12 @@ local function normalizePercent(value, fallback)
 	return num
 end
 
+local function clamp(value, minV, maxV)
+	if value < minV then return minV end
+	if value > maxV then return maxV end
+	return value
+end
+
 local function normalizeStreamGap(value, fallback)
 	local num = tonumber(value)
 	if not num then num = tonumber(fallback) end
@@ -76,11 +91,85 @@ local function normalizeStreamGap(value, fallback)
 	return num
 end
 
+local function normalizeStreamFontScale(value, fallback)
+	local num = tonumber(value)
+	if not num then num = tonumber(fallback) end
+	if not num then return DEFAULT_STREAM_FONT_SCALE end
+	if num < 50 then return 50 end
+	if num > 200 then return 200 end
+	return num
+end
+
+local function normalizeBorderSize(value, fallback)
+	local num = tonumber(value)
+	if not num then num = tonumber(fallback) end
+	if not num then return DEFAULT_BORDER_SIZE end
+	return clamp(num, 1, 64)
+end
+
+local function normalizeBorderOffset(value, fallback)
+	local num = tonumber(value)
+	if not num then num = tonumber(fallback) end
+	if not num then return DEFAULT_BORDER_OFFSET end
+	return clamp(num, -20, 20)
+end
+
 local function defaultFontFace() return (addon.variables and addon.variables.defaultFont) or STANDARD_TEXT_FONT end
 
 local function normalizeFontFace(value)
 	if type(value) ~= "string" or value == "" then return nil end
 	return value
+end
+
+local function normalizeMediaKey(value, fallback)
+	if type(value) ~= "string" or value == "" then return fallback end
+	return value
+end
+
+local function normalizeColorTable(value, fallback)
+	local r, g, b, a
+	if type(value) == "table" then
+		r = value.r or value[1]
+		g = value.g or value[2]
+		b = value.b or value[3]
+		a = value.a or value[4]
+	elseif type(value) == "number" then
+		r, g, b, a = value, value, value, 1
+	end
+	fallback = fallback or DEFAULT_BACKDROP_COLOR
+	r = r or fallback.r or fallback[1] or 1
+	g = g or fallback.g or fallback[2] or 1
+	b = b or fallback.b or fallback[3] or 1
+	a = a or fallback.a or fallback[4] or 1
+	return { r = r, g = g, b = b, a = a }
+end
+
+local function colorsEqual(a, b)
+	if a == b then return true end
+	if type(a) ~= "table" or type(b) ~= "table" then return false end
+	local ar, ag, ab, aa = a.r or a[1], a.g or a[2], a.b or a[3], a.a or a[4]
+	local br, bg, bb, ba = b.r or b[1], b.g or b[2], b.b or b[3], b.a or b[4]
+	return ar == br and ag == bg and ab == bb and aa == ba
+end
+
+local function resolveBackgroundTexture(key)
+	if key == "SOLID" then return SOLID_TEXTURE end
+	if not key or key == "" or key == "DEFAULT" then return DEFAULT_BACKGROUND_TEXTURE end
+	if LSM and LSM.Fetch then
+		local tex = LSM:Fetch("background", key, true)
+		if tex and tex ~= "" then return tex end
+	end
+	return key
+end
+
+local function resolveBorderTexture(key)
+	if key == "SOLID" then return SOLID_TEXTURE end
+	if not key or key == "" or key == "DEFAULT" then return DEFAULT_BORDER_TEXTURE end
+	if LSM and LSM.Fetch then
+		local tex = LSM:Fetch("border", key, true)
+		if tex and tex ~= "" then return tex end
+	end
+	return key
 end
 
 local function fontFaceOptions()
@@ -96,7 +185,47 @@ local function fontFaceOptions()
 			end
 		end
 	end
-	if defaultPath and not hasDefault then list[#list + 1] = { value = defaultPath, label = L["Default"] or "Default" } end
+	if defaultPath and not hasDefault then list[#list + 1] = { value = defaultPath, label = DEFAULT } end
+	table.sort(list, function(a, b) return tostring(a.label) < tostring(b.label) end)
+	return list
+end
+
+local function backgroundTextureOptions()
+	local list = {}
+	local seen = {}
+	local function add(value, label)
+		local lv = tostring(value or ""):lower()
+		if lv == "" or seen[lv] then return end
+		seen[lv] = true
+		list[#list + 1] = { value = value, label = label }
+	end
+	add("DEFAULT", _G.DEFAULT or "Default")
+	add("SOLID", "Solid")
+	if LSM and LSM.HashTable then
+		for name, path in pairs(LSM:HashTable("background") or {}) do
+			if type(path) == "string" and path ~= "" then add(name, tostring(name)) end
+		end
+	end
+	table.sort(list, function(a, b) return tostring(a.label) < tostring(b.label) end)
+	return list
+end
+
+local function borderTextureOptions()
+	local list = {}
+	local seen = {}
+	local function add(value, label)
+		local lv = tostring(value or ""):lower()
+		if lv == "" or seen[lv] then return end
+		seen[lv] = true
+		list[#list + 1] = { value = value, label = label }
+	end
+	add("DEFAULT", _G.DEFAULT or "Default")
+	add("SOLID", "Solid")
+	if LSM and LSM.HashTable then
+		for name, path in pairs(LSM:HashTable("border") or {}) do
+			if type(path) == "string" and path ~= "" then add(name, tostring(name)) end
+		end
+	end
 	table.sort(list, function(a, b) return tostring(a.label) < tostring(b.label) end)
 	return list
 end
@@ -220,6 +349,12 @@ function DataPanel.GetOptionsHintText()
 	if shouldShowOptionsHint() then return L["Right-Click for options"] end
 end
 
+function DataPanel.GetStreamOptionsTitle(streamTitle)
+	local optionsTitle = GAMEMENU_OPTIONS or OPTIONS or "Options"
+	if streamTitle and streamTitle ~= "" then return tostring(streamTitle) .. " - " .. optionsTitle end
+	return optionsTitle
+end
+
 local function partsOnEnter(b)
 	local s = b.slot
 	if not s then return end
@@ -308,7 +443,7 @@ local function registerEditModePanel(panel)
 		y = panel.info.y or 0,
 		width = panel.info.width or panel.frame:GetWidth() or 200,
 		height = panel.info.height or panel.frame:GetHeight() or 20,
-		hideBorder = panel.info.noBorder or false,
+		hideBorder = panel.info.hideBorder or false,
 		clickThrough = panel.info.clickThrough == true,
 		strata = normalizeStrata(panel.info.strata, panel.frame:GetFrameStrata()),
 		contentAnchor = normalizeContentAnchor(panel.info.contentAnchor, "LEFT"),
@@ -316,7 +451,15 @@ local function registerEditModePanel(panel)
 		streamGap = normalizeStreamGap(panel.info.streamGap, DEFAULT_STREAM_GAP),
 		fontOutline = panel.info.fontOutline ~= false,
 		fontShadow = panel.info.fontShadow == true,
+		streamFontScale = normalizeStreamFontScale(panel.info.streamFontScale, DEFAULT_STREAM_FONT_SCALE),
+		useClassTextColor = panel.info.useClassTextColor == true,
 		fontFace = normalizeFontFace(panel.info.fontFace) or defaultFontFace(),
+		backgroundTexture = normalizeMediaKey(panel.info.backgroundTexture, "DEFAULT"),
+		backgroundColor = normalizeColorTable(panel.info.backgroundColor, DEFAULT_BACKDROP_COLOR),
+		borderTexture = normalizeMediaKey(panel.info.borderTexture, "DEFAULT"),
+		borderColor = normalizeColorTable(panel.info.borderColor, DEFAULT_BORDER_COLOR),
+		borderSize = normalizeBorderSize(panel.info.borderSize, DEFAULT_BORDER_SIZE),
+		borderOffset = normalizeBorderOffset(panel.info.borderOffset, DEFAULT_BORDER_OFFSET),
 		showTooltips = panel.info.showTooltips ~= false,
 		textAlphaInCombat = normalizePercent(panel.info.textAlphaInCombat, DEFAULT_TEXT_ALPHA),
 		textAlphaOutOfCombat = normalizePercent(panel.info.textAlphaOutOfCombat, panel.info.textAlphaInCombat),
@@ -324,11 +467,32 @@ local function registerEditModePanel(panel)
 	panel.info.strata = defaults.strata
 	panel.info.contentAnchor = defaults.contentAnchor
 	panel.info.fontFace = defaults.fontFace
+	panel.info.backgroundTexture = defaults.backgroundTexture
+	panel.info.backgroundColor = defaults.backgroundColor
+	panel.info.borderTexture = defaults.borderTexture
+	panel.info.borderColor = defaults.borderColor
+	panel.info.borderSize = defaults.borderSize
+	panel.info.borderOffset = defaults.borderOffset
 	panel.info.showTooltips = defaults.showTooltips
 	panel.info.streamGap = defaults.streamGap
 
 	local settings
 	if SettingType then
+		local function isBorderVisible(layoutName)
+			if EditMode and EditMode.GetValue then
+				local value = EditMode:GetValue(id, "hideBorder", layoutName)
+				if value ~= nil then return not value end
+			end
+			return not (panel.info and panel.info.hideBorder)
+		end
+		local function isClickThrough(layoutName)
+			if EditMode and EditMode.GetValue then
+				local value = EditMode:GetValue(id, "clickThrough", layoutName)
+				if value ~= nil then return value == true end
+			end
+			return panel.info and panel.info.clickThrough == true
+		end
+
 		settings = {
 			{
 				name = L["DataPanelWidth"],
@@ -349,10 +513,124 @@ local function registerEditModePanel(panel)
 				valueStep = 1,
 			},
 			{
+				name = L["DataPanelBackgroundTexture"] or "Background texture",
+				kind = SettingType.Dropdown,
+				field = "backgroundTexture",
+				default = defaults.backgroundTexture,
+				height = 200,
+				get = function(layoutName)
+					if EditMode and EditMode.GetValue then return EditMode:GetValue(id, "backgroundTexture", layoutName) end
+					return panel.info and panel.info.backgroundTexture or defaults.backgroundTexture
+				end,
+				set = function(layoutName, value)
+					if EditMode and EditMode.SetValue then
+						EditMode:SetValue(id, "backgroundTexture", value, layoutName)
+					elseif panel.info then
+						panel.info.backgroundTexture = normalizeMediaKey(value, "DEFAULT")
+						panel:ApplyBorder()
+					end
+				end,
+				generator = function(_, rootDescription, data)
+					for _, option in ipairs(backgroundTextureOptions()) do
+						rootDescription:CreateRadio(option.label, function() return data.get and data.get(nil) == option.value end, function()
+							if data.set then data.set(nil, option.value) end
+						end)
+					end
+				end,
+			},
+			{
+				name = L["DataPanelBackgroundColor"] or "Background color",
+				kind = SettingType.Color,
+				field = "backgroundColor",
+				default = defaults.backgroundColor,
+				hasOpacity = true,
+				get = function(layoutName)
+					if EditMode and EditMode.GetValue then return EditMode:GetValue(id, "backgroundColor", layoutName) end
+					return panel.info and panel.info.backgroundColor or defaults.backgroundColor
+				end,
+				set = function(layoutName, value)
+					if EditMode and EditMode.SetValue then
+						EditMode:SetValue(id, "backgroundColor", value, layoutName)
+					elseif panel.info then
+						panel.info.backgroundColor = normalizeColorTable(value, DEFAULT_BACKDROP_COLOR)
+						panel:ApplyBackdropAlpha()
+					end
+				end,
+			},
+			{
 				name = L["DataPanelHideBorder"],
 				kind = SettingType.Checkbox,
 				field = "hideBorder",
 				default = defaults.hideBorder,
+			},
+			{
+				name = L["DataPanelBorderTexture"] or "Border texture",
+				kind = SettingType.Dropdown,
+				field = "borderTexture",
+				default = defaults.borderTexture,
+				height = 200,
+				get = function(layoutName)
+					if EditMode and EditMode.GetValue then return EditMode:GetValue(id, "borderTexture", layoutName) end
+					return panel.info and panel.info.borderTexture or defaults.borderTexture
+				end,
+				set = function(layoutName, value)
+					if EditMode and EditMode.SetValue then
+						EditMode:SetValue(id, "borderTexture", value, layoutName)
+					elseif panel.info then
+						panel.info.borderTexture = normalizeMediaKey(value, "DEFAULT")
+						panel:ApplyBorder()
+					end
+				end,
+				generator = function(_, rootDescription, data)
+					for _, option in ipairs(borderTextureOptions()) do
+						rootDescription:CreateRadio(option.label, function() return data.get and data.get(nil) == option.value end, function()
+							if data.set then data.set(nil, option.value) end
+						end)
+					end
+				end,
+				isEnabled = isBorderVisible,
+			},
+			{
+				name = L["DataPanelBorderSize"] or "Border size",
+				kind = SettingType.Slider,
+				field = "borderSize",
+				default = defaults.borderSize,
+				minValue = 1,
+				maxValue = 64,
+				valueStep = 1,
+				formatter = function(value) return tostring(math.floor((tonumber(value) or 0) + 0.5)) end,
+				isEnabled = isBorderVisible,
+			},
+			{
+				name = L["DataPanelBorderOffset"] or "Border offset",
+				kind = SettingType.Slider,
+				field = "borderOffset",
+				default = defaults.borderOffset,
+				minValue = -20,
+				maxValue = 20,
+				valueStep = 1,
+				formatter = function(value) return tostring(math.floor((tonumber(value) or 0) + 0.5)) end,
+				isEnabled = isBorderVisible,
+			},
+			{
+				name = L["DataPanelBorderColor"] or "Border color",
+				kind = SettingType.Color,
+				field = "borderColor",
+				default = defaults.borderColor,
+				hasOpacity = true,
+				get = function(layoutName)
+					if EditMode and EditMode.GetValue then return EditMode:GetValue(id, "borderColor", layoutName) end
+					return panel.info and panel.info.borderColor or defaults.borderColor
+				end,
+				set = function(layoutName, value)
+					if EditMode and EditMode.SetValue then
+						EditMode:SetValue(id, "borderColor", value, layoutName)
+					elseif panel.info then
+						panel.info.borderColor = normalizeColorTable(value, DEFAULT_BORDER_COLOR)
+						panel:ApplyBackdropAlpha()
+					end
+				end,
+				isEnabled = isBorderVisible,
 			},
 			{
 				name = L["DataPanelClickThrough"] or "Click-through",
@@ -365,6 +643,7 @@ local function registerEditModePanel(panel)
 				kind = SettingType.Checkbox,
 				field = "showTooltips",
 				default = defaults.showTooltips,
+				isEnabled = function(layoutName) return not isClickThrough(layoutName) end,
 			},
 			{
 				name = L["DataPanelStrata"],
@@ -469,6 +748,22 @@ local function registerEditModePanel(panel)
 				kind = SettingType.Checkbox,
 				field = "fontShadow",
 				default = defaults.fontShadow,
+			},
+			{
+				name = L["DataPanelTextScale"] or "Text scale",
+				kind = SettingType.Slider,
+				field = "streamFontScale",
+				default = defaults.streamFontScale,
+				minValue = 50,
+				maxValue = 200,
+				valueStep = 1,
+				formatter = function(value) return string.format("%d%%", math.floor((tonumber(value) or 100) + 0.5)) end,
+			},
+			{
+				name = L["DataPanelUseClassTextColor"] or "Use class text color",
+				kind = SettingType.Checkbox,
+				field = "useClassTextColor",
+				default = defaults.useClassTextColor,
 			},
 			{
 				name = L["DataPanelOpacityInCombat"] or "Opacity in combat",
@@ -586,14 +881,22 @@ local function ensureSettings(id, name)
 			streams = {},
 			streamSet = {},
 			name = name or ((L["Panel"] or "Panel") .. " " .. id),
-			noBorder = false,
+			hideBorder = false,
 			clickThrough = false,
 			strata = "MEDIUM",
 			contentAnchor = "LEFT",
 			streamGap = DEFAULT_STREAM_GAP,
 			fontOutline = DEFAULT_FONT_OUTLINE,
 			fontShadow = DEFAULT_FONT_SHADOW,
+			streamFontScale = DEFAULT_STREAM_FONT_SCALE,
+			useClassTextColor = false,
 			fontFace = defaultFontFace(),
+			backgroundTexture = "DEFAULT",
+			backgroundColor = { r = 0, g = 0, b = 0, a = DEFAULT_BACKDROP_ALPHA },
+			borderTexture = "DEFAULT",
+			borderColor = { r = 1, g = 1, b = 1, a = DEFAULT_BORDER_ALPHA },
+			borderSize = DEFAULT_BORDER_SIZE,
+			borderOffset = DEFAULT_BORDER_OFFSET,
 			showTooltips = true,
 			textAlphaInCombat = DEFAULT_TEXT_ALPHA,
 			textAlphaOutOfCombat = DEFAULT_TEXT_ALPHA,
@@ -602,14 +905,33 @@ local function ensureSettings(id, name)
 		info.streams = info.streams or {}
 		info.streamSet = info.streamSet or {}
 		info.name = info.name or name or ((L["Panel"] or "Panel") .. " " .. id)
-		if info.noBorder == nil then info.noBorder = false end
+		if info.hideBorder == nil then
+			if info.noBorder ~= nil then
+				info.hideBorder = info.noBorder and true or false
+				if info.noBorder then
+					info.backgroundColor = normalizeColorTable(info.backgroundColor, DEFAULT_BACKDROP_COLOR)
+					info.backgroundColor.a = 0
+				end
+			else
+				info.hideBorder = false
+			end
+		end
+		info.noBorder = nil
 		if info.clickThrough == nil then info.clickThrough = false end
 		info.strata = normalizeStrata(info.strata, "MEDIUM")
 		info.contentAnchor = normalizeContentAnchor(info.contentAnchor, "LEFT")
 		info.streamGap = normalizeStreamGap(info.streamGap, DEFAULT_STREAM_GAP)
 		if info.fontOutline == nil then info.fontOutline = DEFAULT_FONT_OUTLINE end
 		if info.fontShadow == nil then info.fontShadow = DEFAULT_FONT_SHADOW end
+		info.streamFontScale = normalizeStreamFontScale(info.streamFontScale, DEFAULT_STREAM_FONT_SCALE)
+		if info.useClassTextColor == nil then info.useClassTextColor = false end
 		if not info.fontFace or info.fontFace == "" then info.fontFace = defaultFontFace() end
+		info.backgroundTexture = normalizeMediaKey(info.backgroundTexture, "DEFAULT")
+		info.backgroundColor = normalizeColorTable(info.backgroundColor, DEFAULT_BACKDROP_COLOR)
+		info.borderTexture = normalizeMediaKey(info.borderTexture, "DEFAULT")
+		info.borderColor = normalizeColorTable(info.borderColor, DEFAULT_BORDER_COLOR)
+		info.borderSize = normalizeBorderSize(info.borderSize, DEFAULT_BORDER_SIZE)
+		info.borderOffset = normalizeBorderOffset(info.borderOffset, DEFAULT_BORDER_OFFSET)
 		if info.showTooltips == nil then info.showTooltips = true end
 		info.textAlphaInCombat = normalizePercent(info.textAlphaInCombat, DEFAULT_TEXT_ALPHA)
 		info.textAlphaOutOfCombat = normalizePercent(info.textAlphaOutOfCombat, info.textAlphaInCombat)
@@ -689,35 +1011,62 @@ function DataPanel.Create(id, name, existingOnly)
 		if panel.Refresh then panel:Refresh() end
 	end)
 
-	if not info.noBorder then
-		frame:SetBackdrop({
-			bgFile = "Interface/Tooltips/UI-Tooltip-Background",
-			edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-			tile = true,
-			tileSize = 16,
-			edgeSize = 16,
-			insets = { left = 4, right = 4, top = 4, bottom = 4 },
-		})
-		frame:SetBackdropColor(0, 0, 0, DEFAULT_BACKDROP_ALPHA)
-	end
-
 	function panel:ApplyBorder()
 		local i = self.info
-		if i and i.noBorder then
-			self.frame:SetBackdrop(nil)
-		else
-			self.frame:SetBackdrop({
-				bgFile = "Interface/Tooltips/UI-Tooltip-Background",
-				edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
+		if self.frame and self.frame.SetBackdrop then self.frame:SetBackdrop(nil) end
+		if not self.frame.bg or not self.frame.border then
+			local level = (self.frame and self.frame.GetFrameLevel and self.frame:GetFrameLevel()) or 0
+			local borderLevel = math.max(level - 1, 0)
+			local bgLevel = math.max(borderLevel - 1, 0)
+			local bgFrame = CreateFrame("Frame", nil, self.frame, "BackdropTemplate")
+			bgFrame:SetFrameLevel(bgLevel)
+			bgFrame:SetAllPoints(self.frame)
+			self.frame.bg = bgFrame
+			local borderFrame = CreateFrame("Frame", nil, self.frame, "BackdropTemplate")
+			borderFrame:SetFrameLevel(borderLevel)
+			self.frame.border = borderFrame
+		end
+		local bgFrame = self.frame.bg
+		local borderFrame = self.frame.border
+		if bgFrame and bgFrame.SetBackdrop then
+			bgFrame:SetBackdrop({
+				bgFile = resolveBackgroundTexture(i and i.backgroundTexture),
+				edgeFile = nil,
 				tile = true,
 				tileSize = 16,
-				edgeSize = 16,
-				insets = { left = 4, right = 4, top = 4, bottom = 4 },
+				insets = { left = BACKDROP_INSET, right = BACKDROP_INSET, top = BACKDROP_INSET, bottom = BACKDROP_INSET },
 			})
-			self.frame:SetBackdropColor(0, 0, 0, DEFAULT_BACKDROP_ALPHA)
+			if bgFrame.SetBackdropBorderColor then bgFrame:SetBackdropBorderColor(0, 0, 0, 0) end
+			bgFrame:Show()
+		end
+		if borderFrame and borderFrame.SetBackdrop then
+			if i and i.hideBorder then
+				borderFrame:Hide()
+			else
+				local borderSize = normalizeBorderSize(i and i.borderSize, DEFAULT_BORDER_SIZE)
+				local borderOffset = normalizeBorderOffset(i and i.borderOffset, DEFAULT_BORDER_OFFSET)
+				borderFrame:SetBackdrop({
+					bgFile = nil,
+					edgeFile = resolveBorderTexture(i and i.borderTexture),
+					tile = false,
+					edgeSize = borderSize,
+					insets = { left = 0, right = 0, top = 0, bottom = 0 },
+				})
+				if borderFrame.SetBackdropColor then borderFrame:SetBackdropColor(0, 0, 0, 0) end
+				borderFrame:ClearAllPoints()
+				borderFrame:SetPoint("TOPLEFT", self.frame, "TOPLEFT", -borderOffset, borderOffset)
+				borderFrame:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", borderOffset, -borderOffset)
+				borderFrame:Show()
+			end
 		end
 		self:ApplyBackdropAlpha(InCombatLockdown and InCombatLockdown() or false)
-		self:SyncEditModeValue("hideBorder", i and i.noBorder or false)
+		self:SyncEditModeValue("hideBorder", i and i.hideBorder or false)
+		self:SyncEditModeValue("backgroundTexture", i and i.backgroundTexture or "DEFAULT")
+		self:SyncEditModeValue("backgroundColor", i and i.backgroundColor or DEFAULT_BACKDROP_COLOR)
+		self:SyncEditModeValue("borderTexture", i and i.borderTexture or "DEFAULT")
+		self:SyncEditModeValue("borderColor", i and i.borderColor or DEFAULT_BORDER_COLOR)
+		self:SyncEditModeValue("borderSize", i and i.borderSize or DEFAULT_BORDER_SIZE)
+		self:SyncEditModeValue("borderOffset", i and i.borderOffset or DEFAULT_BORDER_OFFSET)
 	end
 
 	function panel:ApplyClickThroughToData(data)
@@ -769,6 +1118,36 @@ function DataPanel.Create(id, name, existingOnly)
 		end
 	end
 
+	function panel:GetStreamFontScale() return normalizeStreamFontScale(self.info and self.info.streamFontScale, DEFAULT_STREAM_FONT_SCALE) end
+
+	function panel:GetClassTextColorHex()
+		if not (self.info and self.info.useClassTextColor) then return nil end
+		local classToken = UnitClass and select(2, UnitClass("player"))
+		if not classToken then return nil end
+		local color = (CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS) and (CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS)[classToken]
+		if not color then return nil end
+		return string.format("%02x%02x%02x", math.floor((color.r or 1) * 255 + 0.5), math.floor((color.g or 1) * 255 + 0.5), math.floor((color.b or 1) * 255 + 0.5))
+	end
+
+	function panel:ApplyClassTextColor(text, skip)
+		if skip or type(text) ~= "string" or text == "" then return text end
+		local hex = self:GetClassTextColorHex()
+		if not hex then return text end
+		return "|cff" .. hex .. text .. "|r"
+	end
+
+	function panel:ApplyStreamFontScale(size)
+		local baseSize = tonumber(size) or 14
+		local scale = self:GetStreamFontScale() / 100
+		return math.max(6, math.floor(baseSize * scale + 0.5))
+	end
+
+	function panel:ReapplyPayloads()
+		for _, data in pairs(self.streams) do
+			if data and data.applyPayload and data.lastPayload then data.applyPayload(data.lastPayload, true) end
+		end
+	end
+
 	function panel:GetTextAlpha(inCombat)
 		local info = self.info or {}
 		local value = (inCombat or false) and info.textAlphaInCombat or info.textAlphaOutOfCombat
@@ -777,10 +1156,14 @@ function DataPanel.Create(id, name, existingOnly)
 
 	function panel:ApplyBackdropAlpha(inCombat)
 		if not self.frame then return end
-		if self.info and self.info.noBorder then return end
+		local bgFrame = self.frame.bg
+		local borderFrame = self.frame.border
+		if not bgFrame or not borderFrame then return end
 		local alpha = self:GetTextAlpha(inCombat)
-		self.frame:SetBackdropColor(0, 0, 0, DEFAULT_BACKDROP_ALPHA * alpha)
-		self.frame:SetBackdropBorderColor(1, 1, 1, DEFAULT_BORDER_ALPHA * alpha)
+		local bg = normalizeColorTable(self.info and self.info.backgroundColor, DEFAULT_BACKDROP_COLOR)
+		local bc = normalizeColorTable(self.info and self.info.borderColor, DEFAULT_BORDER_COLOR)
+		if bgFrame.SetBackdropColor then bgFrame:SetBackdropColor(bg.r or 0, bg.g or 0, bg.b or 0, (bg.a or DEFAULT_BACKDROP_ALPHA) * alpha) end
+		if borderFrame.SetBackdropBorderColor then borderFrame:SetBackdropBorderColor(bc.r or 1, bc.g or 1, bc.b or 1, (bc.a or DEFAULT_BORDER_ALPHA) * alpha) end
 	end
 
 	function panel:ApplyAlpha(inCombat)
@@ -878,9 +1261,17 @@ function DataPanel.Create(id, name, existingOnly)
 			or field == "fontFace"
 			or field == "fontOutline"
 			or field == "fontShadow"
+			or field == "streamFontScale"
+			or field == "useClassTextColor"
 			or field == "showTooltips"
 			or field == "textAlphaInCombat"
 			or field == "textAlphaOutOfCombat"
+			or field == "backgroundTexture"
+			or field == "backgroundColor"
+			or field == "borderTexture"
+			or field == "borderColor"
+			or field == "borderSize"
+			or field == "borderOffset"
 		then
 			EditMode:SetValue(self.editModeId, field, value)
 		end
@@ -946,6 +1337,9 @@ function DataPanel.Create(id, name, existingOnly)
 		local alphaChanged = false
 		local fontStyleChanged = false
 		local fontFaceChanged = false
+		local payloadStyleChanged = false
+		local backdropChanged = false
+		local backdropColorChanged = false
 		local layoutChanged = false
 		if data.width then
 			info.width = round2(data.width)
@@ -956,8 +1350,50 @@ function DataPanel.Create(id, name, existingOnly)
 			self.frame:SetHeight(info.height)
 		end
 		if data.hideBorder ~= nil then
-			info.noBorder = data.hideBorder and true or false
+			info.hideBorder = data.hideBorder and true or false
 			self:ApplyBorder()
+		end
+		if data.backgroundTexture ~= nil then
+			local desired = normalizeMediaKey(data.backgroundTexture, "DEFAULT")
+			if info.backgroundTexture ~= desired then
+				info.backgroundTexture = desired
+				backdropChanged = true
+			end
+		end
+		if data.borderTexture ~= nil then
+			local desired = normalizeMediaKey(data.borderTexture, "DEFAULT")
+			if info.borderTexture ~= desired then
+				info.borderTexture = desired
+				backdropChanged = true
+			end
+		end
+		if data.borderSize ~= nil then
+			local desired = normalizeBorderSize(data.borderSize, info.borderSize)
+			if info.borderSize ~= desired then
+				info.borderSize = desired
+				backdropChanged = true
+			end
+		end
+		if data.borderOffset ~= nil then
+			local desired = normalizeBorderOffset(data.borderOffset, info.borderOffset)
+			if info.borderOffset ~= desired then
+				info.borderOffset = desired
+				backdropChanged = true
+			end
+		end
+		if data.backgroundColor ~= nil then
+			local desired = normalizeColorTable(data.backgroundColor, DEFAULT_BACKDROP_COLOR)
+			if not colorsEqual(info.backgroundColor, desired) then
+				info.backgroundColor = desired
+				backdropColorChanged = true
+			end
+		end
+		if data.borderColor ~= nil then
+			local desired = normalizeColorTable(data.borderColor, DEFAULT_BORDER_COLOR)
+			if not colorsEqual(info.borderColor, desired) then
+				info.borderColor = desired
+				backdropColorChanged = true
+			end
 		end
 		if data.clickThrough ~= nil then
 			local desired = data.clickThrough and true or false
@@ -1002,6 +1438,20 @@ function DataPanel.Create(id, name, existingOnly)
 				fontStyleChanged = true
 			end
 		end
+		if data.streamFontScale ~= nil then
+			local desired = normalizeStreamFontScale(data.streamFontScale, info.streamFontScale)
+			if info.streamFontScale ~= desired then
+				info.streamFontScale = desired
+				payloadStyleChanged = true
+			end
+		end
+		if data.useClassTextColor ~= nil then
+			local desired = data.useClassTextColor and true or false
+			if info.useClassTextColor ~= desired then
+				info.useClassTextColor = desired
+				payloadStyleChanged = true
+			end
+		end
 		if data.showTooltips ~= nil then
 			local desired = data.showTooltips and true or false
 			if info.showTooltips ~= desired then
@@ -1028,7 +1478,13 @@ function DataPanel.Create(id, name, existingOnly)
 			self:ApplyStreams(data.streams)
 			self.applyingFromEditMode = nil
 		end
-		if fontStyleChanged or fontFaceChanged then self:ApplyTextStyle() end
+		if payloadStyleChanged then self:ReapplyPayloads() end
+		if fontStyleChanged or fontFaceChanged or payloadStyleChanged then self:ApplyTextStyle() end
+		if backdropChanged then
+			self:ApplyBorder()
+		elseif backdropColorChanged then
+			self:ApplyBackdropAlpha()
+		end
 		if alphaChanged then self:ApplyAlpha() end
 		if layoutChanged then self:Refresh() end
 		self.suspendEditSync = nil
@@ -1146,6 +1602,7 @@ function DataPanel.Create(id, name, existingOnly)
 
 		local function cb(payload)
 			payload = payload or {}
+			data.lastPayload = payload
 			local layoutNeedsRefresh = false
 			local hasSecureParts = payloadHasSecureParts(payload)
 			if hasSecureParts then data.secureParts = true end
@@ -1155,7 +1612,8 @@ function DataPanel.Create(id, name, existingOnly)
 				return
 			end
 			local font = panel:GetFontFace() or select(1, data.text:GetFont())
-			local size = payload.fontSize or data.fontSize or 14
+			local baseSize = payload.fontSize or data.fontSize or 14
+			local size = panel:ApplyStreamFontScale(baseSize)
 			local fontFlags = panel:GetFontFlags()
 			local fontShadow = panel.info and panel.info.fontShadow == true
 			local clickEnabled = not (panel.info and panel.info.clickThrough)
@@ -1205,6 +1663,11 @@ function DataPanel.Create(id, name, existingOnly)
 				local buttonHeight = button:GetHeight()
 				local heightChanged = data.partsHeight ~= buttonHeight
 				if heightChanged then data.partsHeight = buttonHeight end
+				local partSpacing = tonumber(payload.partSpacing)
+				if not partSpacing then partSpacing = 5 end
+				if partSpacing < 0 then partSpacing = 0 end
+				local spacingChanged = data.partsSpacing ~= partSpacing
+				if spacingChanged then data.partsSpacing = partSpacing end
 				local totalWidth = 0
 				for i, part in ipairs(payload.parts) do
 					local secureSpec = part and part.secure
@@ -1265,16 +1728,60 @@ function DataPanel.Create(id, name, existingOnly)
 						child.slot = data
 						child:SetScript("OnEnter", partsOnEnter)
 						child:SetScript("OnLeave", partsOnLeave)
-						if i == 1 then
-							child:SetPoint("LEFT", button, "LEFT", 0, 0)
-						else
-							child:SetPoint("LEFT", data.parts[i - 1], "RIGHT", 5, 0)
-						end
 						data.parts[i] = child
 						isNew = true
 					end
+					if isNew or spacingChanged then
+						child:ClearAllPoints()
+						if i == 1 then
+							child:SetPoint("LEFT", button, "LEFT", 0, 0)
+						else
+							child:SetPoint("LEFT", data.parts[i - 1], "RIGHT", partSpacing, 0)
+						end
+					end
 					child.slot = data
 					child:Show()
+					local backdropSpec = part.backdrop
+					if backdropSpec then
+						local backdrop = child.eqolBackdrop
+						if not backdrop then
+							backdrop = CreateFrame("Frame", nil, child, "BackdropTemplate")
+							backdrop:SetFrameStrata(child:GetFrameStrata())
+							backdrop:SetFrameLevel(math.max((child:GetFrameLevel() or 1) - 1, 0))
+							child.eqolBackdrop = backdrop
+						end
+						local bgFile = backdropSpec.bgFile or "Interface\\Buttons\\WHITE8x8"
+						local edgeFile = backdropSpec.edgeFile or "Interface\\Buttons\\WHITE8x8"
+						local edgeSize = tonumber(backdropSpec.edgeSize) or 1
+						if edgeSize < 0.5 then edgeSize = 0.5 end
+						if backdrop.eqolBgFile ~= bgFile or backdrop.eqolEdgeFile ~= edgeFile or backdrop.eqolEdgeSize ~= edgeSize then
+							backdrop:SetBackdrop({
+								bgFile = bgFile,
+								edgeFile = edgeFile,
+								edgeSize = edgeSize,
+								insets = { left = 0, right = 0, top = 0, bottom = 0 },
+							})
+							backdrop.eqolBgFile = bgFile
+							backdrop.eqolEdgeFile = edgeFile
+							backdrop.eqolEdgeSize = edgeSize
+						end
+						local offset = tonumber(backdropSpec.offset) or 0
+						backdrop:ClearAllPoints()
+						backdrop:SetPoint("TOPLEFT", child, "TOPLEFT", -offset, offset)
+						backdrop:SetPoint("BOTTOMRIGHT", child, "BOTTOMRIGHT", offset, -offset)
+						local bgColor = backdropSpec.bgColor or { 0, 0, 0, 0.5 }
+						local borderColor = backdropSpec.borderColor or { 1, 1, 1, 0.7 }
+						backdrop:SetBackdropColor(bgColor[1] or bgColor.r or 0, bgColor[2] or bgColor.g or 0, bgColor[3] or bgColor.b or 0, bgColor[4] or bgColor.a or 0.5)
+						backdrop:SetBackdropBorderColor(
+							borderColor[1] or borderColor.r or 1,
+							borderColor[2] or borderColor.g or 1,
+							borderColor[3] or borderColor.b or 1,
+							borderColor[4] or borderColor.a or 0.7
+						)
+						backdrop:Show()
+					elseif child.eqolBackdrop then
+						child.eqolBackdrop:Hide()
+					end
 					if isSecure then
 						local needsSecureConfig = not child.secureConfigured or (secureKey and child.secureKey ~= secureKey)
 						if needsSecureConfig then
@@ -1296,7 +1803,13 @@ function DataPanel.Create(id, name, existingOnly)
 							child.secureKey = secureKey
 						end
 					end
-					if isNew or heightChanged then child:SetHeight(buttonHeight) end
+					local partHeight = tonumber(part.height)
+					if not partHeight then partHeight = tonumber(part.iconHeight) or tonumber(part.iconSize) or tonumber(part.iconWidth) or buttonHeight end
+					if partHeight < buttonHeight then partHeight = buttonHeight end
+					if isNew or heightChanged or child.lastHeight ~= partHeight then
+						child.lastHeight = partHeight
+						child:SetHeight(partHeight)
+					end
 					if isNew or partsFontChanged then panel:ApplyFontStyle(child.text, font, size) end
 					local iconSpec = part.icon
 					local overlaySpec = part.iconOverlay
@@ -1312,10 +1825,29 @@ function DataPanel.Create(id, name, existingOnly)
 								return tex
 							end
 							if not tex then tex = child:CreateTexture(nil, "ARTWORK", nil, sublevel) end
+							local tc = spec.texCoord
 							if spec.atlas then
 								tex:SetAtlas(spec.atlas, true)
+								if type(tc) == "table" then
+									local l = tc[1] or 0
+									local r = tc[2] or 1
+									local t = tc[3] or 0
+									local b = tc[4] or 1
+									tex:SetTexCoord(l, r, t, b)
+								else
+									tex:SetTexCoord(0, 1, 0, 1)
+								end
 							elseif spec.texture then
 								tex:SetTexture(spec.texture)
+								if type(tc) == "table" then
+									local l = tc[1] or 0
+									local r = tc[2] or 1
+									local t = tc[3] or 0
+									local b = tc[4] or 1
+									tex:SetTexCoord(l, r, t, b)
+								else
+									tex:SetTexCoord(0, 1, 0, 1)
+								end
 							end
 							local color = spec.vertexColor or spec.color
 							if type(color) == "table" then
@@ -1354,7 +1886,8 @@ function DataPanel.Create(id, name, existingOnly)
 							if child.iconOverlay then child.iconOverlay:Hide() end
 							child.text:Show()
 						end
-						local text = part.text or ""
+						local rawText = part.text or ""
+						local text = panel:ApplyClassTextColor(rawText, part.skipPanelClassColor == true or payload.skipPanelClassColor == true)
 						local textChanged = text ~= child.lastText
 						if isNew or textChanged then
 							child.text:SetText(text)
@@ -1365,10 +1898,10 @@ function DataPanel.Create(id, name, existingOnly)
 							child.lastWidth = w
 							child:SetWidth(w)
 						end
-						if (isNew or textChanged or partsFontChanged) and hasInlineTexture(text) then panel:ScheduleTextReflow() end
+						if (isNew or textChanged or partsFontChanged) and hasInlineTexture(rawText) then panel:ScheduleTextReflow() end
 					end
 					child.currencyID = part.id
-					totalWidth = totalWidth + (child.lastWidth or 0) + (i > 1 and 5 or 0)
+					totalWidth = totalWidth + (child.lastWidth or 0) + (i > 1 and partSpacing or 0)
 				end
 				if data.parts then
 					for i = #payload.parts + 1, #data.parts do
@@ -1389,14 +1922,15 @@ function DataPanel.Create(id, name, existingOnly)
 					end
 				end
 				data.text:Show()
-				local text = payload.text or ""
+				local rawText = payload.text or ""
+				local text = panel:ApplyClassTextColor(rawText, payload.skipPanelClassColor == true)
 				local textChanged = text ~= data.lastText
 				if textChanged or wasParts then
 					data.text:SetText(text)
 					data.lastText = text
 					textChanged = true
 				end
-				local newSize = payload.fontSize or data.fontSize
+				local newSize = panel:ApplyStreamFontScale(payload.fontSize or data.fontSize or 14)
 				local fontChanged = newSize and (data.fontSize ~= newSize or data.fontFlags ~= fontFlags or data.fontShadow ~= fontShadow)
 				if fontChanged then
 					panel:ApplyFontStyle(data.text, font, newSize)
@@ -1412,11 +1946,11 @@ function DataPanel.Create(id, name, existingOnly)
 						if self.lastWidths and self.lastWidths[name] then self.lastWidths[name] = width end
 						layoutNeedsRefresh = true
 					end
-					if hasInlineTexture(text) then panel:ScheduleTextReflow() end
+					if hasInlineTexture(rawText) then panel:ScheduleTextReflow() end
 				end
 			end
 			if payload.parts then
-				local newSize = payload.fontSize or data.fontSize
+				local newSize = panel:ApplyStreamFontScale(payload.fontSize or data.fontSize or 14)
 				if newSize and (data.fontSize ~= newSize or data.fontFlags ~= fontFlags or data.fontShadow ~= fontShadow) then
 					panel:ApplyFontStyle(data.text, font, newSize)
 					data.fontSize = newSize
@@ -1508,6 +2042,7 @@ function DataPanel.Create(id, name, existingOnly)
 	updateSelectionStrata(panel, info.strata)
 	ensureFadeWatcher()
 	panel:ApplyClickThrough()
+	panel:ApplyBorder()
 	panel:ApplyAlpha()
 
 	return panel

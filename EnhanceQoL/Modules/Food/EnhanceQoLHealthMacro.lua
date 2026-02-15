@@ -42,9 +42,7 @@ function addon.Health.functions.InitHealthMacro()
 	init("healthPriorityOrder", nil)
 end
 
-local function IsMidnightBuild()
-	return addon and addon.variables and addon.variables.isMidnight
-end
+local function IsMidnightBuild() return addon and addon.variables and addon.variables.isMidnight end
 
 local function IsSecretValue(value)
 	if not value then return false end
@@ -59,9 +57,7 @@ local function IsSecretValue(value)
 	return false
 end
 
-local function IsMidnightCombatLocked()
-	return IsMidnightBuild() and UnitAffectingCombat and UnitAffectingCombat("player")
-end
+local function IsMidnightCombatLocked() return IsMidnightBuild() and UnitAffectingCombat and UnitAffectingCombat("player") end
 
 local function GetSpellCooldownSafe(spellId)
 	local cd = C_Spell.GetSpellCooldown(spellId)
@@ -205,21 +201,11 @@ local function BucketSchedule(reason)
 		local runMacro = currentNeeds.macro
 		local skipAllowed = runAllowed or currentNeeds.macroSkipAllowed
 
-		if runRecup and addon.db.healthUseRecuperate and addon.Recuperate and addon.Recuperate.Update then
-			addon.Recuperate.Update()
-		end
-		if runTalent and addon.db.healthUseCustomSpells and addon.Health and addon.Health.functions and addon.Health.functions.refreshTalentCache then
-			addon.Health.functions.refreshTalentCache()
-		end
-		if runTalent then
-			clearTable(spellNameCache)
-		end
-		if runAllowed and addon.Health and addon.Health.functions and addon.Health.functions.updateAllowedHealth then
-			addon.Health.functions.updateAllowedHealth()
-		end
-		if runMacro and addon.Health and addon.Health.functions and addon.Health.functions.updateHealthMacro then
-			addon.Health.functions.updateHealthMacro(false, skipAllowed)
-		end
+		if runRecup and addon.db.healthUseRecuperate and addon.Recuperate and addon.Recuperate.Update then addon.Recuperate.Update() end
+		if runTalent and addon.db.healthUseCustomSpells and addon.Health and addon.Health.functions and addon.Health.functions.refreshTalentCache then addon.Health.functions.refreshTalentCache() end
+		if runTalent then clearTable(spellNameCache) end
+		if runAllowed and addon.Health and addon.Health.functions and addon.Health.functions.updateAllowedHealth then addon.Health.functions.updateAllowedHealth() end
+		if runMacro and addon.Health and addon.Health.functions and addon.Health.functions.updateHealthMacro then addon.Health.functions.updateHealthMacro(false, skipAllowed) end
 	end)
 end
 
@@ -268,15 +254,11 @@ local function normalizeOrder(order)
 	return out
 end
 
-local function defaultPriorityOrder()
-	return { "stone", "potion", addon.db.healthUseCombatPotions and "combatpotion" or "none", "none" }
-end
+local function defaultPriorityOrder() return { "stone", "potion", addon.db.healthUseCombatPotions and "combatpotion" or "none", "none" } end
 
 local function ensurePriorityOrder()
 	local order = addon.db.healthPriorityOrder
-	if not order or #order == 0 then
-		order = defaultPriorityOrder()
-	end
+	if not order or #order == 0 then order = defaultPriorityOrder() end
 	addon.db.healthPriorityOrder = normalizeOrder(order)
 end
 
@@ -719,22 +701,28 @@ frame:SetScript("OnEvent", function(_, event, arg1)
 		migrateOldPriority()
 		ensurePriorityOrder()
 		SyncEventRegistration()
+		if not addon.db.healthMacroEnabled then return end
 		if addon.db.healthUseRecuperate then BucketSchedule("recup") end
 		if addon.db.healthUseCustomSpells then BucketSchedule("talent") end
 		BucketSchedule("allowed")
 		BucketSchedule("macro")
+		return
 	elseif event == "PLAYER_REGEN_ENABLED" then
+		if not addon.db.healthMacroEnabled then return end
 		cooldownWatch.secretBlocked = nil
 		if addon.db.healthUseCustomSpells then BucketSchedule("talent") end
 		BucketSchedule("allowed")
 		BucketSchedule("macro")
 	elseif event == "BAG_UPDATE_DELAYED" then
+		if not addon.db.healthMacroEnabled then return end
 		BucketSchedule("allowed")
 		BucketSchedule("macro")
 	elseif event == "PLAYER_LEVEL_UP" then
+		if not addon.db.healthMacroEnabled then return end
 		BucketSchedule("allowed")
 		if not UnitAffectingCombat("player") then BucketSchedule("macro") end
 	elseif event == "SPELLS_CHANGED" or event == "PLAYER_TALENT_UPDATE" then
+		if not addon.db.healthMacroEnabled then return end
 		if addon.db.healthUseRecuperate then BucketSchedule("recup") end
 		if addon.db.healthUseCustomSpells then
 			BucketSchedule("talent")
@@ -742,14 +730,17 @@ frame:SetScript("OnEvent", function(_, event, arg1)
 			BucketSchedule("macro")
 		end
 	elseif event == "UNIT_MAXHEALTH" then
+		if not addon.db.healthMacroEnabled then return end
 		if arg1 == "player" and not UnitAffectingCombat("player") then
 			BucketSchedule("allowed")
 			BucketSchedule("macro")
 		end
 	elseif event == "PLAYER_EQUIPMENT_CHANGED" then
+		if not addon.db.healthMacroEnabled then return end
 		BucketSchedule("allowed")
 		BucketSchedule("macro")
 	elseif event == "BAG_UPDATE_COOLDOWN" then
+		if not addon.db.healthMacroEnabled then return end
 		if addon.db.healthReorderByCooldown then handleCooldownEvent() end
 	end
 end)

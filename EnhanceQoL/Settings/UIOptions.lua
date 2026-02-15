@@ -20,7 +20,6 @@ local SetCooldownViewerVisibility = addon.functions.SetCooldownViewerVisibility 
 local GetCooldownViewerVisibility = addon.functions.GetCooldownViewerVisibility or function() return nil end
 local SetSpellActivationOverlayVisibility = addon.functions.SetSpellActivationOverlayVisibility or function() end
 local GetSpellActivationOverlayVisibility = addon.functions.GetSpellActivationOverlayVisibility or function() return nil end
-local IsCooldownViewerEnabled = addon.functions.IsCooldownViewerEnabled or function() return false end
 local getCVarOptionState = addon.functions.GetCVarOptionState or function() return false end
 local setCVarOptionState = addon.functions.SetCVarOptionState or function() end
 
@@ -887,8 +886,7 @@ local function createCooldownViewerDropdowns(category, expandable)
 		BuffIconCooldownViewer = L["cooldownViewerBuffIcon"] or "Buff Icon Cooldowns",
 	}
 
-	local function dropdownEnabled() return IsCooldownViewerEnabled() end
-	local desc = L["cooldownManagerShowDesc"] or "Requires the Blizzard Cooldown Viewer to be enabled in the in-game options. Visible while any selected condition is true."
+	local desc = L["cooldownManagerShowDesc"] or "Visible while any selected condition is true."
 
 	for _, frameName in ipairs(COOLDOWN_VIEWER_FRAMES) do
 		local exp = expandable
@@ -911,7 +909,6 @@ local function createCooldownViewerDropdowns(category, expandable)
 					SetCooldownViewerVisibility(frameName, key, desired)
 				end
 			end,
-			isEnabled = dropdownEnabled,
 			desc = desc,
 			parentSection = exp,
 		})
@@ -940,7 +937,6 @@ local function createCooldownViewerDropdowns(category, expandable)
 			addon.db.cooldownViewerFadeStrength = pct / 100
 			if addon.functions.ApplyCooldownViewerVisibility then addon.functions.ApplyCooldownViewerVisibility() end
 		end,
-		parentCheck = dropdownEnabled,
 		parentSection = expandable,
 	})
 
@@ -954,7 +950,6 @@ local function createCooldownViewerDropdowns(category, expandable)
 			if addon.functions.ApplyCooldownViewerVisibility then addon.functions.ApplyCooldownViewerVisibility() end
 		end,
 		desc = L["cooldownManagerSharedHoverDesc"],
-		parentCheck = dropdownEnabled,
 		parentSection = expandable,
 	})
 end
@@ -1157,6 +1152,7 @@ function addon.functions.initUIOptions()
 	addon.functions.InitDBValue("gcdBarAnchorOffsetX", defaults.anchorOffsetX or 0)
 	addon.functions.InitDBValue("gcdBarAnchorOffsetY", defaults.anchorOffsetY or -120)
 	addon.functions.InitDBValue("gcdBarAnchorMatchWidth", defaults.anchorMatchRelativeWidth == true)
+	addon.functions.InitDBValue("gcdBarHideInPetBattle", defaults.hideInPetBattle == true)
 
 	if addon.GCDBar and addon.GCDBar.OnSettingChanged then addon.GCDBar:OnSettingChanged(addon.db["gcdBarEnabled"]) end
 
@@ -1264,22 +1260,37 @@ local function createCastbarCategory()
 		parentSection = expandable,
 	})
 
-	local function isCustomPlayerCastbarEnabled()
-		local cfg = addon.db and addon.db.ufFrames and addon.db.ufFrames.player
-		if not (cfg and cfg.enabled == true) then return false end
-		local castCfg = cfg.cast
-		if not castCfg then
-			local uf = addon.Aura and addon.Aura.UF
-			local defaults = uf and uf.defaults and uf.defaults.player
-			castCfg = defaults and defaults.cast
+	local function getCastbarConfig()
+		addon.db = addon.db or {}
+		addon.db.castbar = type(addon.db.castbar) == "table" and addon.db.castbar or {}
+		local castbar = addon.Aura and (addon.Aura.Castbar or addon.Aura.UFStandaloneCastbar)
+		local hasStandaloneModule = type(castbar) == "table" and type(castbar.GetConfig) == "function"
+		if not hasStandaloneModule then addon.db.castbar.enabled = false end
+		local cfg, defaults
+		if hasStandaloneModule then
+			cfg, defaults = castbar.GetConfig()
 		end
-		if not castCfg then return false end
-		return castCfg.enabled ~= false
+		cfg = type(cfg) == "table" and cfg or addon.db.castbar
+		defaults = type(defaults) == "table" and defaults or {}
+		if hasStandaloneModule then
+			if cfg.enabled == nil then cfg.enabled = defaults.enabled == true end
+		else
+			cfg.enabled = false
+		end
+		return cfg
 	end
+
+	local function refreshCastbar()
+		local castbar = addon.Aura and (addon.Aura.Castbar or addon.Aura.UFStandaloneCastbar)
+		if castbar and castbar.Refresh then castbar.Refresh() end
+		if addon.functions and addon.functions.ApplyCastBarVisibility then addon.functions.ApplyCastBarVisibility() end
+	end
+
+	local function isCustomCastbarEnabled() return getCastbarConfig().enabled == true end
 
 	local function getCastbarOptions()
 		local options = {}
-		if not isCustomPlayerCastbarEnabled() then table.insert(options, { value = "PlayerCastingBarFrame", text = PLAYER }) end
+		if not isCustomCastbarEnabled() then table.insert(options, { value = "PlayerCastingBarFrame", text = PLAYER }) end
 		if not isEQoLUnitEnabled("target") then table.insert(options, { value = "TargetFrameSpellBar", text = TARGET }) end
 		if not isEQoLUnitEnabled("focus") then table.insert(options, { value = "FocusFrameSpellBar", text = FOCUS }) end
 		return options
@@ -1294,6 +1305,21 @@ local function createCastbarCategory()
 	addon.functions.SettingsCreateHeadline(category, L["CastBars2"], {
 		parentSection = expandable,
 	})
+	--@debug@
+	addon.functions.SettingsCreateCheckbox(category, {
+		var = "useCustomPlayerCastbar",
+		text = L["useCustomPlayerCastbar"] or "Enable castbar",
+		desc = L["useCustomPlayerCastbarDesc"] or "Enable the EQoL castbar.",
+		get = function() return isCustomCastbarEnabled() end,
+		func = function(value)
+			local castCfg = getCastbarConfig()
+			castCfg.enabled = value and true or false
+			refreshCastbar()
+		end,
+		default = false,
+		parentSection = expandable,
+	})
+	--@end-debug@
 	addon.functions.SettingsCreateCheckbox(category, {
 		var = "ShowTargetCastbar",
 		text = L["ShowTargetCastbar"],

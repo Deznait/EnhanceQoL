@@ -42,6 +42,10 @@ local updateBarSeparators
 local updateBarThresholds
 local forceColorUpdate
 local applyAbsorbLayout
+local setParentBarTextureVisible
+local getSeparatorSegmentCount
+local shouldUseDiscreteSeparatorSegments
+local refreshDiscreteSegmentsForBar
 local ensureEditModeRegistration
 local lastBarSelectionPerSpec = {}
 local lastSpecCopySelection = {}
@@ -68,8 +72,6 @@ local ResourcebarVars = {
 	DEFAULT_POWER_WIDTH = 200,
 	DEFAULT_POWER_HEIGHT = 20,
 	BLIZZARD_TEX = "Interface\\TargetingFrame\\UI-StatusBar",
-	SMOOTH_SPEED = 12,
-	DEFAULT_SMOOTH_DEADZONE = 0.75,
 	RUNE_UPDATE_INTERVAL = 0.1,
 	ESSENCE_UPDATE_INTERVAL = 0.1,
 	REFRESH_DEBOUNCE = 0.05,
@@ -89,8 +91,66 @@ local ResourcebarVars = {
 	AURA_POWER_CONFIG = {},
 }
 local RB = ResourcebarVars
+RB.UNITFRAME_ANCHOR_MAP = {
+	PlayerFrame = { uf = "EQOLUFPlayerFrame", blizz = "PlayerFrame", ufKey = "player" },
+	EQOLUFPlayerFrame = { uf = "EQOLUFPlayerFrame", blizz = "PlayerFrame", ufKey = "player" },
+	TargetFrame = { uf = "EQOLUFTargetFrame", blizz = "TargetFrame", ufKey = "target" },
+	EQOLUFTargetFrame = { uf = "EQOLUFTargetFrame", blizz = "TargetFrame", ufKey = "target" },
+	TargetFrameToT = { uf = "EQOLUFToTFrame", blizz = "TargetFrameToT", ufKey = "targettarget" },
+	EQOLUFToTFrame = { uf = "EQOLUFToTFrame", blizz = "TargetFrameToT", ufKey = "targettarget" },
+	FocusFrame = { uf = "EQOLUFFocusFrame", blizz = "FocusFrame", ufKey = "focus" },
+	EQOLUFFocusFrame = { uf = "EQOLUFFocusFrame", blizz = "FocusFrame", ufKey = "focus" },
+	PetFrame = { uf = "EQOLUFPetFrame", blizz = "PetFrame", ufKey = "pet" },
+	EQOLUFPetFrame = { uf = "EQOLUFPetFrame", blizz = "PetFrame", ufKey = "pet" },
+	BossTargetFrameContainer = { uf = "EQOLUFBossContainer", blizz = "BossTargetFrameContainer", ufKey = "boss" },
+	EQOLUFBossContainer = { uf = "EQOLUFBossContainer", blizz = "BossTargetFrameContainer", ufKey = "boss" },
+}
 
-local tryActivateSmooth
+function ResourceBars.IsMappedUFEnabled(ufKey)
+	local ufCfg = addon.db and addon.db.ufFrames
+	local cfg = ufCfg and ufCfg[ufKey]
+	return cfg and cfg.enabled == true
+end
+
+function ResourceBars.ResolveRelativeFrameByName(relativeName)
+	if type(relativeName) ~= "string" or relativeName == "" or relativeName == "UIParent" then return UIParent end
+	local mapped = RB.UNITFRAME_ANCHOR_MAP[relativeName]
+	if mapped then
+		if mapped.ufKey and ResourceBars.IsMappedUFEnabled(mapped.ufKey) then
+			local ufFrame = _G[mapped.uf]
+			if ufFrame then return ufFrame end
+		end
+		local blizzFrame = _G[mapped.blizz]
+		if blizzFrame then return blizzFrame end
+	end
+	return _G[relativeName] or UIParent
+end
+
+function ResourceBars.RelativeFrameMatchesName(relativeName, frameName)
+	if not relativeName or not frameName then return false end
+	if relativeName == frameName then return true end
+	local mapped = RB.UNITFRAME_ANCHOR_MAP[relativeName]
+	if not mapped then return false end
+	return frameName == mapped.uf or frameName == mapped.blizz
+end
+
+function ResourceBars.GetRelativeFrameHookTargets(relativeName)
+	local targets = {}
+	local seen = {}
+	local function add(name)
+		if type(name) ~= "string" or name == "" or seen[name] then return end
+		seen[name] = true
+		targets[#targets + 1] = name
+	end
+	local mapped = RB.UNITFRAME_ANCHOR_MAP[relativeName]
+	if mapped then
+		add(mapped.blizz)
+		add(mapped.uf)
+	end
+	add(relativeName)
+	return targets
+end
+
 local requestActiveRefresh
 local getStatusbarDropdownLists
 local ensureRelativeFrameHooks
@@ -108,6 +168,7 @@ local COSMETIC_BAR_KEYS = {
 	"textStyle",
 	"shortNumbers",
 	"percentRounding",
+	"hidePercentSign",
 	"fontSize",
 	"fontFace",
 	"fontOutline",
@@ -143,7 +204,6 @@ local COSMETIC_BAR_KEYS = {
 	"reverseFill",
 	"verticalFill",
 	"smoothFill",
-	"smoothDeadzone",
 	"showSeparator",
 	"separatorColor",
 	"separatorThickness",
@@ -227,6 +287,12 @@ local function formatPercentText(value, cfg)
 	end
 	if C_StringUtil and C_StringUtil.RoundToNearestString then return C_StringUtil.RoundToNearestString(value) end
 	return tostring(floor(value + 0.5))
+end
+
+local function formatPercentDisplay(value, cfg)
+	local percentText = formatPercentText(value, cfg)
+	if cfg and cfg.hidePercentSign == true then return percentText end
+	return (addon.variables and addon.variables.isMidnight) and (percentText .. "%") or percentText
 end
 
 local function isSpellKnownSafe(spellId)
@@ -497,71 +563,15 @@ function ResourceBars.RefreshTextureDropdown()
 	dd:SetValue(cur)
 end
 
-local function stopSmoothUpdater(bar)
-	if not bar then return end
-	if bar._smoothUpdater and bar:GetScript("OnUpdate") == bar._smoothUpdater then bar:SetScript("OnUpdate", nil) end
-	bar._smoothActive = false
-end
+local STATUSBAR_INTERP = Enum and Enum.StatusBarInterpolation
+local INTERP_EASE = STATUSBAR_INTERP and STATUSBAR_INTERP.ExponentialEaseOut
 
-local function ensureSmoothUpdater(bar)
-	if not bar then return end
-	if not bar._smoothUpdater then
-		bar._smoothUpdater = function(self, elapsed)
-			if not self:IsShown() then
-				stopSmoothUpdater(self)
-				return
-			end
-			local target = self._smoothTarget
-			if target == nil then
-				stopSmoothUpdater(self)
-				return
-			end
-			local current = self:GetValue() or 0
-			local dz = self._smoothDeadzone or RB.DEFAULT_SMOOTH_DEADZONE
-			local diff = target - current
-			if abs(diff) <= dz then
-				self:SetValue(target)
-				stopSmoothUpdater(self)
-				return
-			end
-			local speed = self._smoothSpeed or RB.SMOOTH_SPEED
-			local step = diff * min(1, (elapsed or 0) * speed)
-			self:SetValue(current + step)
-		end
-	end
-end
-
-local function ensureSmoothVisibilityHooks(bar)
-	if not bar or bar._smoothVisibilityHooks then return end
-	bar:HookScript("OnHide", function(self) stopSmoothUpdater(self) end)
-	bar:HookScript("OnShow", function(self) tryActivateSmooth(self) end)
-	bar._smoothVisibilityHooks = true
-end
-
-tryActivateSmooth = function(bar)
-	if not bar or not bar._smoothEnabled then
-		stopSmoothUpdater(bar)
-		return
-	end
-	if addon.variables.isMidnight then return end
-	ensureSmoothUpdater(bar)
-	ensureSmoothVisibilityHooks(bar)
-	bar._smoothSpeed = bar._smoothSpeed or RB.SMOOTH_SPEED
-	bar._smoothDeadzone = bar._smoothDeadzone or RB.DEFAULT_SMOOTH_DEADZONE
-	if not bar._smoothTarget then
-		stopSmoothUpdater(bar)
-		return
-	end
-	if not bar:IsShown() then return end
-	local current = bar:GetValue() or 0
-	local diff = bar._smoothTarget - current
-	local dz = bar._smoothDeadzone or RB.DEFAULT_SMOOTH_DEADZONE
-	if abs(diff) > dz then
-		if bar:GetScript("OnUpdate") ~= bar._smoothUpdater then bar:SetScript("OnUpdate", bar._smoothUpdater) end
-		bar._smoothActive = true
+local function setBarValue(bar, value, smooth)
+	if not bar or value == nil then return end
+	if smooth and INTERP_EASE then
+		bar:SetValue(value, INTERP_EASE)
 	else
-		if abs(diff) > 0 then bar:SetValue(bar._smoothTarget) end
-		stopSmoothUpdater(bar)
+		bar:SetValue(value)
 	end
 end
 
@@ -669,6 +679,35 @@ local function getSpecInfo(specIndex)
 	return powertypeClasses[class] and powertypeClasses[class][spec]
 end
 
+function ResourceBars.IsSpecBarTypeSupported(specInfo, barType)
+	if barType == "HEALTH" then return true end
+	if not specInfo then return true end
+	return specInfo.MAIN == barType or specInfo[barType] == true
+end
+
+function ResourceBars.IsBarTypeSupportedForClass(barType, classTag, specIndex)
+	if barType == "HEALTH" then return true end
+	local class = classTag or addon.variables.unitClass
+	if not class or not powertypeClasses or not powertypeClasses[class] then return false end
+	local classTbl = powertypeClasses[class]
+	local spec = specIndex or addon.variables.unitSpec
+	if spec and classTbl[spec] then return ResourceBars.IsSpecBarTypeSupported(classTbl[spec], barType) end
+	for _, specInfo in pairs(classTbl) do
+		if type(specInfo) == "table" and ResourceBars.IsSpecBarTypeSupported(specInfo, barType) then return true end
+	end
+	return false
+end
+
+function ResourceBars.GetClassPowerTypes(classTag)
+	local class = classTag or addon.variables.unitClass
+	local list = {}
+	if not class then return list end
+	for _, pType in ipairs(classPowerTypes or {}) do
+		if ResourceBars.IsBarTypeSupportedForClass(pType, class, nil) then list[#list + 1] = pType end
+	end
+	return list
+end
+
 local function specSecondaries(specInfo)
 	local list = {}
 	if not specInfo then return list end
@@ -676,6 +715,18 @@ local function specSecondaries(specInfo)
 		if pType ~= specInfo.MAIN and specInfo[pType] then list[#list + 1] = pType end
 	end
 	return list
+end
+
+function ResourceBars.GetEditModeLegacyFrameId(barType, classTag)
+	local class = classTag or addon.variables.unitClass or "UNKNOWN"
+	return "resourceBar_" .. tostring(class) .. "_" .. tostring(barType or "")
+end
+
+function ResourceBars.GetEditModeFrameId(barType, classTag, specIndex)
+	local class = classTag or addon.variables.unitClass or "UNKNOWN"
+	local spec = tonumber(specIndex or addon.variables.unitSpec)
+	if spec and spec > 0 then return "resourceBar_" .. tostring(class) .. "_" .. tostring(spec) .. "_" .. tostring(barType or "") end
+	return ResourceBars.GetEditModeLegacyFrameId(barType, class)
 end
 
 local function secondaryIndex(specInfo, pType)
@@ -809,6 +860,23 @@ local function applyGlobalProfile(barType, specIndex, cosmeticOnly, sourceKey)
 		end
 	end
 	if not globalCfg then return false, "NO_GLOBAL" end
+	local sourceBarType
+	do
+		local tagged = globalCfg._rbType
+		if type(tagged) == "string" and tagged ~= "" then
+			sourceBarType = tagged
+		elseif sourceKey == "MAIN" then
+			local mainType = store and store._MAIN_TYPE
+			if type(mainType) == "string" and mainType ~= "" then sourceBarType = mainType end
+		elseif type(sourceKey) == "string" and sourceKey ~= "" and sourceKey ~= "SECONDARY" then
+			sourceBarType = sourceKey
+		elseif store and globalCfg == store[barType] then
+			sourceBarType = barType
+		elseif store and globalCfg == store.MAIN then
+			local mainType = store._MAIN_TYPE
+			if type(mainType) == "string" and mainType ~= "" then sourceBarType = mainType end
+		end
+	end
 	-- Ensure size fields exist even for older saved globals
 	if not globalCfg.width or not globalCfg.height then
 		local frameName = (barType == "HEALTH") and "EQOLHealthBar" or ("EQOL" .. tostring(barType) .. "Bar")
@@ -825,7 +893,22 @@ local function applyGlobalProfile(barType, specIndex, cosmeticOnly, sourceKey)
 	if cosmeticOnly then
 		copyCosmeticBarSettings(globalCfg, specCfg[barType])
 	else
-		specCfg[barType] = CopyTable(globalCfg)
+		local copied = CopyTable(globalCfg or {})
+		copied._rbType = barType
+		local relType
+		do
+			local anchor = copied.anchor
+			local rf = anchor and anchor.relativeFrame
+			if rf == "EQOLHealthBar" then
+				relType = "HEALTH"
+			elseif type(rf) == "string" and rf ~= "" then
+				relType = rf:match("^EQOL(.+)Bar$")
+			end
+		end
+		local crossTypeTemplate = sourceBarType and sourceBarType ~= barType
+		local unsupportedRelative = relType and relType ~= "HEALTH" and specInfo and not (specInfo.MAIN == relType or specInfo[relType])
+		if crossTypeTemplate or unsupportedRelative then copied.anchor = nil end
+		specCfg[barType] = copied
 		-- Chain secondary anchors if we are applying to second or later secondary
 		if secondaryIdx and secondaryIdx > 1 then
 			local prevType = specSecondaries(getSpecInfo(specIndex))[secondaryIdx - 1]
@@ -838,6 +921,7 @@ local function applyGlobalProfile(barType, specIndex, cosmeticOnly, sourceKey)
 			specCfg[barType].separatorColor = specCfg[barType].separatorColor or globalCfg.separatorColor or RB.SEP_DEFAULT
 		end
 	end
+	if specCfg[barType] and specCfg[barType]._rbType ~= barType then specCfg[barType]._rbType = barType end
 	return true
 end
 
@@ -921,6 +1005,11 @@ ensureSpecCfg = function(specIndex)
 				specCfg[pType] = specCfg[pType] or {}
 				local ok = false
 				if ResourceBars.ApplyGlobalProfile then ok = ResourceBars.ApplyGlobalProfile(pType, specIndex or spec, false) end
+				-- Fallback for fresh profiles/new chars without any saved global template yet.
+				if not ok then
+					specCfg[pType]._rbType = pType
+					ok = true
+				end
 				if ok then
 					applied = applied + 1
 					specCfg[pType].enabled = true
@@ -941,22 +1030,27 @@ ensureSpecCfg = function(specIndex)
 						local a = specCfg[pType].anchor or {}
 						a.point = a.point or "CENTER"
 						a.relativePoint = a.relativePoint or "CENTER"
-						local targetFrame = a.relativeFrame or frameNameFor("HEALTH")
-						if class == "DRUID" then
-							if pType == "COMBO_POINTS" then
-								targetFrame = frameNameFor("ENERGY")
+						local explicitRelative = type(a.relativeFrame) == "string" and a.relativeFrame ~= ""
+						local chained = false
+						if not explicitRelative then
+							local targetFrame = frameNameFor("HEALTH")
+							if class == "DRUID" then
+								if pType == "COMBO_POINTS" then
+									targetFrame = frameNameFor("ENERGY")
+								else
+									targetFrame = prevFrame
+								end
+								if not targetFrame or targetFrame == "" then targetFrame = prevFrame or (selection.MAIN and mainFrame or nil) end
 							else
 								targetFrame = prevFrame
 							end
-							if not targetFrame or targetFrame == "" then targetFrame = prevFrame or (selection.MAIN and mainFrame or nil) end
-						else
-							targetFrame = prevFrame
+							a.relativeFrame = targetFrame
+							chained = targetFrame and targetFrame ~= ""
 						end
-						a.relativeFrame = targetFrame
 						a.x = a.x or 0
-						a.y = a.y or -2
+						if chained then a.y = a.y or -2 end
 						a.autoSpacing = a.autoSpacing or nil
-						a.matchRelativeWidth = a.matchRelativeWidth or true
+						if chained then a.matchRelativeWidth = a.matchRelativeWidth or true end
 						specCfg[pType].anchor = a
 						if class ~= "DRUID" then prevFrame = frameNameFor(pType) end
 					else
@@ -1022,6 +1116,8 @@ local function exportResourceProfile(scopeKey, profileName)
 			if db.resourceBarsHideOutOfCombat ~= nil then globals.resourceBarsHideOutOfCombat = db.resourceBarsHideOutOfCombat and true or false end
 			if db.resourceBarsHideMounted ~= nil then globals.resourceBarsHideMounted = db.resourceBarsHideMounted and true or false end
 			if db.resourceBarsHideVehicle ~= nil then globals.resourceBarsHideVehicle = db.resourceBarsHideVehicle and true or false end
+			if db.resourceBarsHidePetBattle ~= nil then globals.resourceBarsHidePetBattle = db.resourceBarsHidePetBattle and true or false end
+			if db.resourceBarsHideClientScene ~= nil then globals.resourceBarsHideClientScene = db.resourceBarsHideClientScene and true or false end
 			if type(db.globalResourceBarSettings) == "table" then globals.globalResourceBarSettings = CopyTable(db.globalResourceBarSettings) end
 			if next(globals) then payload.globalSettings = globals end
 		end
@@ -1114,6 +1210,9 @@ local function importResourceProfile(encoded, scopeKey)
 		if global.resourceBarsHideOutOfCombat ~= nil then addon.db.resourceBarsHideOutOfCombat = global.resourceBarsHideOutOfCombat and true or false end
 		if global.resourceBarsHideMounted ~= nil then addon.db.resourceBarsHideMounted = global.resourceBarsHideMounted and true or false end
 		if global.resourceBarsHideVehicle ~= nil then addon.db.resourceBarsHideVehicle = global.resourceBarsHideVehicle and true or false end
+		if global.resourceBarsHidePetBattle ~= nil then addon.db.resourceBarsHidePetBattle = global.resourceBarsHidePetBattle and true or false end
+		if global.resourceBarsHideClientScene ~= nil then addon.db.resourceBarsHideClientScene = global.resourceBarsHideClientScene and true or false end
+		if global.resourceBarsHidePetBattle == nil and global.auraHideInPetBattle ~= nil then addon.db.resourceBarsHidePetBattle = global.auraHideInPetBattle and true or false end
 		if type(global.globalResourceBarSettings) == "table" then addon.db.globalResourceBarSettings = CopyTable(global.globalResourceBarSettings) end
 	end
 
@@ -1275,17 +1374,28 @@ end
 local function configureSpecialTexture(bar, pType, cfg)
 	if not bar then return end
 	local atlas = RB.ATLAS_BY_POWER[pType]
-	if not atlas then return end
+	if not atlas then
+		bar._eqolSpecialAtlas = nil
+		bar._eqolSpecialAtlasNormalized = nil
+		return
+	end
 	cfg = cfg or bar._cfg
-	if not isDefaultTextureSelection(cfg, pType) then return end
+	if not isDefaultTextureSelection(cfg, pType) then
+		bar._eqolSpecialAtlas = nil
+		bar._eqolSpecialAtlasNormalized = nil
+		return
+	end
+	local shouldNormalize = shouldNormalizeAtlasColor(cfg, pType, bar)
+	local tex = bar.GetStatusBarTexture and bar:GetStatusBarTexture() or nil
+	local currentAtlas = tex and tex.GetAtlas and tex:GetAtlas() or nil
+	if bar._eqolSpecialAtlas == atlas and bar._eqolSpecialAtlasNormalized == shouldNormalize and currentAtlas == atlas then return end
 	if bar.SetStatusBarTexture then bar:SetStatusBarTexture(atlas) end
-	local tex = bar:GetStatusBarTexture()
+	tex = bar.GetStatusBarTexture and bar:GetStatusBarTexture() or nil
 	if tex and tex.SetAtlas then
-		local currentAtlas = tex.GetAtlas and tex:GetAtlas()
+		currentAtlas = tex.GetAtlas and tex:GetAtlas()
 		if currentAtlas ~= atlas then tex:SetAtlas(atlas, true) end
 		if tex.SetHorizTile then tex:SetHorizTile(false) end
 		if tex.SetVertTile then tex:SetVertTile(false) end
-		local shouldNormalize = shouldNormalizeAtlasColor(cfg, pType, bar)
 		if shouldNormalize then
 			bar:SetStatusBarColor(1, 1, 1, 1)
 			bar._baseColor = bar._baseColor or {}
@@ -1295,6 +1405,8 @@ local function configureSpecialTexture(bar, pType, cfg)
 			bar._usingMaxColor = false
 		end
 	end
+	bar._eqolSpecialAtlas = atlas
+	bar._eqolSpecialAtlasNormalized = shouldNormalize
 end
 
 local function isValidStatusbarPath(path)
@@ -1316,6 +1428,8 @@ local function resolveTexture(cfg)
 	if sel == nil or sel == "DEFAULT" or not isValidStatusbarPath(sel) then return RB.DEFAULT_RB_TEX end
 	return sel
 end
+
+local function shouldEnableBarMouse(cfg) return not (cfg and cfg.clickThrough == true) end
 
 local function isEQOLFrameName(name)
 	if name == "EQOLHealthBar" then return true end
@@ -1786,24 +1900,6 @@ local function configureBarBehavior(bar, cfg, pType)
 		applyAbsorbLayout(bar, cfg)
 	end
 
-	if pType ~= "RUNES" then
-		ensureSmoothVisibilityHooks(bar)
-		if cfg.smoothFill then
-			bar._smoothEnabled = true
-			bar._smoothDeadzone = cfg.smoothDeadzone or RB.DEFAULT_SMOOTH_DEADZONE
-			bar._smoothSpeed = RB.SMOOTH_SPEED
-			ensureSmoothUpdater(bar)
-		else
-			bar._smoothEnabled = false
-			bar._smoothDeadzone = cfg.smoothDeadzone or RB.DEFAULT_SMOOTH_DEADZONE
-			bar._smoothSpeed = RB.SMOOTH_SPEED
-			bar._smoothTarget = nil
-			stopSmoothUpdater(bar)
-		end
-	else
-		stopSmoothUpdater(bar)
-	end
-
 	if bar._rbBackdropState and bar._rbBackdropState.insets then applyStatusBarInsets(bar, bar._rbBackdropState.insets, true) end
 end
 
@@ -1890,21 +1986,44 @@ ensureEditModeRegistration = function()
 	if ResourceBars and ResourceBars.RegisterEditModeFrames then ResourceBars.RegisterEditModeFrames() end
 end
 
-local function Snap(bar, off)
-	local s = bar:GetEffectiveScale() or 1
-	return floor(off * s + 0.5) / s
+local function SnapFractionToSpan(bar, span, frac)
+	local s = (bar and bar.GetEffectiveScale and bar:GetEffectiveScale()) or 1
+	if s <= 0 then s = 1 end
+	local physicalSpan = max(1, floor((span or 0) * s + 0.5))
+	local physicalOffset = floor((physicalSpan * (frac or 0)) + 0.5)
+	return physicalOffset / s
 end
 
--- Legacy migration: pull saved Edit Mode layout coords into empty anchors so
--- old profiles keep their bar positions after a reload.
+-- Pull saved Edit Mode layout coords into empty anchors.
 local function backfillAnchorFromLayout(anchor, barType)
 	if not anchor or (anchor.x ~= nil and anchor.y ~= nil) then return end
 	if anchor.relativeFrame and anchor.relativeFrame ~= "" and anchor.relativeFrame ~= "UIParent" then return end
 	local editMode = addon and addon.EditMode
 	if not editMode or not editMode.GetLayoutData then return end
 	local layoutName = (editMode.GetActiveLayoutName and editMode:GetActiveLayoutName()) or editMode.activeLayout
-	local frameId = "resourceBar_" .. tostring(barType or "")
+	local frameId = ResourceBars.GetEditModeFrameId(barType, nil, addon.variables and addon.variables.unitSpec)
 	local data = editMode:GetLayoutData(frameId, layoutName)
+	if (not data or data.x == nil or data.y == nil) and ResourceBars.GetEditModeLegacyFrameId then
+		local legacyId = ResourceBars.GetEditModeLegacyFrameId(barType)
+		if legacyId and legacyId ~= frameId then
+			local legacy = editMode:GetLayoutData(legacyId, layoutName)
+			if legacy and legacy.x ~= nil and legacy.y ~= nil then
+				data = legacy
+				-- Seed spec-specific layout from legacy class-wide data once.
+				if editMode.EnsureLayoutData then
+					local target = editMode:EnsureLayoutData(frameId, layoutName)
+					if target then
+						target.point = target.point or legacy.point
+						target.relativePoint = target.relativePoint or legacy.relativePoint or legacy.point
+						target.x = legacy.x
+						target.y = legacy.y
+						if legacy.width ~= nil and target.width == nil then target.width = legacy.width end
+						if legacy.height ~= nil and target.height == nil then target.height = legacy.height end
+					end
+				end
+			end
+		end
+	end
 	if not data or data.x == nil or data.y == nil then return end
 	local point = data.point or data.relativePoint
 	if not point then return end
@@ -1937,14 +2056,9 @@ mapFormID("TRAVEL", DRUID_TRAVEL_FORM, DRUID_ACQUATIC_FORM, DRUID_FLIGHT_FORM, D
 mapFormID("MOONKIN", DRUID_MOONKIN_FORM_1, DRUID_MOONKIN_FORM_2)
 mapFormID("HUMANOID", DRUID_TREE_FORM)
 local formKeyToIndex = {}
-local druidStanceOrder = {}
 for idx, key in pairs(formIndexToKey) do
 	formKeyToIndex[key] = idx
-	if type(idx) == "number" and idx > 0 then druidStanceOrder[#druidStanceOrder + 1] = idx end
 end
-tsort(druidStanceOrder)
-local druidStanceString = table.concat(druidStanceOrder, "/")
-local DRUID_HUMANOID_VISIBILITY_CLAUSE = (druidStanceString and druidStanceString ~= "") and ("[combat,nostance:%s] show"):format(druidStanceString) or "[combat] show"
 local DRUID_FORM_SEQUENCE = { "HUMANOID", "BEAR", "CAT", "TRAVEL", "MOONKIN", "STAG" }
 local function shouldUseDruidFormDriver(cfg)
 	if addon.variables.unitClass ~= "DRUID" then return false end
@@ -1966,8 +2080,63 @@ local function mapFormNameToKey(name)
 	if name:find("moonkin") or name:find("owl") then return "MOONKIN" end
 	if name:find("treant") then return "HUMANOID" end
 	if name:find("tree of life") or name:find("tree form") or name:find("treeform") then return "HUMANOID" end
+	if name:find("mount") then return "STAG" end
 	if name:find("stag") then return "STAG" end
 	return nil
+end
+
+local function resolveFormKeyFromShapeshiftIndex(idx)
+	if not idx or idx <= 0 or not GetShapeshiftFormInfo then return nil end
+	local texture, _, _, spellID = GetShapeshiftFormInfo(idx)
+	if spellID and C_Spell and C_Spell.GetSpellName then
+		local key = mapFormNameToKey(C_Spell.GetSpellName(spellID))
+		if key then return key end
+	end
+	if type(texture) == "string" then
+		local key = mapFormNameToKey(texture)
+		if key then return key end
+	end
+	return nil
+end
+
+local function addUniqueStanceIndex(dst, idx)
+	if not dst or not idx or idx <= 0 then return end
+	for i = 1, #dst do
+		if dst[i] == idx then return end
+	end
+	dst[#dst + 1] = idx
+end
+
+local function getDruidFormStanceMap()
+	local map = {}
+	if addon.variables.unitClass ~= "DRUID" then return map end
+
+	local numForms = GetNumShapeshiftForms and GetNumShapeshiftForms() or 0
+	for idx = 1, numForms do
+		local key = resolveFormKeyFromShapeshiftIndex(idx)
+		if key then
+			map[key] = map[key] or {}
+			addUniqueStanceIndex(map[key], idx)
+		end
+	end
+
+	local activeIdx = GetShapeshiftForm and (GetShapeshiftForm() or 0) or 0
+	if activeIdx > 0 then
+		local activeKey
+		if GetShapeshiftFormID then activeKey = formIDToKey[GetShapeshiftFormID()] end
+		if not activeKey then activeKey = resolveFormKeyFromShapeshiftIndex(activeIdx) end
+		if not activeKey then activeKey = formIndexToKey[activeIdx] end
+		if activeKey then
+			map[activeKey] = map[activeKey] or {}
+			addUniqueStanceIndex(map[activeKey], activeIdx)
+		end
+	end
+
+	for _, indices in pairs(map) do
+		tsort(indices)
+	end
+
+	return map
 end
 
 local function ensureDruidShowFormsDefaults(cfg, pType, specInfo)
@@ -2033,22 +2202,6 @@ local function ensureRelativeFrameFallback(anchor, pType, specInfo)
 		if specInfo and (specInfo.MAIN == relType or specInfo[relType]) then return end
 	end
 	if _G[rf] then return end -- relative bar already exists (e.g., created earlier)
-
-	-- Fallback to spec MAIN bar if available; otherwise health
-	local fallback
-	if specInfo and specInfo.MAIN and pType ~= "HEALTH" then
-		fallback = "EQOL" .. specInfo.MAIN .. "Bar"
-		if fallback == ("EQOL" .. tostring(pType) .. "Bar") then fallback = nil end
-	end
-	if not fallback or fallback == rf then fallback = "EQOLHealthBar" end
-
-	anchor.relativeFrame = fallback
-	if not anchor.point then anchor.point = "TOP" end
-	if not anchor.relativePoint then anchor.relativePoint = "BOTTOM" end
-	if anchor.x == nil then anchor.x = 0 end
-	if anchor.y == nil then anchor.y = -2 end
-	anchor.autoSpacing = nil
-	if anchor.matchRelativeWidth == nil then anchor.matchRelativeWidth = true end
 end
 
 function updateHealthBar(evt)
@@ -2059,45 +2212,22 @@ function updateHealthBar(evt)
 		if previousMax ~= newMax then
 			healthBar._lastMax = newMax
 			healthBar:SetMinMaxValues(0, newMax)
-			if not addon.variables.isMidnight then
-				local currentValue = healthBar:GetValue() or 0
+			local currentValue = healthBar:GetValue()
+			local canClamp = not (issecretvalue and (issecretvalue(currentValue) or issecretvalue(newMax)))
+			if canClamp then
+				currentValue = currentValue or 0
 				if currentValue > newMax then healthBar:SetValue(newMax) end
-				if healthBar._smoothTarget and healthBar._smoothTarget > newMax then
-					healthBar._smoothTarget = newMax
-					if healthBar._smoothEnabled then tryActivateSmooth(healthBar) end
-				end
-			else
-				healthBar:SetValue(newMax)
 			end
 		end
 		local maxHealth = healthBar._lastMax or newMax or 1
 		local curHealth = UnitHealth("player")
 		local settings = getBarSettings("HEALTH") or {}
 		local smooth = settings.smoothFill == true
-		if not addon.variables.isMidnight and smooth then
-			healthBar._smoothTarget = curHealth
-			healthBar._smoothDeadzone = settings.smoothDeadzone or healthBar._smoothDeadzone or RB.DEFAULT_SMOOTH_DEADZONE
-			healthBar._smoothSpeed = RB.SMOOTH_SPEED
-			if not healthBar._smoothInitialized then
-				healthBar:SetValue(curHealth)
-				healthBar._smoothInitialized = true
-			end
-			healthBar._smoothEnabled = true
-			tryActivateSmooth(healthBar)
-		else
-			healthBar._smoothTarget = nil
-			healthBar._smoothDeadzone = settings.smoothDeadzone or healthBar._smoothDeadzone or RB.DEFAULT_SMOOTH_DEADZONE
-			healthBar._smoothSpeed = RB.SMOOTH_SPEED
-			healthBar:SetValue(curHealth)
-			healthBar._smoothInitialized = nil
-			healthBar._smoothEnabled = false
-			stopSmoothUpdater(healthBar)
-		end
+		setBarValue(healthBar, curHealth, smooth)
 		healthBar._lastVal = curHealth
 
 		local percent = getHealthPercent("player", curHealth, maxHealth)
-		local percentText = formatPercentText(percent, settings)
-		local percentStr = addon.variables.isMidnight and (percentText .. "%") or percentText
+		local percentStr = formatPercentDisplay(percent, settings)
 		if healthBar.text then
 			local style = settings and settings.textStyle or "PERCENT"
 			local useShortNumbers = settings.shortNumbers ~= false
@@ -2205,7 +2335,7 @@ function updateHealthBar(evt)
 			local absorbEnabled = settings.absorbEnabled ~= false
 			if not absorbEnabled or maxHealth <= 0 then
 				absorbBar:Hide()
-				absorbBar:SetValue(0)
+				setBarValue(absorbBar, 0, smooth)
 				absorbBar._lastVal = 0
 			else
 				if not absorbBar:IsShown() then absorbBar:Show() end
@@ -2226,15 +2356,15 @@ function updateHealthBar(evt)
 				if settings.absorbSample then abs = maxHealth * 0.6 end
 				if settings.absorbOverfill then applyAbsorbLayout(healthBar, settings) end
 				if addon.variables.isMidnight then
-					absorbBar:SetValue(abs)
 					absorbBar:SetMinMaxValues(0, maxHealth)
+					setBarValue(absorbBar, abs, smooth)
 				else
 					if abs > maxHealth then abs = maxHealth end
 					if absorbBar._lastMax ~= maxHealth then
 						absorbBar:SetMinMaxValues(0, maxHealth)
 						absorbBar._lastMax = maxHealth
 					end
-					absorbBar:SetValue(abs)
+					setBarValue(absorbBar, abs, smooth)
 					absorbBar._lastVal = abs
 				end
 			end
@@ -2262,7 +2392,7 @@ function getAnchor(name, spec)
 end
 
 local function resolveAnchor(info, type)
-	local frame = _G[info and info.relativeFrame]
+	local frame = ResourceBars.ResolveRelativeFrameByName(info and info.relativeFrame)
 	if not frame or frame == UIParent then return frame or UIParent, false end
 
 	local visited = {}
@@ -2286,7 +2416,7 @@ local function resolveAnchor(info, type)
 
 		if not bType then break end
 		local anch = getAnchor(bType, addon.variables.unitSpec)
-		check = _G[anch and anch.relativeFrame]
+		check = ResourceBars.ResolveRelativeFrameByName(anch and anch.relativeFrame)
 		if check == nil or check == UIParent then break end
 		limit = limit - 1
 	end
@@ -2323,10 +2453,7 @@ function createHealthBar()
 		healthBar:SetSize(w, h)
 	end
 	if not healthBar._rbRefreshOnShow then
-		healthBar:HookScript("OnShow", function(self)
-			self._smoothInitialized = nil
-			updateHealthBar("ON_SHOW")
-		end)
+		healthBar:HookScript("OnShow", function(self) updateHealthBar("ON_SHOW") end)
 		healthBar._rbRefreshOnShow = true
 	end
 	do
@@ -2524,9 +2651,12 @@ function getBarSettings(pType)
 	local class = addon.variables.unitClass
 	local spec = addon.variables.unitSpec
 	local specInfo = getSpecInfo(spec)
+	if class and not ResourceBars.IsBarTypeSupportedForClass(pType, class, spec) then return nil end
+	if not ResourceBars.IsSpecBarTypeSupported(specInfo, pType) then return nil end
 	if addon.db.personalResourceBarSettings and addon.db.personalResourceBarSettings[class] and addon.db.personalResourceBarSettings[class][spec] then
 		local cfg = addon.db.personalResourceBarSettings[class][spec][pType]
 		if cfg then
+			if cfg._rbType ~= pType then cfg._rbType = pType end
 			if isAuraPowerType and isAuraPowerType(pType) then ensureAuraPowerDefaults(pType, cfg) end
 			ensureDruidShowFormsDefaults(cfg, pType, specInfo)
 			ensureRelativeFrameFallback(cfg.anchor, pType, specInfo)
@@ -2538,7 +2668,35 @@ function getBarSettings(pType)
 		if specCfg and not specCfg[pType] then
 			local globalCfg, secondaryIdx = resolveGlobalTemplate(pType, spec)
 			if globalCfg then
-				specCfg[pType] = CopyTable(globalCfg)
+				local store = addon.db and addon.db.globalResourceBarSettings
+				local sourceBarType
+				do
+					local tagged = globalCfg._rbType
+					if type(tagged) == "string" and tagged ~= "" then
+						sourceBarType = tagged
+					elseif store and globalCfg == store[pType] then
+						sourceBarType = pType
+					elseif store and globalCfg == store.MAIN then
+						local mainType = store._MAIN_TYPE
+						if type(mainType) == "string" and mainType ~= "" then sourceBarType = mainType end
+					end
+				end
+				local copied = CopyTable(globalCfg or {})
+				copied._rbType = pType
+				local relType
+				do
+					local anchor = copied.anchor
+					local rf = anchor and anchor.relativeFrame
+					if rf == "EQOLHealthBar" then
+						relType = "HEALTH"
+					elseif type(rf) == "string" and rf ~= "" then
+						relType = rf:match("^EQOL(.+)Bar$")
+					end
+				end
+				local crossTypeTemplate = sourceBarType and sourceBarType ~= pType
+				local unsupportedRelative = relType and relType ~= "HEALTH" and specInfo and not (specInfo.MAIN == relType or specInfo[relType])
+				if crossTypeTemplate or unsupportedRelative then copied.anchor = nil end
+				specCfg[pType] = copied
 				if isAuraPowerType and isAuraPowerType(pType) then ensureAuraPowerDefaults(pType, specCfg[pType]) end
 				ensureDruidShowFormsDefaults(specCfg[pType], pType, specInfo)
 				ensureRelativeFrameFallback(specCfg[pType].anchor, pType, specInfo)
@@ -2575,8 +2733,8 @@ local function syncBarWidthWithAnchor(pType)
 	end
 	local relativeFrameName = anchor.relativeFrame
 	ensureRelativeFrameHooks(relativeFrameName)
-	local relFrame = relativeFrameName and _G[relativeFrameName]
-	if not relFrame or not relFrame.GetWidth then
+	local relFrame = ResourceBars.ResolveRelativeFrameByName(relativeFrameName)
+	if not relFrame or relFrame == UIParent or not relFrame.GetWidth then
 		local current = frame:GetWidth() or 0
 		if abs(current - baseWidth) < 0.5 then return false end
 		frame:SetWidth(baseWidth)
@@ -2615,8 +2773,21 @@ local pendingHookRetries = {}
 
 ensureRelativeFrameHooks = function(frameName)
 	if not frameName or frameName == "UIParent" then return end
-	local frame = _G[frameName]
-	if not frame then
+	local foundFrame = false
+	for _, targetName in ipairs(ResourceBars.GetRelativeFrameHookTargets(frameName)) do
+		local frame = _G[targetName]
+		if frame then
+			foundFrame = true
+			if not widthMatchHookedFrames[targetName] and frame.HookScript then
+				local okSize = pcall(frame.HookScript, frame, "OnSizeChanged", handleRelativeFrameGeometryChanged)
+				local okShow = pcall(frame.HookScript, frame, "OnShow", handleRelativeFrameGeometryChanged)
+				local okHide = pcall(frame.HookScript, frame, "OnHide", handleRelativeFrameGeometryChanged)
+				if okSize or okShow or okHide then widthMatchHookedFrames[targetName] = true end
+			end
+		end
+	end
+	if foundFrame then return end
+	if not foundFrame then
 		if After and not pendingHookRetries[frameName] then
 			pendingHookRetries[frameName] = true
 			After(1, function()
@@ -2625,13 +2796,6 @@ ensureRelativeFrameHooks = function(frameName)
 			end)
 		end
 		return
-	end
-	if widthMatchHookedFrames[frameName] then return end
-	if frame.HookScript then
-		local okSize = pcall(frame.HookScript, frame, "OnSizeChanged", handleRelativeFrameGeometryChanged)
-		local okShow = pcall(frame.HookScript, frame, "OnShow", handleRelativeFrameGeometryChanged)
-		local okHide = pcall(frame.HookScript, frame, "OnHide", handleRelativeFrameGeometryChanged)
-		if okSize or okShow or okHide then widthMatchHookedFrames[frameName] = true end
 	end
 end
 
@@ -2663,10 +2827,6 @@ function updatePowerBar(type, runeSlot)
 		else
 			cooldownR, cooldownG, cooldownB, cooldownA = 0.35, 0.35, 0.35, 1
 		end
-		local readyChanged = (bar._runeReadyR ~= readyR) or (bar._runeReadyG ~= readyG) or (bar._runeReadyB ~= readyB) or (bar._runeReadyA ~= readyA)
-		local cooldownChanged = (bar._runeCooldownR ~= cooldownR) or (bar._runeCooldownG ~= cooldownG) or (bar._runeCooldownB ~= cooldownB) or (bar._runeCooldownA ~= cooldownA)
-		bar._runeReadyR, bar._runeReadyG, bar._runeReadyB, bar._runeReadyA = readyR, readyG, readyB, readyA
-		bar._runeCooldownR, bar._runeCooldownG, bar._runeCooldownB, bar._runeCooldownA = cooldownR, cooldownG, cooldownB, cooldownA
 		bar._rune = bar._rune or {}
 		bar._runeOrder = bar._runeOrder or {}
 		bar._charging = bar._charging or {}
@@ -2687,6 +2847,20 @@ function updatePowerBar(type, runeSlot)
 		for i = count + 1, #charging do
 			charging[i] = nil
 		end
+		-- Runes use max color only when all six runes are ready (resource at maximum).
+		local allRunesReady = count == 0
+		if cfg.useMaxColor == true and allRunesReady then
+			local maxCol = cfg.maxColor or RB.WHITE
+			readyR = maxCol[1] or readyR
+			readyG = maxCol[2] or readyG
+			readyB = maxCol[3] or readyB
+			readyA = maxCol[4] or readyA
+		end
+		local readyChanged = (bar._runeReadyR ~= readyR) or (bar._runeReadyG ~= readyG) or (bar._runeReadyB ~= readyB) or (bar._runeReadyA ~= readyA)
+		local cooldownChanged = (bar._runeCooldownR ~= cooldownR) or (bar._runeCooldownG ~= cooldownG) or (bar._runeCooldownB ~= cooldownB) or (bar._runeCooldownA ~= cooldownA)
+		bar._runeReadyR, bar._runeReadyG, bar._runeReadyB, bar._runeReadyA = readyR, readyG, readyB, readyA
+		bar._runeCooldownR, bar._runeCooldownG, bar._runeCooldownB, bar._runeCooldownA = cooldownR, cooldownG, cooldownB, cooldownA
+		bar._usingMaxColor = cfg.useMaxColor == true and allRunesReady
 		if count > 1 then
 			local snapshot = bar._chargingSnapshot
 			if not snapshot then
@@ -2952,31 +3126,12 @@ function updatePowerBar(type, runeSlot)
 
 		local style = bar._style or "PERCENT"
 		local smooth = cfg.smoothFill == true
-		if not addon.variables.isMidnight and smooth then
-			bar._smoothTarget = curPower
-			bar._smoothDeadzone = cfg.smoothDeadzone or bar._smoothDeadzone or RB.DEFAULT_SMOOTH_DEADZONE
-			bar._smoothSpeed = RB.SMOOTH_SPEED
-			if not bar._smoothInitialized then
-				bar:SetValue(curPower)
-				bar._smoothInitialized = true
-			end
-			bar._smoothEnabled = true
-			tryActivateSmooth(bar)
-		else
-			bar._smoothTarget = nil
-			bar._smoothDeadzone = cfg.smoothDeadzone or bar._smoothDeadzone or RB.DEFAULT_SMOOTH_DEADZONE
-			bar._smoothSpeed = RB.SMOOTH_SPEED
-			bar:SetValue(curPower)
-			bar._smoothInitialized = nil
-			bar._smoothEnabled = false
-			stopSmoothUpdater(bar)
-		end
+		setBarValue(bar, curPower, smooth)
 		bar._lastVal = curPower
 
 		local percent = maxHealth > 0 and (curPower / maxHealth) or 0
 		local percentDisplay = percent * 100
-		local percentText = formatPercentText(percentDisplay, cfg)
-		local percentStr = addon.variables.isMidnight and (percentText .. "%") or percentText
+		local percentStr = formatPercentDisplay(percentDisplay, cfg)
 		if bar.text then
 			local useShortNumbers = cfg.shortNumbers ~= false
 			if style == "NONE" then
@@ -3069,30 +3224,11 @@ function updatePowerBar(type, runeSlot)
 		local style = bar._style or "CURMAX"
 		local smooth = cfg.smoothFill == true
 		local shownStacks = (visualMax and visualMax > 0) and ((stacks <= 0) and 0 or (((stacks - 1) % visualMax) + 1)) or stacks
-		if not addon.variables.isMidnight and smooth then
-			bar._smoothTarget = shownStacks
-			bar._smoothDeadzone = cfg.smoothDeadzone or bar._smoothDeadzone or RB.DEFAULT_SMOOTH_DEADZONE
-			bar._smoothSpeed = RB.SMOOTH_SPEED
-			if not bar._smoothInitialized then
-				bar:SetValue(shownStacks)
-				bar._smoothInitialized = true
-			end
-			bar._smoothEnabled = true
-			tryActivateSmooth(bar)
-		else
-			bar._smoothTarget = nil
-			bar._smoothDeadzone = cfg.smoothDeadzone or bar._smoothDeadzone or RB.DEFAULT_SMOOTH_DEADZONE
-			bar._smoothSpeed = RB.SMOOTH_SPEED
-			bar:SetValue(shownStacks)
-			bar._smoothInitialized = nil
-			bar._smoothEnabled = false
-			stopSmoothUpdater(bar)
-		end
+		setBarValue(bar, shownStacks, smooth)
 		bar._lastVal = shownStacks
 
 		local percent = logicalMax > 0 and (stacks / logicalMax * 100) or 0
-		local percentText = formatPercentText(percent, cfg)
-		local percentStr = addon.variables.isMidnight and (percentText .. "%") or percentText
+		local percentStr = formatPercentDisplay(percent, cfg)
 
 		if bar.text then
 			local useShortNumbers = cfg.shortNumbers ~= false
@@ -3168,6 +3304,7 @@ function updatePowerBar(type, runeSlot)
 		end
 		bar._usingMaxColor = flag == "max"
 		bar._usingMaelstromFiveColor = flag == "mid"
+		refreshDiscreteSegmentsForBar(type, bar, cfg, shownStacks, visualMax)
 		configureSpecialTexture(bar, type, cfg)
 		if ResourceBars.RefreshStatusBarGradient then ResourceBars.RefreshStatusBarGradient(bar, cfg) end
 		return
@@ -3177,7 +3314,7 @@ function updatePowerBar(type, runeSlot)
 	local cfg = getBarSettings(type) or {}
 	local cfgDef = (RB.POWER_CONFIG and RB.POWER_CONFIG[type]) or {}
 	local isSoulShards = type == "SOUL_SHARDS"
-	local useRaw = isSoulShards == true
+	local useRaw = isSoulShards and addon.variables and addon.variables.unitClass == "WARLOCK" and addon.variables.unitSpec == 3
 	local maxPower = bar._lastMax
 	if not maxPower or bar._lastMaxRaw ~= useRaw then
 		maxPower = UnitPowerMax("player", pType, useRaw)
@@ -3201,36 +3338,17 @@ function updatePowerBar(type, runeSlot)
 	end
 	local displayCur = curPower
 	local displayMax = maxPower
-	if isSoulShards then
+	if isSoulShards and useRaw then
 		displayCur = (curPower or 0) / 10
 		displayMax = (maxPower or 0) / 10
 	end
 
 	local style = bar._style or ((type == "MANA") and "PERCENT" or "CURMAX")
 	local smooth = cfg.smoothFill == true and type ~= "ESSENCE"
-	if not addon.variables.isMidnight and smooth then
-		bar._smoothTarget = barValue
-		bar._smoothDeadzone = cfg.smoothDeadzone or bar._smoothDeadzone or RB.DEFAULT_SMOOTH_DEADZONE
-		bar._smoothSpeed = RB.SMOOTH_SPEED
-		if not bar._smoothInitialized then
-			bar:SetValue(barValue)
-			bar._smoothInitialized = true
-		end
-		bar._smoothEnabled = true
-		tryActivateSmooth(bar)
-	else
-		bar._smoothTarget = nil
-		bar._smoothDeadzone = cfg.smoothDeadzone or bar._smoothDeadzone or RB.DEFAULT_SMOOTH_DEADZONE
-		bar._smoothSpeed = RB.SMOOTH_SPEED
-		bar:SetValue(barValue)
-		bar._smoothInitialized = nil
-		bar._smoothEnabled = false
-		stopSmoothUpdater(bar)
-	end
+	setBarValue(bar, barValue, smooth)
 	bar._lastVal = barValue
 	local percent = getPowerPercent("player", pType, curPower, maxPower)
-	local percentText = formatPercentText(percent, cfg)
-	local percentStr = addon.variables.isMidnight and (percentText .. "%") or percentText
+	local percentStr = formatPercentDisplay(percent, cfg)
 	if bar.text then
 		local useShortNumbers = cfg.shortNumbers ~= false
 		if style == "NONE" then
@@ -3418,6 +3536,10 @@ function updatePowerBar(type, runeSlot)
 				ResourceBars.DeactivateEssenceTicker(bar)
 			end
 		end
+	else
+		local discreteCur = isSoulShards and displayCur or curPower
+		local discreteMax = isSoulShards and displayMax or maxPower
+		refreshDiscreteSegmentsForBar(type, bar, cfg, discreteCur, discreteMax)
 	end
 
 	configureSpecialTexture(bar, type, cfg)
@@ -3433,14 +3555,90 @@ function forceColorUpdate(pType)
 	if pType and powerbar[pType] then updatePowerBar(pType) end
 end
 
+setParentBarTextureVisible = function(bar, visible)
+	if not bar then return end
+	local tex = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+	if tex then tex:SetAlpha(visible and 1 or 0) end
+end
+
+getSeparatorSegmentCount = function(pType, cfg)
+	if pType == "RUNES" then
+		return 6
+	elseif pType == "ESSENCE" then
+		return POWER_ENUM and UnitPowerMax("player", POWER_ENUM.ESSENCE) or 0
+	elseif isAuraPowerType and isAuraPowerType(pType) then
+		local auraCfg = RB.AURA_POWER_CONFIG[pType] or {}
+		return (cfg and cfg.visualSegments) or auraCfg.visualSegments or auraCfg.maxStacks or 0
+	end
+	local enumId = POWER_ENUM[pType]
+	return enumId and UnitPowerMax("player", enumId) or 0
+end
+
+shouldUseDiscreteSeparatorSegments = function(pType, cfg)
+	if pType == "RUNES" or pType == "ESSENCE" then return false end
+	return ResourceBars.separatorEligible and ResourceBars.separatorEligible[pType] and cfg and cfg.showSeparator == true
+end
+
+refreshDiscreteSegmentsForBar = function(pType, bar, cfg, value, maxValue)
+	if not bar then return false end
+	if not shouldUseDiscreteSeparatorSegments(pType, cfg) then
+		if ResourceBars.HideDiscreteSegments then ResourceBars.HideDiscreteSegments(bar) end
+		setParentBarTextureVisible(bar, true)
+		return false
+	end
+
+	local segments = getSeparatorSegmentCount(pType, cfg)
+	if not segments or segments < 2 then
+		if ResourceBars.HideDiscreteSegments then ResourceBars.HideDiscreteSegments(bar) end
+		setParentBarTextureVisible(bar, true)
+		return false
+	end
+
+	local scaledValue = tonumber(value) or 0
+	local sourceMax = tonumber(maxValue) or segments
+	if sourceMax > 0 and sourceMax ~= segments then scaledValue = (scaledValue / sourceMax) * segments end
+
+	if ResourceBars.UpdateDiscreteSegments then
+		ResourceBars.UpdateDiscreteSegments(
+			bar,
+			cfg,
+			segments,
+			scaledValue,
+			bar._lastColor or bar._baseColor or RB.WHITE,
+			resolveTexture(cfg),
+			(cfg and cfg.separatorThickness) or RB.SEPARATOR_THICKNESS,
+			(cfg and cfg.separatorColor) or RB.SEP_DEFAULT
+		)
+		setParentBarTextureVisible(bar, false)
+		return true
+	end
+
+	setParentBarTextureVisible(bar, true)
+	return false
+end
+
 -- Create/update separator ticks for a given bar type if enabled
 updateBarSeparators = function(pType)
 	local eligible = ResourceBars.separatorEligible
 	if pType ~= "RUNES" and (not eligible or not eligible[pType]) then return end
 	local bar = powerbar[pType]
 	if not bar then return end
+	if pType == "RUNES" then
+		-- RUNES separators are handled as real gaps in layoutRunes.
+		if bar.separatorMarks then
+			for _, tx in ipairs(bar.separatorMarks) do
+				tx:Hide()
+			end
+		end
+		if bar:IsShown() then layoutRunes(bar) end
+		return
+	end
 	local cfg = getBarSettings(pType)
 	if not (cfg and cfg.showSeparator) then
+		if pType ~= "RUNES" and pType ~= "ESSENCE" then
+			if ResourceBars.HideDiscreteSegments then ResourceBars.HideDiscreteSegments(bar) end
+			setParentBarTextureVisible(bar, true)
+		end
 		if bar.separatorMarks then
 			for _, tx in ipairs(bar.separatorMarks) do
 				tx:Hide()
@@ -3449,19 +3647,27 @@ updateBarSeparators = function(pType)
 		return
 	end
 
-	local segments
-	if pType == "RUNES" then
-		-- Runes don't use UnitPowerMax; always 6 segments
-		segments = 6
-	elseif isAuraPowerType and isAuraPowerType(pType) then
-		local auraCfg = RB.AURA_POWER_CONFIG[pType] or {}
-		segments = (cfg and cfg.visualSegments) or auraCfg.visualSegments or auraCfg.maxStacks or 0
-	elseif pType == "ENERGY" then
-		segments = 10
-	else
-		local enumId = POWER_ENUM[pType]
-		segments = enumId and UnitPowerMax("player", enumId) or 0
+	if shouldUseDiscreteSeparatorSegments(pType, cfg) then
+		local segCount = getSeparatorSegmentCount(pType, cfg)
+		if ResourceBars.LayoutDiscreteSegments and segCount and segCount >= 2 then
+			ResourceBars.LayoutDiscreteSegments(bar, cfg, segCount, resolveTexture(cfg), (cfg and cfg.separatorThickness) or RB.SEPARATOR_THICKNESS, (cfg and cfg.separatorColor) or RB.SEP_DEFAULT)
+			setParentBarTextureVisible(bar, false)
+		else
+			if ResourceBars.HideDiscreteSegments then ResourceBars.HideDiscreteSegments(bar) end
+			setParentBarTextureVisible(bar, true)
+		end
+		if bar.separatorMarks then
+			for _, tx in ipairs(bar.separatorMarks) do
+				tx:Hide()
+			end
+		end
+		return
+	elseif pType ~= "RUNES" and pType ~= "ESSENCE" then
+		if ResourceBars.HideDiscreteSegments then ResourceBars.HideDiscreteSegments(bar) end
+		setParentBarTextureVisible(bar, true)
 	end
+
+	local segments = getSeparatorSegmentCount(pType, cfg)
 	if not segments or segments < 2 then
 		-- Nothing to separate
 		if bar.separatorMarks then
@@ -3504,8 +3710,8 @@ updateBarSeparators = function(pType)
 	end
 
 	local needed = segments - 1
-	local w = max(1, (bar:GetWidth() or 0) - (inset.left + inset.right))
-	local h = max(1, (bar:GetHeight() or 0) - (inset.top + inset.bottom))
+	local w = max(1, (inner and inner.GetWidth and inner:GetWidth()) or ((bar:GetWidth() or 0) - (inset.left + inset.right)))
+	local h = max(1, (inner and inner.GetHeight and inner:GetHeight()) or ((bar:GetHeight() or 0) - (inset.top + inset.bottom)))
 	local vertical = cfg and cfg.verticalFill == true
 	local span = vertical and h or w
 	local desiredThickness = (cfg and cfg.separatorThickness) or RB.SEPARATOR_THICKNESS
@@ -3542,11 +3748,11 @@ updateBarSeparators = function(pType)
 		local half = floor(thickness * 0.5)
 		tx:SetColorTexture(r, g, b, a)
 		if vertical then
-			local y = Snap(bar, h * frac)
+			local y = SnapFractionToSpan(bar, h, frac)
 			tx:SetPoint("TOP", inner, "TOP", 0, -(y - max(0, half)))
 			tx:SetSize(w, thickness)
 		else
-			local x = Snap(bar, w * frac)
+			local x = SnapFractionToSpan(bar, w, frac)
 			tx:SetPoint("LEFT", inner, "LEFT", x - max(0, half), 0)
 			tx:SetSize(thickness, h)
 		end
@@ -3575,7 +3781,7 @@ local function getSafeThresholdMaxValue(bar, pType)
 		if last ~= nil and not isSecret(last) then maxValue = last end
 	end
 	if not maxValue and pType and POWER_ENUM and UnitPowerMax then
-		local useRaw = pType == "SOUL_SHARDS"
+		local useRaw = pType == "SOUL_SHARDS" and addon.variables and addon.variables.unitClass == "WARLOCK" and addon.variables.unitSpec == 3
 		local tmp = UnitPowerMax("player", POWER_ENUM[pType], useRaw)
 		if tmp ~= nil and not isSecret(tmp) then maxValue = tmp end
 	end
@@ -3694,8 +3900,8 @@ updateBarThresholds = function(pType)
 		end
 	end
 
-	local w = max(1, (bar:GetWidth() or 0) - (inset.left + inset.right))
-	local h = max(1, (bar:GetHeight() or 0) - (inset.top + inset.bottom))
+	local w = max(1, (inner and inner.GetWidth and inner:GetWidth()) or ((bar:GetWidth() or 0) - (inset.left + inset.right)))
+	local h = max(1, (inner and inner.GetHeight and inner:GetHeight()) or ((bar:GetHeight() or 0) - (inset.top + inset.bottom)))
 	local vertical = cfg and cfg.verticalFill == true
 	local reverse = cfg and cfg.reverseFill == true
 	local desiredThickness = (cfg and cfg.thresholdThickness) or RB.THRESHOLD_THICKNESS or RB.SEPARATOR_THICKNESS
@@ -3717,11 +3923,11 @@ updateBarThresholds = function(pType)
 		local half = floor(thickness * 0.5)
 		tx:SetColorTexture(r, g, b, a)
 		if vertical then
-			local y = Snap(bar, h * frac)
+			local y = SnapFractionToSpan(bar, h, frac)
 			tx:SetPoint("BOTTOM", inner, "BOTTOM", 0, y - max(0, half))
 			tx:SetSize(w, thickness)
 		else
-			local x = Snap(bar, w * frac)
+			local x = SnapFractionToSpan(bar, w, frac)
 			tx:SetPoint("LEFT", inner, "LEFT", x - max(0, half), 0)
 			tx:SetSize(thickness, h)
 		end
@@ -3737,12 +3943,19 @@ function layoutRunes(bar)
 	if not bar then return end
 	bar.runes = bar.runes or {}
 	local count = 6
-	local gap = 0
 	local inner = bar._rbInner or bar
 	local overlay = ensureTextOverlayFrame(bar) or bar
 	local w = max(1, inner:GetWidth() or (bar:GetWidth() or 0))
 	local h = max(1, inner:GetHeight() or (bar:GetHeight() or 0))
 	local cfg = getBarSettings("RUNES") or {}
+	local showSeparator = cfg.showSeparator == true
+	local gap = 0
+	if showSeparator then
+		local configured = tonumber(cfg.separatorThickness)
+		if configured == nil then configured = RB.SEPARATOR_THICKNESS end
+		if configured == nil then configured = 1 end
+		gap = max(0, floor(configured + 0.5))
+	end
 	if nil == cfg.showCooldownText then cfg.showCooldownText = true end
 	local show = cfg.showCooldownText ~= false -- default on
 	local size = cfg.cooldownTextFontSize or cfg.fontSize or 16
@@ -3751,11 +3964,16 @@ function layoutRunes(bar)
 	local fr, fg, fb, fa = resolveFontColor(cfg)
 	local vertical = cfg.verticalFill == true
 	local readyR, readyG, readyB, readyA = resolveRuneReadyColor(cfg)
+	local span = vertical and h or w
+	local maxGap = (count > 1) and max(0, floor((span - count) / (count - 1))) or 0
+	if gap > maxGap then gap = maxGap end
 	local segPrimary
+	local available = span - (gap * (count - 1))
+	if available < count then available = count end
 	if vertical then
-		segPrimary = max(1, floor((h - gap * (count - 1)) / count + 0.5))
+		segPrimary = max(1, floor((available / count) + 0.5))
 	else
-		segPrimary = max(1, floor((w - gap * (count - 1)) / count + 0.5))
+		segPrimary = max(1, floor((available / count) + 0.5))
 	end
 	for i = 1, count do
 		local sb = bar.runes[i]
@@ -3830,6 +4048,47 @@ function layoutRunes(bar)
 			ResourceBars.RefreshStatusBarGradient(sb, cfg)
 		end
 	end
+
+	local gapColor = cfg.separatorColor or RB.SEP_DEFAULT
+	local gapR = gapColor[1] or 1
+	local gapG = gapColor[2] or 1
+	local gapB = gapColor[3] or 1
+	local gapA = gapColor[4] or 0.5
+	bar.runeGapMarks = bar.runeGapMarks or {}
+	local gapMarks = bar.runeGapMarks
+	local neededGaps = count - 1
+	if showSeparator and gap > 0 and neededGaps > 0 then
+		for i = 1, neededGaps do
+			local mark = gapMarks[i]
+			if not mark then
+				mark = inner:CreateTexture(nil, "BACKGROUND", nil, 1)
+				gapMarks[i] = mark
+			elseif mark:GetParent() ~= inner then
+				mark:SetParent(inner)
+			end
+			mark:ClearAllPoints()
+			mark:SetColorTexture(gapR, gapG, gapB, gapA)
+			if vertical then
+				mark:SetPoint("BOTTOM", bar.runes[i], "TOP", 0, 0)
+				mark:SetPoint("LEFT", inner, "LEFT", 0, 0)
+				mark:SetPoint("RIGHT", inner, "RIGHT", 0, 0)
+				mark:SetHeight(gap)
+			else
+				mark:SetPoint("LEFT", bar.runes[i], "RIGHT", 0, 0)
+				mark:SetPoint("TOP", inner, "TOP", 0, 0)
+				mark:SetPoint("BOTTOM", inner, "BOTTOM", 0, 0)
+				mark:SetWidth(gap)
+			end
+			if not mark:IsShown() then mark:Show() end
+		end
+		for i = neededGaps + 1, #gapMarks do
+			if gapMarks[i] then gapMarks[i]:Hide() end
+		end
+	else
+		for i = 1, #gapMarks do
+			if gapMarks[i] then gapMarks[i]:Hide() end
+		end
+	end
 end
 
 local function createPowerBar(type, anchor)
@@ -3845,9 +4104,6 @@ local function createPowerBar(type, anchor)
 			-- Force re-read of max (fixes “cap changed while hidden”)
 			self._lastMax = nil
 			self._lastMaxRaw = nil
-
-			-- Optional: makes smooth bars snap correctly on first show
-			self._smoothInitialized = nil
 
 			updatePowerBar(self._rbType)
 
@@ -3986,7 +4242,7 @@ local function createPowerBar(type, anchor)
 
 	-- Dragging disabled outside Edit Mode; positioning handled via Edit Mode
 	bar:SetMovable(false)
-	bar:EnableMouse(false)
+	bar:EnableMouse(shouldEnableBarMouse(settings))
 	bar:Show()
 	if type == "RUNES" then ResourceBars.ForceRuneRecolor() end
 	updatePowerBar(type)
@@ -4060,18 +4316,9 @@ local function setPowerbars(opts)
 			if key then return key end
 		end
 		local idx = GetShapeshiftForm() or 0
-		local key = formIndexToKey[idx]
+		local key = resolveFormKeyFromShapeshiftIndex(idx)
 		if key then return key end
-		local name
-		if GetShapeshiftFormInfo then
-			local r1, r2 = GetShapeshiftFormInfo(idx)
-			if type(r1) == "string" then
-				name = r1
-			elseif type(r2) == "string" then
-				name = r2
-			end
-		end
-		key = mapFormNameToKey(name)
+		key = formIndexToKey[idx]
 		if key then return key end
 		return "HUMANOID"
 	end
@@ -4184,10 +4431,6 @@ local function setPowerbars(opts)
 end
 addon.Aura.functions.setPowerBars = setPowerbars
 
-local function shouldHideResourceBarsOutOfCombat() return addon and addon.db and addon.db.resourceBarsHideOutOfCombat == true end
-local function shouldHideResourceBarsMounted() return addon and addon.db and addon.db.resourceBarsHideMounted == true end
-local function shouldHideResourceBarsInVehicle() return addon and addon.db and addon.db.resourceBarsHideVehicle == true end
-
 local function forEachResourceBarFrame(callback)
 	if type(callback) ~= "function" then return end
 	if healthBar then callback(healthBar, "HEALTH") end
@@ -4202,10 +4445,11 @@ local function resolveBarConfigForFrame(pType, frame)
 	return cfg
 end
 
-local function buildDruidVisibilityExpression(cfg, hideOutOfCombat)
+local function buildDruidVisibilityExpression(cfg, hideOutOfCombat, formStanceMap)
 	if not shouldUseDruidFormDriver(cfg) then return nil end
 	local showForms = cfg.showForms
 	local clauses = {}
+	local seen = {}
 	local function appendClause(formCondition)
 		local cond = formCondition
 		if hideOutOfCombat then
@@ -4215,23 +4459,33 @@ local function buildDruidVisibilityExpression(cfg, hideOutOfCombat)
 				cond = "combat"
 			end
 		end
-		if cond and cond ~= "" then clauses[#clauses + 1] = ("[%s] show"):format(cond) end
+		if cond and cond ~= "" then
+			local clause = ("[%s] show"):format(cond)
+			if not seen[clause] then
+				seen[clause] = true
+				clauses[#clauses + 1] = clause
+			end
+		end
 	end
 
 	if showForms.HUMANOID ~= false then
-		local humanoidCondition
-		if druidStanceString and druidStanceString ~= "" then
-			humanoidCondition = "nostance:" .. druidStanceString
-		else
-			humanoidCondition = "nostance"
+		appendClause("nostance")
+		for _, idx in ipairs((formStanceMap and formStanceMap.HUMANOID) or {}) do
+			if idx and idx > 0 then appendClause("stance:" .. idx) end
 		end
-		appendClause(humanoidCondition)
 	end
 	for i = 2, #DRUID_FORM_SEQUENCE do
 		local key = DRUID_FORM_SEQUENCE[i]
 		if showForms[key] ~= false then
-			local idx = formKeyToIndex[key]
-			if idx and idx > 0 then appendClause("stance:" .. idx) end
+			local indices = formStanceMap and formStanceMap[key]
+			if indices and #indices > 0 then
+				for _, idx in ipairs(indices) do
+					if idx and idx > 0 then appendClause("stance:" .. idx) end
+				end
+			else
+				local idx = formKeyToIndex[key]
+				if idx and idx > 0 then appendClause("stance:" .. idx) end
+			end
 		end
 	end
 	if #clauses == 0 then return "hide" end
@@ -4240,21 +4494,24 @@ local function buildDruidVisibilityExpression(cfg, hideOutOfCombat)
 end
 
 local function buildVisibilityDriverForBar(cfg)
-	local hideOOC = shouldHideResourceBarsOutOfCombat()
-	local hideMounted = shouldHideResourceBarsMounted()
-	local hideVehicle = shouldHideResourceBarsInVehicle()
+	local hideOOC = ResourceBars.ShouldHideOutOfCombat and ResourceBars.ShouldHideOutOfCombat()
+	local hideMounted = ResourceBars.ShouldHideMounted and ResourceBars.ShouldHideMounted()
+	local hideVehicle = ResourceBars.ShouldHideInVehicle and ResourceBars.ShouldHideInVehicle()
+	local hidePetBattle = ResourceBars.ShouldHideInPetBattle and ResourceBars.ShouldHideInPetBattle()
 	cfg = cfg or {}
-	local druidExpr = buildDruidVisibilityExpression(cfg, hideOOC)
-	if not hideOOC and not hideMounted and not hideVehicle and not druidExpr then return nil, false end
+	local formStanceMap = addon.variables.unitClass == "DRUID" and getDruidFormStanceMap() or nil
+	local druidExpr = buildDruidVisibilityExpression(cfg, hideOOC, formStanceMap)
+	if not hideOOC and not hideMounted and not hideVehicle and not hidePetBattle and not druidExpr then return nil, false end
 
 	local clauses = {}
+	if hidePetBattle then clauses[#clauses + 1] = "[petbattle] hide" end
 	if hideVehicle then clauses[#clauses + 1] = "[vehicleui] hide" end
 	if hideMounted then
 		clauses[#clauses + 1] = "[mounted] hide"
 		if addon.variables.unitClass == "DRUID" then
-			local travelIdx = formKeyToIndex.TRAVEL
+			local travelIdx = (formStanceMap and formStanceMap.TRAVEL and formStanceMap.TRAVEL[1]) or formKeyToIndex.TRAVEL
 			if travelIdx and travelIdx > 0 then clauses[#clauses + 1] = ("[stance:%d] hide"):format(travelIdx) end
-			local stagIdx = formKeyToIndex.STAG
+			local stagIdx = (formStanceMap and formStanceMap.STAG and formStanceMap.STAG[1]) or formKeyToIndex.STAG
 			if stagIdx and stagIdx > 0 then clauses[#clauses + 1] = ("[stance:%d] hide"):format(stagIdx) end
 		end
 	end
@@ -4305,13 +4562,13 @@ local function ensureVisibilityDriverWatcher()
 		end
 
 		if event == "PLAYER_MOUNT_DISPLAY_CHANGED" then
-			if not shouldHideResourceBarsMounted() and not shouldHideResourceBarsInVehicle() then return end
+			if not (ResourceBars.ShouldHideMounted and ResourceBars.ShouldHideMounted()) and not (ResourceBars.ShouldHideInVehicle and ResourceBars.ShouldHideInVehicle()) then return end
 			local mounted = IsMounted and IsMounted() or false
 			if not ResourceBars._pendingVisibilityDriver and self._playerMounted == mounted then return end
 			self._playerMounted = mounted
 		elseif event == "UNIT_ENTERED_VEHICLE" or event == "UNIT_EXITED_VEHICLE" then
 			if unit and unit ~= "player" then return end
-			if not shouldHideResourceBarsInVehicle() then return end
+			if not (ResourceBars.ShouldHideInVehicle and ResourceBars.ShouldHideInVehicle()) then return end
 			local inVehicle = UnitInVehicle and UnitInVehicle("player") or false
 			if not ResourceBars._pendingVisibilityDriver and self._playerVehicle == inVehicle then return end
 			self._playerVehicle = inVehicle
@@ -4356,41 +4613,53 @@ end
 
 function ResourceBars.ApplyVisibilityPreference(context)
 	if not RegisterStateDriver or not UnregisterStateDriver then return end
-	if not canApplyVisibilityDriver() then return end
-	ResourceBars._pendingVisibilityDriver = nil
-	local enabled = not (addon and addon.db and addon.db.enableResourceFrame == false)
+	local canApplyDriver = canApplyVisibilityDriver()
+	if canApplyDriver then ResourceBars._pendingVisibilityDriver = nil end
+	local barsEnabled = not (addon and addon.db and addon.db.enableResourceFrame == false)
 	local editModeActive = addon.EditMode and addon.EditMode.IsInEditMode and addon.EditMode:IsInEditMode()
+	local hideInClientScene = not editModeActive and ResourceBars.ShouldHideInClientScene and ResourceBars.ShouldHideInClientScene() and ResourceBars._clientSceneOpen == true
 	local driverWasActive = ResourceBars._visibilityDriverActive == true
-	if not enabled then
+	if not barsEnabled then
 		forEachResourceBarFrame(function(frame)
-			applyVisibilityDriverToFrame(frame, nil)
+			if canApplyDriver then applyVisibilityDriverToFrame(frame, nil) end
 			if frame then frame._rbDruidFormDriver = nil end
+			if ResourceBars.ApplyClientSceneAlphaToFrame then ResourceBars.ApplyClientSceneAlphaToFrame(frame, false) end
 		end)
-		ResourceBars._visibilityDriverActive = false
+		if canApplyDriver then
+			ResourceBars._visibilityDriverActive = false
+		else
+			ResourceBars._visibilityDriverActive = driverWasActive
+		end
 		return
 	end
 	local driverActiveNow = false
 	forEachResourceBarFrame(function(frame, pType)
 		local cfg = resolveBarConfigForFrame(pType, frame)
-		local enabled = cfg and cfg.enabled == true
-		if enabled then
+		local barEnabled = cfg and cfg.enabled == true
+		if barEnabled then
 			if editModeActive then
-				applyVisibilityDriverToFrame(frame, "show")
+				if canApplyDriver then applyVisibilityDriverToFrame(frame, "show") end
 				frame._rbDruidFormDriver = nil
 				driverActiveNow = true
 			else
 				local expr, hasDruidRule = buildVisibilityDriverForBar(cfg)
 				if expr then driverActiveNow = true end
-				applyVisibilityDriverToFrame(frame, expr)
+				if canApplyDriver then applyVisibilityDriverToFrame(frame, expr) end
 				frame._rbDruidFormDriver = hasDruidRule or nil
 			end
+			if ResourceBars.ApplyClientSceneAlphaToFrame then ResourceBars.ApplyClientSceneAlphaToFrame(frame, hideInClientScene) end
 		else
-			applyVisibilityDriverToFrame(frame, nil)
+			if canApplyDriver then applyVisibilityDriverToFrame(frame, nil) end
 			if frame then frame._rbDruidFormDriver = nil end
+			if ResourceBars.ApplyClientSceneAlphaToFrame then ResourceBars.ApplyClientSceneAlphaToFrame(frame, false) end
 		end
 	end)
-	ResourceBars._visibilityDriverActive = driverActiveNow
-	if driverWasActive and not driverActiveNow and context ~= "fromSetPowerbars" and frameAnchor then setPowerbars() end
+	if canApplyDriver then
+		ResourceBars._visibilityDriverActive = driverActiveNow
+		if driverWasActive and not driverActiveNow and context ~= "fromSetPowerbars" and frameAnchor then setPowerbars() end
+	else
+		ResourceBars._visibilityDriverActive = driverWasActive
+	end
 end
 
 local resourceBarsLoaded = addon.Aura.ResourceBars ~= nil
@@ -4438,6 +4707,15 @@ local function eventHandler(self, event, unit, arg1)
 	elseif event == "TRAIT_CONFIG_UPDATED" then
 		scheduleSpecRefresh()
 		if scheduleRelativeFrameWidthSync then scheduleRelativeFrameWidthSync() end
+	elseif event == "CLIENT_SCENE_OPENED" then
+		local sceneType = unit
+		ResourceBars._clientSceneOpen = (sceneType == 1)
+		ResourceBars.ApplyVisibilityPreference(event)
+		return
+	elseif event == "CLIENT_SCENE_CLOSED" then
+		ResourceBars._clientSceneOpen = false
+		ResourceBars.ApplyVisibilityPreference(event)
+		return
 	elseif event == "PLAYER_ENTERING_WORLD" then
 		updateHealthBar("UNIT_ABSORB_AMOUNT_CHANGED")
 		setPowerbars()
@@ -4525,6 +4803,8 @@ function ResourceBars.EnableResourceBars()
 	frameAnchor:RegisterEvent("PLAYER_ENTERING_WORLD")
 	frameAnchor:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
 	frameAnchor:RegisterEvent("TRAIT_CONFIG_UPDATED")
+	frameAnchor:RegisterEvent("CLIENT_SCENE_OPENED")
+	frameAnchor:RegisterEvent("CLIENT_SCENE_CLOSED")
 	frameAnchor:SetScript("OnEvent", eventHandler)
 	frameAnchor:Hide()
 
@@ -4546,6 +4826,7 @@ function ResourceBars.EnableResourceBars()
 end
 
 function ResourceBars.DisableResourceBars()
+	ResourceBars._clientSceneOpen = false
 	if frameAnchor then
 		frameAnchor:UnregisterAllEvents()
 		frameAnchor:SetScript("OnEvent", nil)
@@ -4721,7 +5002,7 @@ function ResourceBars.SetPowerBarSize(w, h, pType)
 				if anchor and changed[anchor.relativeFrame] then
 					local frame = bType == "HEALTH" and healthBar or powerbar[bType]
 					if frame then
-						local rel = _G[anchor.relativeFrame] or UIParent
+						local rel = ResourceBars.ResolveRelativeFrameByName(anchor.relativeFrame)
 						-- Ensure we don't accumulate multiple points to stale relatives
 						frame:ClearAllPoints()
 						frame:SetPoint(anchor.point or "CENTER", rel, anchor.relativePoint or anchor.point or "CENTER", anchor.x or 0, anchor.y or 0)
@@ -4744,10 +5025,10 @@ function ResourceBars.ReanchorDependentsOf(frameName)
 	for bType, cfg in pairs(specCfg) do
 		if type(cfg) == "table" then
 			local anch = cfg.anchor
-			if anch and anch.relativeFrame == frameName then
+			if anch and ResourceBars.RelativeFrameMatchesName(anch.relativeFrame, frameName) then
 				local frame = (bType == "HEALTH") and healthBar or powerbar[bType]
 				if frame then
-					local rel = _G[anch.relativeFrame] or UIParent
+					local rel = ResourceBars.ResolveRelativeFrameByName(anch.relativeFrame)
 					frame:ClearAllPoints()
 					frame:SetPoint(anch.point or "TOPLEFT", rel, anch.relativePoint or anch.point or "TOPLEFT", anch.x or 0, anch.y or 0)
 				end
@@ -4835,10 +5116,10 @@ function ResourceBars.Refresh()
 			bar:SetPoint(a.point or "TOPLEFT", rel, a.relativePoint or a.point or "TOPLEFT", a.x or 0, a.y or 0)
 			-- Update movability based on anchor target (only movable when relative to UIParent)
 			local isUI = (a.relativeFrame or "UIParent") == "UIParent"
-			bar:SetMovable(isUI)
-			bar:EnableMouse(isUI)
-
 			local cfg = getBarSettings(pType)
+			bar:SetMovable(isUI)
+			bar:EnableMouse(shouldEnableBarMouse(cfg))
+
 			bar._cfg = cfg
 			local defaultStyle = (pType == "MANA" or pType == "STAGGER") and "PERCENT" or "CURMAX"
 			bar._style = (cfg and cfg.textStyle) or defaultStyle
@@ -5129,7 +5410,8 @@ function ResourceBars.ReanchorAll()
 			bar:SetPoint(a.point or "TOPLEFT", rel, a.relativePoint or a.point or "TOPLEFT", a.x or 0, a.y or 0)
 			local isUI = (a.relativeFrame or "UIParent") == "UIParent"
 			bar:SetMovable(isUI)
-			bar:EnableMouse(isUI)
+			local cfg = getBarSettings(pType)
+			bar:EnableMouse(shouldEnableBarMouse(cfg))
 		end
 	end
 

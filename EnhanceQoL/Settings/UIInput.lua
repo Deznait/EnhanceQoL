@@ -161,6 +161,7 @@ local verticalScale = 11 / 17
 local horizontalScale = 565 / 571
 
 local UI_SCALE_PRESETS = {
+	Scale4K = 0.355555555556,
 	Scale1440p = 0.533333333333,
 	Scale1080p = 0.711111111111,
 	Scale1440p125 = 0.666666666666,
@@ -243,12 +244,7 @@ function addon.functions.SettingsCreateClassSpecificResourceBars(category, paren
 			text = L["deathknight_HideRuneFrame"],
 			func = function(value)
 				addon.db["deathknight_HideRuneFrame"] = value
-				local ufActive = addon.db and addon.db.ufFrames and addon.db.ufFrames.player and addon.db.ufFrames.player.enabled
-				if value and not ufActive then
-					if RuneFrame then RuneFrame:Hide() end
-				else
-					if RuneFrame then RuneFrame:Show() end
-				end
+				if addon.functions and addon.functions.UpdateClassResourceVisibility then addon.functions.UpdateClassResourceVisibility() end
 			end,
 			parentSection = parentSection,
 		})
@@ -260,12 +256,7 @@ function addon.functions.SettingsCreateClassSpecificResourceBars(category, paren
 			text = L["druid_HideComboPoint"],
 			func = function(value)
 				addon.db["druid_HideComboPoint"] = value
-				local ufActive = addon.db and addon.db.ufFrames and addon.db.ufFrames.player and addon.db.ufFrames.player.enabled
-				if value and not ufActive then
-					if DruidComboPointBarFrame then DruidComboPointBarFrame:Hide() end
-				else
-					if DruidComboPointBarFrame then DruidComboPointBarFrame:Show() end
-				end
+				if addon.functions and addon.functions.UpdateClassResourceVisibility then addon.functions.UpdateClassResourceVisibility() end
 			end,
 			parentSection = parentSection,
 		})
@@ -275,12 +266,7 @@ function addon.functions.SettingsCreateClassSpecificResourceBars(category, paren
 			text = L["evoker_HideEssence"],
 			func = function(value)
 				addon.db["evoker_HideEssence"] = value
-				local ufActive = addon.db and addon.db.ufFrames and addon.db.ufFrames.player and addon.db.ufFrames.player.enabled
-				if value and not ufActive then
-					if EssencePlayerFrame then EssencePlayerFrame:Hide() end
-				else
-					if EssencePlayerFrame then EssencePlayerFrame:Show() end
-				end
+				if addon.functions and addon.functions.UpdateClassResourceVisibility then addon.functions.UpdateClassResourceVisibility() end
 			end,
 			parentSection = parentSection,
 		})
@@ -292,12 +278,7 @@ function addon.functions.SettingsCreateClassSpecificResourceBars(category, paren
 			text = L["monk_HideHarmonyBar"],
 			func = function(value)
 				addon.db["monk_HideHarmonyBar"] = value
-				local ufActive = addon.db and addon.db.ufFrames and addon.db.ufFrames.player and addon.db.ufFrames.player.enabled
-				if value and not ufActive then
-					if MonkHarmonyBarFrame then MonkHarmonyBarFrame:Hide() end
-				else
-					if MonkHarmonyBarFrame then MonkHarmonyBarFrame:Show() end
-				end
+				if addon.functions and addon.functions.UpdateClassResourceVisibility then addon.functions.UpdateClassResourceVisibility() end
 			end,
 			parentSection = parentSection,
 		})
@@ -312,12 +293,7 @@ function addon.functions.SettingsCreateClassSpecificResourceBars(category, paren
 			text = L["rogue_HideComboPoint"],
 			func = function(value)
 				addon.db["rogue_HideComboPoint"] = value
-				local ufActive = addon.db and addon.db.ufFrames and addon.db.ufFrames.player and addon.db.ufFrames.player.enabled
-				if value and not ufActive then
-					if RogueComboPointBarFrame then RogueComboPointBarFrame:Hide() end
-				else
-					if RogueComboPointBarFrame then RogueComboPointBarFrame:Show() end
-				end
+				if addon.functions and addon.functions.UpdateClassResourceVisibility then addon.functions.UpdateClassResourceVisibility() end
 			end,
 			parentSection = parentSection,
 		})
@@ -328,12 +304,7 @@ function addon.functions.SettingsCreateClassSpecificResourceBars(category, paren
 			text = L["paladin_HideHolyPower"],
 			func = function(value)
 				addon.db["paladin_HideHolyPower"] = value
-				local ufActive = addon.db and addon.db.ufFrames and addon.db.ufFrames.player and addon.db.ufFrames.player.enabled
-				if value and not ufActive then
-					if PaladinPowerBarFrame then PaladinPowerBarFrame:Hide() end
-				else
-					if PaladinPowerBarFrame then PaladinPowerBarFrame:Show() end
-				end
+				if addon.functions and addon.functions.UpdateClassResourceVisibility then addon.functions.UpdateClassResourceVisibility() end
 			end,
 			parentSection = parentSection,
 		})
@@ -343,12 +314,7 @@ function addon.functions.SettingsCreateClassSpecificResourceBars(category, paren
 			text = L["warlock_HideSoulShardBar"],
 			func = function(value)
 				addon.db["warlock_HideSoulShardBar"] = value
-				local ufActive = addon.db and addon.db.ufFrames and addon.db.ufFrames.player and addon.db.ufFrames.player.enabled
-				if value and not ufActive then
-					if WarlockPowerFrame then WarlockPowerFrame:Hide() end
-				else
-					if WarlockPowerFrame then WarlockPowerFrame:Show() end
-				end
+				if addon.functions and addon.functions.UpdateClassResourceVisibility then addon.functions.UpdateClassResourceVisibility() end
 			end,
 			parentSection = parentSection,
 		})
@@ -475,13 +441,14 @@ local interfaceExpandable = addon.functions.SettingsCreateExpandableSection(cUII
 
 local uiScaleOptions = {
 	NoScaling = L["uiScalePresetNone"] or "No scaling",
+	Scale4K = "0.3556 (4K)",
 	Scale1080p = "0.7111 (1080p)",
 	Scale1440p = "0.5333 (1440p)",
 	Scale1440p125 = "0.6666 (1440p 125%)",
 	Scale1080p125 = "0.8888 (1080p 125%)",
 }
 
-local uiScaleOrder = { "NoScaling", "Scale1440p", "Scale1440p125", "Scale1080p", "Scale1080p125" }
+local uiScaleOrder = { "NoScaling", "Scale4K", "Scale1440p", "Scale1440p125", "Scale1080p", "Scale1080p125" }
 
 addon.functions.SettingsCreateDropdown(cUIInput, {
 	var = "uiScalePreset",

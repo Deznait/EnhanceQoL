@@ -629,8 +629,9 @@ function addon.functions.initQuest()
 
 	if Menu and Menu.ModifyMenu then
 		local function GetNPCIDFromGUID(guid)
+			if type(guid) == "nil" then return end
+			if type(guid) ~= "nil" and issecretvalue(guid) then return nil end
 			if guid then
-				if issecretvalue and issecretvalue(guid) then return nil end
 				local type, _, _, _, _, npcID = strsplit("-", guid)
 				if type == "Creature" or type == "Vehicle" then return tonumber(npcID) end
 			end
@@ -639,9 +640,13 @@ function addon.functions.initQuest()
 
 		local function AddIgnoreAutoQuest(owner, root, ctx)
 			if not addon.db["autoChooseQuest"] then return end
+			if addon.functions.isRestrictedContent() then return end
 
 			if not UnitExists("target") or UnitPlayerControlled("target") then return end
-			local npcID = GetNPCIDFromGUID(UnitGUID("target"))
+			local guid = UnitGUID("target")
+			if issecretvalue(guid) then return end
+			print("tset")
+			local npcID = GetNPCIDFromGUID(guid)
 			if not npcID then return end
 			if issecretvalue and issecretvalue(npcID) then return end
 			local name = UnitName("target")

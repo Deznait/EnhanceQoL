@@ -43,7 +43,12 @@ local function buildSettings()
 			var = "teleportsWorldMapEnabled",
 			text = L["teleportsWorldMapEnabled"],
 			desc = L["teleportsWorldMapEnabledDesc"],
-			func = function(v) addon.db["teleportsWorldMapEnabled"] = v end,
+			func = function(v)
+				addon.db["teleportsWorldMapEnabled"] = v
+				if addon.MythicPlus and addon.MythicPlus.functions and addon.MythicPlus.functions.RefreshWorldMapTeleportPanel then
+					addon.MythicPlus.functions.RefreshWorldMapTeleportPanel()
+				end
+			end,
 			children = {
 				{
 					text = "|cffffd700" .. L["teleportsWorldMapHelp"] .. "|r",

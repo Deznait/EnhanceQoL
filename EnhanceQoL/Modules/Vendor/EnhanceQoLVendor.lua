@@ -595,7 +595,7 @@ end
 local frameLoad = CreateFrame("Frame")
 
 local function updateLegend(value, value2)
-	if not addon.aceFrame:IsShown() or nil == addon.Vendor.variables["labelExplained" .. value .. "line"] then return end
+	if not addon.aceFrame or not addon.aceFrame:IsShown() or nil == addon.Vendor.variables["labelExplained" .. value .. "line"] then return end
 	local text = {}
 	if addon.db["vendor" .. value .. "IgnoreWarbound"] then table.insert(text, L["vendorIgnoreWarbound"]) end
 	if addon.db["vendor" .. value .. "IgnoreBoE"] then table.insert(text, L["vendorIgnoreBoE"]) end
@@ -766,7 +766,13 @@ local function lookupItems()
 								end
 							end
 						elseif sellPrice and sellPrice > 0 then
-							if classID == 4 and subclassID == 5 and not C_TransmogCollection.PlayerHasTransmog(itemID) then
+							if quality == 0 and addon.Vendor.variables.itemQualityFilter[quality] then
+								local bType = select(1, getTooltipInfo(bag, slot, quality))
+								local effectiveBindType = bindType or 0
+								if bType and effectiveBindType < bType then effectiveBindType = bType end
+								local bindFilter = addon.Vendor.variables.itemBindTypeQualityFilter[quality]
+								if bindFilter and bindFilter[effectiveBindType] then table.insert(itemsToSell, { bag = bag, slot = slot, itemID = itemID }) end
+							elseif classID == 4 and subclassID == 5 and not C_TransmogCollection.PlayerHasTransmog(itemID) then
 								-- do not sell appearances
 							elseif classID == 7 and addon.Vendor.variables.itemQualityFilter[quality] then
 								local expTable = addon.db["vendor" .. addon.Vendor.variables.tabNames[quality] .. "CraftingExpansions"]
@@ -774,12 +780,12 @@ local function lookupItems()
 							elseif addon.Vendor.variables.itemQualityFilter[quality] then
 								local effectiveILvl = C_Item.GetDetailedItemLevelInfo(itemLink)
 								local bType, canUpgrade, isIgnoredUpgradeTrack = getTooltipInfo(bag, slot, quality)
-								if bType and bindType < bType then bindType = bType end
-								if not bType then bindType = 0 end
+								local effectiveBindType = bindType or 0
+								if bType and effectiveBindType < bType then effectiveBindType = bType end
 								if
 									addon.Vendor.variables.itemTypeFilter[classID]
 									and (not addon.Vendor.variables.itemSubTypeFilter[classID] or (addon.Vendor.variables.itemSubTypeFilter[classID] and addon.Vendor.variables.itemSubTypeFilter[classID][subclassID]))
-									and addon.Vendor.variables.itemBindTypeQualityFilter[quality][bindType]
+									and addon.Vendor.variables.itemBindTypeQualityFilter[quality][effectiveBindType]
 								then
 									if not canUpgrade and not isIgnoredUpgradeTrack then
 										local rIlvl = (avgItemLevelEquipped - addon.db["vendor" .. addon.Vendor.variables.tabNames[quality] .. "MinIlvlDif"])
@@ -854,7 +860,7 @@ local eventHandlers = {
 		if addon.db["vendorDestroyEnable"] then scheduleDestroyButtonUpdate() end
 	end,
 	["ITEM_DATA_LOAD_RESULT"] = function(arg1, arg2)
-		if arg2 == false and addon.aceFrame:IsShown() and lastEbox then
+		if arg2 == false and addon.aceFrame and addon.aceFrame:IsShown() and lastEbox then
 			StaticPopupDialogs["VendorWrongItemID"] = {
 				text = L["Item id does not exist"],
 				button1 = OKAY,
@@ -918,7 +924,7 @@ local function addVendorFrame(container, type)
 	local iqColor = ITEM_QUALITY_COLORS[type].hex .. _G["ITEM_QUALITY" .. type .. "_DESC"] .. "|r"
 
 	local function updateLegend(sValue, sValue2)
-		if not addon.aceFrame:IsShown() then return end
+		if not addon.aceFrame or not addon.aceFrame:IsShown() then return end
 		local text = {}
 		local uText = {}
 		if addon.db["vendor" .. sValue .. "IgnoreWarbound"] then table.insert(text, L["vendorIgnoreWarbound"]) end
@@ -950,6 +956,7 @@ local function addVendorFrame(container, type)
 	local vendorEnable = addon.functions.createCheckboxAce(L["vendorEnable"]:format(iqColor), addon.db["vendor" .. value .. "Enable"], function(self, _, checked)
 		addon.db["vendor" .. value .. "Enable"] = checked
 		addon.Vendor.variables.itemQualityFilter[type] = checked
+		if type == 0 and checked then addon.db["sellAllJunk"] = false end
 
 		container:ReleaseChildren()
 		addVendorFrame(container, type)
@@ -968,7 +975,7 @@ local function addVendorFrame(container, type)
 			{ text = L["vendorIgnoreBoE"], var = "vendor" .. value .. "IgnoreBoE", filter = { 2 } },
 			{ text = L["vendorIgnoreWarbound"], var = "vendor" .. value .. "IgnoreWarbound", filter = { 7, 8, 9 } },
 		}
-		if type ~= 1 then
+		if type > 1 then
 			table.insert(data, { text = L["vendorIgnoreUpgradable"], var = "vendor" .. value .. "IgnoreUpgradable" })
 			if type == 4 then
 				table.insert(data, { text = L["vendorIgnoreHeroicTrack"], var = "vendor" .. value .. "IgnoreHeroicTrack" })
@@ -1008,20 +1015,22 @@ local function addVendorFrame(container, type)
 		end)
 		groupCore:AddChild(vendorIlvl)
 
-		local expList = {}
-		for i = 0, LE_EXPANSION_LEVEL_CURRENT do
-			expList[i] = _G["EXPANSION_NAME" .. i]
+		if type > 0 then
+			local expList = {}
+			for i = 0, LE_EXPANSION_LEVEL_CURRENT do
+				expList[i] = _G["EXPANSION_NAME" .. i]
+			end
+			local list, order = addon.functions.prepareListForDropdown(expList, true)
+			local dropCrafting = addon.functions.createDropdownAce(L["vendorCraftingExpansions"], list, order, function(self, event, key, checked)
+				addon.db["vendor" .. value .. "CraftingExpansions"][key] = checked or nil
+				updateSellMarks(nil, true)
+			end)
+			dropCrafting:SetMultiselect(true)
+			for id, val in pairs(addon.db["vendor" .. value .. "CraftingExpansions"]) do
+				if val then dropCrafting:SetItemValue(tonumber(id), true) end
+			end
+			groupCore:AddChild(dropCrafting)
 		end
-		local list, order = addon.functions.prepareListForDropdown(expList, true)
-		local dropCrafting = addon.functions.createDropdownAce(L["vendorCraftingExpansions"], list, order, function(self, event, key, checked)
-			addon.db["vendor" .. value .. "CraftingExpansions"][key] = checked or nil
-			updateSellMarks(nil, true)
-		end)
-		dropCrafting:SetMultiselect(true)
-		for id, val in pairs(addon.db["vendor" .. value .. "CraftingExpansions"]) do
-			if val then dropCrafting:SetItemValue(tonumber(id), true) end
-		end
-		groupCore:AddChild(dropCrafting)
 
 		if addon.db["vendor" .. value .. "IgnoreWarbound"] then table.insert(text, L["vendorIgnoreWarbound"]) end
 		if addon.db["vendor" .. value .. "IgnoreBoE"] then table.insert(text, L["vendorIgnoreBoE"]) end

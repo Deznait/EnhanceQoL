@@ -43,10 +43,12 @@ GCDBar.defaults = GCDBar.defaults
 		progressMode = "REMAINING",
 		fillDirection = "LEFT",
 		anchorRelativeFrame = ANCHOR_TARGET_UI,
+		anchorMatchRelativeWidth = false,
 		anchorPoint = "CENTER",
 		anchorRelativePoint = "CENTER",
 		anchorOffsetX = 0,
 		anchorOffsetY = -120,
+		hideInPetBattle = false,
 	}
 
 local defaults = GCDBar.defaults
@@ -67,10 +69,12 @@ local DB_BORDER_OFFSET = "gcdBarBorderOffset"
 local DB_PROGRESS_MODE = "gcdBarProgressMode"
 local DB_FILL_DIRECTION = "gcdBarFillDirection"
 local DB_ANCHOR_RELATIVE_FRAME = "gcdBarAnchorTarget"
+local DB_ANCHOR_MATCH_WIDTH = "gcdBarAnchorMatchWidth"
 local DB_ANCHOR_POINT = "gcdBarAnchorPoint"
 local DB_ANCHOR_RELATIVE_POINT = "gcdBarAnchorRelativePoint"
 local DB_ANCHOR_OFFSET_X = "gcdBarAnchorOffsetX"
 local DB_ANCHOR_OFFSET_Y = "gcdBarAnchorOffsetY"
+local DB_HIDE_IN_PET_BATTLE = "gcdBarHideInPetBattle"
 
 local DEFAULT_TEX = "Interface\\TargetingFrame\\UI-StatusBar"
 local GetSpellCooldownInfo = (C_Spell and C_Spell.GetSpellCooldown) or GetSpellCooldown
@@ -82,6 +86,10 @@ local function getValue(key, fallback)
 	if value == nil then return fallback end
 	return value
 end
+
+local function shouldHideInPetBattleForGCD() return getValue(DB_HIDE_IN_PET_BATTLE, defaults.hideInPetBattle) == true end
+
+local function isPetBattleActive() return C_PetBattles and C_PetBattles.IsInBattle and C_PetBattles.IsInBattle() == true end
 
 local function clamp(value, minValue, maxValue)
 	value = tonumber(value) or minValue
@@ -269,6 +277,8 @@ function GCDBar:GetAnchorRelativeFrame()
 	return normalizeAnchorRelativeFrame(target)
 end
 
+function GCDBar:GetAnchorMatchWidth() return getValue(DB_ANCHOR_MATCH_WIDTH, defaults.anchorMatchRelativeWidth == true) == true end
+
 function GCDBar:GetAnchorPoint() return normalizeAnchorPoint(getValue(DB_ANCHOR_POINT, defaults.anchorPoint), defaults.anchorPoint) end
 
 function GCDBar:GetAnchorRelativePoint()
@@ -280,7 +290,11 @@ function GCDBar:GetAnchorOffsetX() return normalizeAnchorOffset(getValue(DB_ANCH
 
 function GCDBar:GetAnchorOffsetY() return normalizeAnchorOffset(getValue(DB_ANCHOR_OFFSET_Y, defaults.anchorOffsetY), defaults.anchorOffsetY) end
 
+function GCDBar:GetHideInPetBattle() return shouldHideInPetBattleForGCD() end
+
 function GCDBar:AnchorUsesUIParent() return self:GetAnchorRelativeFrame() == ANCHOR_TARGET_UI end
+
+function GCDBar:AnchorUsesMatchedWidth() return self:GetAnchorMatchWidth() and not self:AnchorUsesUIParent() end
 
 local function anchorDefaultsFor(target)
 	if target == ANCHOR_TARGET_UI then
@@ -394,6 +408,71 @@ function GCDBar:MaybeUpdateAnchor()
 	end
 end
 
+local widthMatchHookedFrames = {}
+local pendingWidthHookRetries = {}
+local widthSyncQueued = false
+
+function GCDBar:ScheduleMatchedWidthSync()
+	if widthSyncQueued then return end
+	if not (C_Timer and C_Timer.After) then
+		self:ApplySize()
+		return
+	end
+	widthSyncQueued = true
+	C_Timer.After(0, function()
+		widthSyncQueued = false
+		if not (addon and addon.db and addon.db[DB_ENABLED] == true) then return end
+		GCDBar:ApplySize()
+		if EditMode and EditMode.RefreshFrame then EditMode:RefreshFrame(EDITMODE_ID) end
+	end)
+end
+
+function GCDBar:EnsureWidthSyncHook(frameName)
+	if not frameName or frameName == "" or frameName == ANCHOR_TARGET_UI or frameName == "EQOL_GCDBar" then return end
+	if widthMatchHookedFrames[frameName] then return end
+	local frame = _G and _G[frameName]
+	if not frame then
+		if C_Timer and C_Timer.After and not pendingWidthHookRetries[frameName] then
+			pendingWidthHookRetries[frameName] = true
+			C_Timer.After(1, function()
+				pendingWidthHookRetries[frameName] = nil
+				if GCDBar and GCDBar.EnsureWidthSyncHook then GCDBar:EnsureWidthSyncHook(frameName) end
+			end)
+		end
+		return
+	end
+	if frame.HookScript then
+		local function onGeometryChanged()
+			if GCDBar and GCDBar.AnchorUsesMatchedWidth and GCDBar:AnchorUsesMatchedWidth() then GCDBar:ScheduleMatchedWidthSync() end
+		end
+		local okSize = pcall(frame.HookScript, frame, "OnSizeChanged", onGeometryChanged)
+		local okShow = pcall(frame.HookScript, frame, "OnShow", onGeometryChanged)
+		local okHide = pcall(frame.HookScript, frame, "OnHide", onGeometryChanged)
+		if okSize or okShow or okHide then widthMatchHookedFrames[frameName] = true end
+	end
+end
+
+function GCDBar:EnsureWidthSyncHooks()
+	if not self:AnchorUsesMatchedWidth() then return end
+	local target = self:GetAnchorRelativeFrame()
+	if target == ANCHOR_TARGET_PLAYER_CASTBAR then
+		self:EnsureWidthSyncHook("PlayerCastingBarFrame")
+		self:EnsureWidthSyncHook(EQOL_PLAYER_CASTBAR)
+	elseif target ~= ANCHOR_TARGET_UI then
+		self:EnsureWidthSyncHook(target)
+	end
+end
+
+function GCDBar:GetResolvedWidth()
+	local width = self:GetWidth()
+	if not self:AnchorUsesMatchedWidth() then return width end
+	local relativeFrame = self:ResolveAnchorFrame()
+	if not (relativeFrame and relativeFrame.GetWidth) then return width end
+	local relativeWidth = tonumber(relativeFrame:GetWidth()) or 0
+	if relativeWidth <= 0 then return width end
+	return math.max(50, relativeWidth)
+end
+
 function GCDBar:ApplyAppearance()
 	if not self.frame then return end
 	local texture = resolveTexture(self:GetTextureKey())
@@ -442,7 +521,8 @@ end
 
 function GCDBar:ApplySize()
 	if not self.frame then return end
-	local width = self:GetWidth()
+	self:EnsureWidthSyncHooks()
+	local width = self:GetResolvedWidth()
 	local height = self:GetHeight()
 	self.frame:SetSize(width, height)
 	if self.frame.bg then self.frame.bg:SetAllPoints(self.frame) end
@@ -543,6 +623,10 @@ end
 function GCDBar:UpdateGCD()
 	if self.previewing then return end
 	if not self.frame then return end
+	if shouldHideInPetBattleForGCD() and isPetBattleActive() then
+		self:StopTimer()
+		return
+	end
 	self:MaybeUpdateAnchor()
 	if not GetSpellCooldownInfo then return end
 
@@ -569,7 +653,7 @@ function GCDBar:UpdateGCD()
 end
 
 function GCDBar:OnEvent(event, spellID, baseSpellID)
-	if event ~= "SPELL_UPDATE_COOLDOWN" then return end
+	if event ~= "SPELL_UPDATE_COOLDOWN" and event ~= "PET_BATTLE_OPENING_START" and event ~= "PET_BATTLE_CLOSE" then return end
 	self:UpdateGCD()
 end
 
@@ -577,6 +661,8 @@ function GCDBar:RegisterEvents()
 	if self.eventsRegistered then return end
 	local frame = self:EnsureFrame()
 	frame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+	frame:RegisterEvent("PET_BATTLE_OPENING_START")
+	frame:RegisterEvent("PET_BATTLE_CLOSE")
 	frame:SetScript("OnEvent", function(_, event, ...) GCDBar:OnEvent(event, ...) end)
 	self.eventsRegistered = true
 end
@@ -584,6 +670,8 @@ end
 function GCDBar:UnregisterEvents()
 	if not self.eventsRegistered or not self.frame then return end
 	self.frame:UnregisterEvent("SPELL_UPDATE_COOLDOWN")
+	self.frame:UnregisterEvent("PET_BATTLE_OPENING_START")
+	self.frame:UnregisterEvent("PET_BATTLE_CLOSE")
 	self.frame:SetScript("OnEvent", nil)
 	self.eventsRegistered = false
 end
@@ -608,10 +696,18 @@ function GCDBar:ApplyLayoutData(data)
 	local progressMode = normalizeProgressMode(data.progressMode or defaults.progressMode)
 	local fillDirection = normalizeFillDirection(data.fillDirection or defaults.fillDirection)
 	local anchorRelativeFrame = normalizeAnchorRelativeFrame(data.anchorRelativeFrame or data.anchorTarget or addon.db[DB_ANCHOR_RELATIVE_FRAME] or defaults.anchorRelativeFrame)
+	local anchorMatchWidth = addon.db[DB_ANCHOR_MATCH_WIDTH] == true
+	if data.anchorMatchWidth ~= nil then
+		anchorMatchWidth = data.anchorMatchWidth == true
+	elseif data.anchorMatchRelativeWidth ~= nil then
+		anchorMatchWidth = data.anchorMatchRelativeWidth == true
+	end
 	local anchorPoint = normalizeAnchorPoint(data.point or addon.db[DB_ANCHOR_POINT], defaults.anchorPoint)
 	local anchorRelativePoint = normalizeAnchorPoint(data.relativePoint or addon.db[DB_ANCHOR_RELATIVE_POINT], anchorPoint)
 	local anchorOffsetX = normalizeAnchorOffset(data.x ~= nil and data.x or addon.db[DB_ANCHOR_OFFSET_X], defaults.anchorOffsetX)
 	local anchorOffsetY = normalizeAnchorOffset(data.y ~= nil and data.y or addon.db[DB_ANCHOR_OFFSET_Y], defaults.anchorOffsetY)
+	local hideInPetBattle = addon.db[DB_HIDE_IN_PET_BATTLE] == true
+	if data.hideInPetBattle ~= nil then hideInPetBattle = data.hideInPetBattle == true end
 
 	addon.db[DB_WIDTH] = width
 	addon.db[DB_HEIGHT] = height
@@ -629,10 +725,12 @@ function GCDBar:ApplyLayoutData(data)
 	addon.db[DB_FILL_DIRECTION] = fillDirection
 	local prevAnchorRelativeFrame = addon.db[DB_ANCHOR_RELATIVE_FRAME]
 	addon.db[DB_ANCHOR_RELATIVE_FRAME] = anchorRelativeFrame
+	addon.db[DB_ANCHOR_MATCH_WIDTH] = anchorMatchWidth and true or false
 	addon.db[DB_ANCHOR_POINT] = anchorPoint
 	addon.db[DB_ANCHOR_RELATIVE_POINT] = anchorRelativePoint
 	addon.db[DB_ANCHOR_OFFSET_X] = anchorOffsetX
 	addon.db[DB_ANCHOR_OFFSET_Y] = anchorOffsetY
+	addon.db[DB_HIDE_IN_PET_BATTLE] = hideInPetBattle and true or false
 
 	self:ApplySize()
 	self:ApplyAppearance()
@@ -723,6 +821,11 @@ local function applySetting(field, value)
 		end
 		value = target
 		skipEditValue = true
+	elseif field == "anchorMatchWidth" then
+		local enabled = value == true
+		addon.db[DB_ANCHOR_MATCH_WIDTH] = enabled and true or false
+		value = enabled
+		refreshSettingsUI()
 	elseif field == "anchorPoint" then
 		local point = normalizeAnchorPoint(value, defaults.anchorPoint)
 		addon.db[DB_ANCHOR_POINT] = point
@@ -748,6 +851,10 @@ local function applySetting(field, value)
 		addon.db[DB_ANCHOR_OFFSET_Y] = offset
 		editField = "y"
 		value = offset
+	elseif field == "hideInPetBattle" then
+		local enabled = value == true
+		addon.db[DB_HIDE_IN_PET_BATTLE] = enabled and true or false
+		value = enabled
 	end
 
 	if not skipEditValue and EditMode and EditMode.SetValue then EditMode:SetValue(EDITMODE_ID, editField, value, nil, true) end
@@ -765,14 +872,19 @@ function GCDBar:RegisterEditMode()
 		local function anchorFrameEntries()
 			local entries = {}
 			local seen = {}
-			local function add(key, label)
+			local function frameIsAvailable(key)
+				if key == ANCHOR_TARGET_UI or key == ANCHOR_TARGET_PLAYER_CASTBAR then return true end
+				return _G and _G[key] ~= nil
+			end
+			local function add(key, label, force)
 				if not key or key == "" or seen[key] then return end
+				if not force and not frameIsAvailable(key) then return end
 				seen[key] = true
 				entries[#entries + 1] = { key = key, label = label or key }
 			end
 
-			add(ANCHOR_TARGET_UI, L["gcdBarAnchorScreen"] or "Screen (UIParent)")
-			add(ANCHOR_TARGET_PLAYER_CASTBAR, L["gcdBarAnchorPlayerCastbar"] or "Player Castbar")
+			add(ANCHOR_TARGET_UI, L["gcdBarAnchorScreen"] or "Screen (UIParent)", true)
+			add(ANCHOR_TARGET_PLAYER_CASTBAR, L["gcdBarAnchorPlayerCastbar"] or "Player Castbar", true)
 
 			add("PlayerFrame", _G.HUD_EDIT_MODE_PLAYER_FRAME_LABEL or PLAYER or "Player Frame")
 			add("TargetFrame", _G.HUD_EDIT_MODE_TARGET_FRAME_LABEL or TARGET or "Target Frame")
@@ -782,9 +894,25 @@ function GCDBar:RegisterEditMode()
 			add("BuffBarCooldownViewer", L["cooldownViewerBuffBar"] or "Buff Bar Cooldowns")
 			add("BuffIconCooldownViewer", L["cooldownViewerBuffIcon"] or "Buff Icon Cooldowns")
 
-			if addon.variables and addon.variables.actionBarNames then
-				for _, info in ipairs(addon.variables.actionBarNames) do
-					if info and info.name then add(info.name, info.text or info.name) end
+			local cooldownPanels = addon.Aura and addon.Aura.CooldownPanels
+			if cooldownPanels and cooldownPanels.GetRoot then
+				local root = cooldownPanels:GetRoot()
+				if root and root.panels then
+					local order = root.order or {}
+					local function addPanelEntry(panelId, panel)
+						if not panel or panel.enabled == false then return end
+						local label = string.format("Panel %s: %s", tostring(panelId), panel.name or "Cooldown Panel")
+						add("EQOL_CooldownPanel" .. tostring(panelId), label)
+					end
+					if #order > 0 then
+						for _, panelId in ipairs(order) do
+							addPanelEntry(panelId, root.panels[panelId])
+						end
+					else
+						for panelId, panel in pairs(root.panels) do
+							addPanelEntry(panelId, panel)
+						end
+					end
 				end
 			end
 
@@ -799,7 +927,7 @@ function GCDBar:RegisterEditMode()
 			end
 
 			local current = GCDBar:GetAnchorRelativeFrame()
-			if current and not seen[current] then add(current, current) end
+			if current and not seen[current] then add(current, current, true) end
 
 			return entries
 		end
@@ -867,6 +995,23 @@ function GCDBar:RegisterEditMode()
 				set = function(_, value) applySetting("anchorOffsetY", value) end,
 			},
 			{
+				name = L["gcdBarAnchorMatchWidth"] or "Match relative frame width",
+				kind = SettingType.Checkbox,
+				field = "anchorMatchWidth",
+				default = defaults.anchorMatchRelativeWidth == true,
+				get = function() return GCDBar:GetAnchorMatchWidth() end,
+				set = function(_, value) applySetting("anchorMatchWidth", value) end,
+				isEnabled = function() return not GCDBar:AnchorUsesUIParent() end,
+			},
+			{
+				name = L["gcdBarHideInPetBattle"] or "Hide in pet battles",
+				kind = SettingType.Checkbox,
+				field = "hideInPetBattle",
+				default = defaults.hideInPetBattle == true,
+				get = function() return GCDBar:GetHideInPetBattle() end,
+				set = function(_, value) applySetting("hideInPetBattle", value) end,
+			},
+			{
 				name = L["gcdBarWidth"] or "Bar width",
 				kind = SettingType.Slider,
 				field = "width",
@@ -877,6 +1022,7 @@ function GCDBar:RegisterEditMode()
 				get = function() return GCDBar:GetWidth() end,
 				set = function(_, value) applySetting("width", value) end,
 				formatter = function(value) return tostring(math.floor((tonumber(value) or 0) + 0.5)) end,
+				isEnabled = function() return not GCDBar:AnchorUsesMatchedWidth() end,
 			},
 			{
 				name = L["gcdBarHeight"] or "Bar height",
@@ -1076,6 +1222,8 @@ function GCDBar:RegisterEditMode()
 			progressMode = self:GetProgressMode(),
 			fillDirection = self:GetFillDirection(),
 			anchorRelativeFrame = self:GetAnchorRelativeFrame(),
+			anchorMatchWidth = self:GetAnchorMatchWidth(),
+			hideInPetBattle = self:GetHideInPetBattle(),
 			color = (function()
 				local r, g, b, a = self:GetColor()
 				return { r = r, g = g, b = b, a = a }

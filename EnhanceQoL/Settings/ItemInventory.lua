@@ -21,7 +21,30 @@ local GetTime = GetTime
 local doneHook = false
 local inspectDone = {}
 local inspectUnit = nil
+local inspectItemLinks = {}
+local inspectSlotOrder = { 1, 2, 3, 15, 5, 9, 10, 6, 7, 8, 11, 12, 13, 14, 16, 17 }
+local inspectSlotFrameNames = {
+	[1] = "InspectHeadSlot",
+	[2] = "InspectNeckSlot",
+	[3] = "InspectShoulderSlot",
+	[15] = "InspectBackSlot",
+	[5] = "InspectChestSlot",
+	[9] = "InspectWristSlot",
+	[10] = "InspectHandsSlot",
+	[6] = "InspectWaistSlot",
+	[7] = "InspectLegsSlot",
+	[8] = "InspectFeetSlot",
+	[11] = "InspectFinger0Slot",
+	[12] = "InspectFinger1Slot",
+	[13] = "InspectTrinket0Slot",
+	[14] = "InspectTrinket1Slot",
+	[16] = "InspectMainHandSlot",
+	[17] = "InspectSecondaryHandSlot",
+}
 addon.enchantTextCache = addon.enchantTextCache or {}
+local MAX_ENCHANT_LINK_CACHE = 2048
+local enchantTextLinkCache = {}
+local enchantTextLinkCacheCount = 0
 -- New helpers for Character vs Inspect display options
 local function _ensureDisplayDB()
 	addon.db = addon.db or {}
@@ -86,6 +109,25 @@ local function applyCharIlvlPosition(element)
 	element.ilvl:SetPoint(anchor.textPoint, element.ilvlBackground, anchor.textPoint, anchor.textX, anchor.textY)
 end
 
+local function getMissingEnchantOverlayColor()
+	local c = addon.db and addon.db["missingEnchantOverlayColor"]
+	local r = (c and c.r) or 1
+	local g = (c and c.g) or 0
+	local b = (c and c.b) or 0
+	local a = (c and c.a)
+	if a == nil then a = 0.6 end
+	return r, g, b, a
+end
+
+local function applyMissingEnchantOverlayStyle(texture)
+	if not texture then return end
+	local r, g, b, a = getMissingEnchantOverlayColor()
+	texture:SetColorTexture(r, g, b, a)
+	local topAlpha = math.min(1, a + 0.35)
+	local bottomAlpha = math.max(0, a - 0.15)
+	if texture.SetGradientAlpha then texture:SetGradientAlpha("VERTICAL", r, g, b, topAlpha, r, g, b, bottomAlpha) end
+end
+
 local function CheckItemGems(element, itemLink, emptySocketsCount, key, pdElement, attempts)
 	attempts = attempts or 1 -- Anzahl der Versuche
 	if attempts > 10 then -- Abbruch nach 5 Versuchen, um Endlosschleifen zu vermeiden
@@ -126,13 +168,33 @@ local function CheckItemGems(element, itemLink, emptySocketsCount, key, pdElemen
 	end
 end
 
+local function setEnchantTextLinkCache(link, value)
+	if enchantTextLinkCache[link] == nil then
+		enchantTextLinkCacheCount = enchantTextLinkCacheCount + 1
+		if enchantTextLinkCacheCount > MAX_ENCHANT_LINK_CACHE then
+			enchantTextLinkCache = {}
+			enchantTextLinkCacheCount = 1
+		end
+	end
+	enchantTextLinkCache[link] = value
+end
+
 local function getTooltipInfoFromLink(link)
-	if not link then return nil, nil end
+	if not link then return nil end
+
+	local cached = enchantTextLinkCache[link]
+	if cached ~= nil then
+		if cached == false then return nil end
+		return cached
+	end
 
 	local enchantID = tonumber(link:match("item:%d+:(%d+)") or 0)
 	local enchantText = nil
 
-	if enchantID and enchantID > 0 then enchantText = addon.enchantTextCache[enchantID] end
+	if enchantID and enchantID > 0 then
+		enchantText = addon.enchantTextCache[enchantID]
+		if enchantText == false then enchantText = nil end
+	end
 
 	if enchantText == nil then
 		local data = C_TooltipInfo.GetHyperlink(link)
@@ -155,54 +217,32 @@ local function getTooltipInfoFromLink(link)
 		end
 
 		if enchantID and enchantID > 0 then addon.enchantTextCache[enchantID] = enchantText or false end
-	elseif enchantText == false then
-		enchantText = nil
 	end
 
+	setEnchantTextLinkCache(link, enchantText or false)
 	return enchantText
 end
 
-local itemCount = 0
-local ilvlSum = 0
-
 local function removeInspectElements()
 	if nil == InspectPaperDollFrame then return end
-	itemCount = 0
-	ilvlSum = 0
 	if InspectPaperDollFrame.ilvl then InspectPaperDollFrame.ilvl:SetText("") end
-	local itemSlotsInspectList = {
-		[1] = InspectHeadSlot,
-		[2] = InspectNeckSlot,
-		[3] = InspectShoulderSlot,
-		[15] = InspectBackSlot,
-		[5] = InspectChestSlot,
-		[9] = InspectWristSlot,
-		[10] = InspectHandsSlot,
-		[6] = InspectWaistSlot,
-		[7] = InspectLegsSlot,
-		[8] = InspectFeetSlot,
-		[11] = InspectFinger0Slot,
-		[12] = InspectFinger1Slot,
-		[13] = InspectTrinket0Slot,
-		[14] = InspectTrinket1Slot,
-		[16] = InspectMainHandSlot,
-		[17] = InspectSecondaryHandSlot,
-	}
-
-	for key, element in pairs(itemSlotsInspectList) do
-		if element.ilvl then element.ilvl:SetFormattedText("") end
-		if element.ilvlBackground then element.ilvlBackground:Hide() end
-		if element.enchant then element.enchant:SetText("") end
-		if element.borderGradient then element.borderGradient:Hide() end
-		if element.gems and #element.gems > 0 then
-			for i = 1, #element.gems do
-				element.gems[i]:UnregisterAllEvents()
-				element.gems[i]:SetScript("OnUpdate", nil)
-				element.gems[i]:Hide()
+	for _, key in ipairs(inspectSlotOrder) do
+		local frameName = inspectSlotFrameNames[key]
+		local element = frameName and _G[frameName]
+		if element then
+			if element.ilvl then element.ilvl:SetFormattedText("") end
+			if element.ilvlBackground then element.ilvlBackground:Hide() end
+			if element.enchant then element.enchant:SetText("") end
+			if element.borderGradient then element.borderGradient:Hide() end
+			if element.gems and #element.gems > 0 then
+				for i = 1, #element.gems do
+					element.gems[i]:UnregisterAllEvents()
+					element.gems[i]:SetScript("OnUpdate", nil)
+					element.gems[i]:Hide()
+				end
 			end
 		end
 	end
-	collectgarbage("collect")
 end
 
 local tooltipCache = {}
@@ -246,12 +286,14 @@ local function onInspect(arg1)
 		doneHook = true
 		InspectFrame:HookScript("OnHide", function(self)
 			inspectDone = {}
+			inspectItemLinks = {}
 			removeInspectElements()
 		end)
 	end
 	if inspectUnit ~= InspectFrame.unit then
 		inspectUnit = InspectFrame.unit
 		inspectDone = {}
+		inspectItemLinks = {}
 	end
 	if not InspectOpt("ilvl") and pdElement.ilvl then pdElement.ilvl:SetText("") end
 	if not pdElement.ilvl and InspectOpt("ilvl") then
@@ -264,105 +306,99 @@ local function onInspect(arg1)
 		pdElement.ilvl:SetPoint("TOPRIGHT", pdElement.ilvlBackground, "TOPRIGHT", -1, -1) -- Position des Textes im Zentrum des Hintergrunds
 		pdElement.ilvl:SetFont(addon.db["inspectframeDisplayFont"], 16, "OUTLINE") -- Setzt die Schriftart, -größe und -stil (OUTLINE)
 
-		pdElement.ilvl:SetFormattedText("")
+		if C_PaperDollInfo and C_PaperDollInfo.GetInspectItemLevel then
+			local ilvl = C_PaperDollInfo.GetInspectItemLevel(unit)
+			if ilvl then pdElement.ilvl:SetFormattedText(string.format("%.1f", ilvl)) end
+		else
+			pdElement.ilvl:SetFormattedText("")
+		end
 		pdElement.ilvl:SetTextColor(1, 1, 1, 1)
 
 		local textWidth = pdElement.ilvl:GetStringWidth()
 		pdElement.ilvlBackground:SetSize(textWidth + 6, pdElement.ilvl:GetStringHeight() + 4) -- Mehr Padding für bessere Lesbarkeit
 	end
-	local itemSlotsInspectList = {
-		[1] = InspectHeadSlot,
-		[2] = InspectNeckSlot,
-		[3] = InspectShoulderSlot,
-		[15] = InspectBackSlot,
-		[5] = InspectChestSlot,
-		[9] = InspectWristSlot,
-		[10] = InspectHandsSlot,
-		[6] = InspectWaistSlot,
-		[7] = InspectLegsSlot,
-		[8] = InspectFeetSlot,
-		[11] = InspectFinger0Slot,
-		[12] = InspectFinger1Slot,
-		[13] = InspectTrinket0Slot,
-		[14] = InspectTrinket1Slot,
-		[16] = InspectMainHandSlot,
-		[17] = InspectSecondaryHandSlot,
-	}
-	local twoHandLocs = {
-		INVTYPE_2HWEAPON = true,
-		INVTYPE_RANGED = true,
-		INVTYPE_RANGEDRIGHT = true,
-		INVTYPE_FISHINGPOLE = true,
-	}
-
-	for key, element in pairs(itemSlotsInspectList) do
-		if nil == inspectDone[key] then
-			if element.ilvl then element.ilvl:SetFormattedText("") end
-			if element.ilvlBackground then element.ilvlBackground:Hide() end
-			if element.enchant then element.enchant:SetText("") end
+	for _, key in ipairs(inspectSlotOrder) do
+		local frameName = inspectSlotFrameNames[key]
+		local element = frameName and _G[frameName]
+		if element then
+			if element.borderGradient then applyMissingEnchantOverlayStyle(element.borderGradient) end
 			local itemLink = GetInventoryItemLink(unit, key)
-			if itemLink then
-				local eItem = Item:CreateFromItemLink(itemLink)
-				if eItem and not eItem:IsItemEmpty() then
-					eItem:ContinueOnItemLoad(function()
-						inspectDone[key] = true
-						if InspectOpt("gems") then
-							local itemStats = C_Item.GetItemStats(itemLink)
-							local socketCount = 0
-							for statName, statValue in pairs(itemStats) do
-								if (statName:find("EMPTY_SOCKET") or statName:find("empty_socket")) and addon.variables.allowedSockets[statName] then socketCount = socketCount + statValue end
+			if inspectItemLinks[key] ~= itemLink then
+				inspectItemLinks[key] = itemLink
+				inspectDone[key] = nil
+			end
+			if inspectDone[key] ~= true and inspectDone[key] ~= "pending" then
+				if element.ilvl then element.ilvl:SetFormattedText("") end
+				if element.ilvlBackground then element.ilvlBackground:Hide() end
+				if element.enchant then element.enchant:SetText("") end
+				if itemLink then
+					local eItem = Item:CreateFromItemLink(itemLink)
+					if eItem and not eItem:IsItemEmpty() then
+						inspectDone[key] = "pending"
+						eItem:ContinueOnItemLoad(function()
+							-- Link changed while item was loading; skip stale callback work.
+							if inspectItemLinks[key] ~= itemLink then
+								if inspectDone[key] == "pending" then inspectDone[key] = nil end
+								return
 							end
-							local neededSockets = addon.variables.shouldSocketed[key] or 0
-							if neededSockets then
-								local cSeason, isPvP = getTooltipInfo(itemLink)
-								if addon.variables.shouldSocketedChecks[key] then
-									if not addon.variables.shouldSocketedChecks[key].func(cSeason, isPvP) then neededSockets = 0 end
+							inspectDone[key] = true
+							if InspectOpt("gems") then
+								local itemStats = C_Item.GetItemStats(itemLink)
+								local socketCount = 0
+								for statName, statValue in pairs(itemStats) do
+									if (statName:find("EMPTY_SOCKET") or statName:find("empty_socket")) and addon.variables.allowedSockets[statName] then socketCount = socketCount + statValue end
 								end
-							end
-							local displayCount = math.max(socketCount, neededSockets)
-							if element.gems and #element.gems > displayCount then
-								for i = displayCount + 1, #element.gems do
+								local neededSockets = addon.variables.shouldSocketed[key] or 0
+								if neededSockets then
+									local cSeason, isPvP = getTooltipInfo(itemLink)
+									if addon.variables.shouldSocketedChecks[key] then
+										if not addon.variables.shouldSocketedChecks[key].func(cSeason, isPvP) then neededSockets = 0 end
+									end
+								end
+								local displayCount = math.max(socketCount, neededSockets)
+								if element.gems and #element.gems > displayCount then
+									for i = displayCount + 1, #element.gems do
+										element.gems[i]:UnregisterAllEvents()
+										element.gems[i]:SetScript("OnUpdate", nil)
+										element.gems[i]:Hide()
+									end
+								end
+								if not element.gems then element.gems = {} end
+								for i = 1, displayCount do
+									if not element.gems[i] then
+										element.gems[i] = CreateFrame("Frame", nil, pdElement)
+										element.gems[i]:SetSize(16, 16) -- Setze die Größe des Icons
+										if addon.variables.itemSlotSide[key] == 0 then
+											element.gems[i]:SetPoint("TOPLEFT", element, "TOPRIGHT", 5 + (i - 1) * 16, -1) -- Verschiebe jedes Icon um 20px
+										elseif addon.variables.itemSlotSide[key] == 1 then
+											element.gems[i]:SetPoint("TOPRIGHT", element, "TOPLEFT", -5 - (i - 1) * 16, -1)
+										else
+											element.gems[i]:SetPoint("BOTTOM", element, "TOPLEFT", -1, 5 + (i - 1) * 16)
+										end
+
+										element.gems[i]:SetFrameStrata("DIALOG")
+										element.gems[i]:SetScript("OnLeave", function(self) GameTooltip:Hide() end)
+
+										element.gems[i].icon = element.gems[i]:CreateTexture(nil, "OVERLAY")
+										element.gems[i].icon:SetAllPoints(element.gems[i])
+									end
+									element.gems[i].icon:SetTexture("Interface\\ItemSocketingFrame\\UI-EmptySocket-Prismatic")
+									if i > socketCount then
+										element.gems[i].icon:SetVertexColor(1, 0, 0)
+										element.gems[i]:SetScript("OnEnter", nil)
+									else
+										element.gems[i].icon:SetVertexColor(1, 1, 1)
+									end
+									element.gems[i]:Show()
+								end
+								if socketCount > 0 then CheckItemGems(element, itemLink, socketCount, key, pdElement) end
+							elseif element.gems and #element.gems > 0 then
+								for i = 1, #element.gems do
 									element.gems[i]:UnregisterAllEvents()
 									element.gems[i]:SetScript("OnUpdate", nil)
 									element.gems[i]:Hide()
 								end
 							end
-							if not element.gems then element.gems = {} end
-							for i = 1, displayCount do
-								if not element.gems[i] then
-									element.gems[i] = CreateFrame("Frame", nil, pdElement)
-									element.gems[i]:SetSize(16, 16) -- Setze die Größe des Icons
-									if addon.variables.itemSlotSide[key] == 0 then
-										element.gems[i]:SetPoint("TOPLEFT", element, "TOPRIGHT", 5 + (i - 1) * 16, -1) -- Verschiebe jedes Icon um 20px
-									elseif addon.variables.itemSlotSide[key] == 1 then
-										element.gems[i]:SetPoint("TOPRIGHT", element, "TOPLEFT", -5 - (i - 1) * 16, -1)
-									else
-										element.gems[i]:SetPoint("BOTTOM", element, "TOPLEFT", -1, 5 + (i - 1) * 16)
-									end
-
-									element.gems[i]:SetFrameStrata("DIALOG")
-									element.gems[i]:SetScript("OnLeave", function(self) GameTooltip:Hide() end)
-
-									element.gems[i].icon = element.gems[i]:CreateTexture(nil, "OVERLAY")
-									element.gems[i].icon:SetAllPoints(element.gems[i])
-								end
-								element.gems[i].icon:SetTexture("Interface\\ItemSocketingFrame\\UI-EmptySocket-Prismatic")
-								if i > socketCount then
-									element.gems[i].icon:SetVertexColor(1, 0, 0)
-									element.gems[i]:SetScript("OnEnter", nil)
-								else
-									element.gems[i].icon:SetVertexColor(1, 1, 1)
-								end
-								element.gems[i]:Show()
-							end
-							if socketCount > 0 then CheckItemGems(element, itemLink, socketCount, key, pdElement) end
-						elseif element.gems and #element.gems > 0 then
-							for i = 1, #element.gems do
-								element.gems[i]:UnregisterAllEvents()
-								element.gems[i]:SetScript("OnUpdate", nil)
-								element.gems[i]:Hide()
-							end
-						end
 
 						if InspectOpt("ilvl") then
 							local double = false
@@ -379,15 +415,23 @@ local function onInspect(arg1)
 								element.ilvl:SetFont(addon.db["inspectframeDisplayFont"], 14, "OUTLINE") -- Setzt die Schriftart, -größe und -stil (OUTLINE)
 							end
 
-							applyCharIlvlPosition(element)
-							element.ilvlBackground:SetSize(30, 16) -- Größe des Hintergrunds (muss ggf. angepasst werden)
+								applyCharIlvlPosition(element)
+								element.ilvlBackground:SetSize(30, 16) -- Größe des Hintergrunds (muss ggf. angepasst werden)
 
-							local color = eItem:GetItemQualityColor()
-							local itemLevelText = eItem:GetCurrentItemLevel()
+								local color = eItem:GetItemQualityColor()
 
-							ilvlSum = ilvlSum + itemLevelText * (double and 2 or 1)
-							element.ilvl:SetFormattedText(itemLevelText)
-							element.ilvl:SetTextColor(color.r, color.g, color.b, 1)
+								local itemLevelText
+
+								local ttData = C_TooltipInfo.GetInventoryItem(unit, key, true)
+								if ttData and ttData.lines then
+									for i, v in pairs(ttData.lines) do
+										if v.type == 41 then itemLevelText = v.itemLevel end
+									end
+								end
+								if not itemLevelText then itemLevelText = eItem:GetCurrentItemLevel() end
+
+								element.ilvl:SetFormattedText(itemLevelText)
+								element.ilvl:SetTextColor(color.r, color.g, color.b, 1)
 
 							local textWidth = element.ilvl:GetStringWidth()
 							element.ilvlBackground:SetSize(textWidth + 6, element.ilvl:GetStringHeight() + 4) -- Mehr Padding für bessere Lesbarkeit
@@ -422,15 +466,23 @@ local function onInspect(arg1)
 									if element.borderGradient then element.borderGradient:Hide() end
 								end
 
-								if not foundEnchant and UnitLevel(inspectUnit) == addon.variables.maxLevel then
-									element.enchant:SetText("")
-									if
-										nil == addon.variables.shouldEnchantedChecks[key]
-										or (nil ~= addon.variables.shouldEnchantedChecks[key] and addon.variables.shouldEnchantedChecks[key].func(eItem:GetCurrentItemLevel()))
-									then
-										if key == 17 then
-											local _, _, _, _, _, _, _, _, itemEquipLoc = C_Item.GetItemInfoInstant(itemLink)
-											if addon.variables.allowedEnchantTypesForOffhand[itemEquipLoc] then
+									if not foundEnchant and UnitLevel(inspectUnit) == addon.variables.maxLevel then
+										element.enchant:SetText("")
+										if
+											nil == addon.variables.shouldEnchantedChecks[key]
+											or (nil ~= addon.variables.shouldEnchantedChecks[key] and addon.variables.shouldEnchantedChecks[key].func(eItem:GetCurrentItemLevel()))
+										then
+											if key == 17 then
+												local _, _, _, _, _, _, _, _, itemEquipLoc = C_Item.GetItemInfoInstant(itemLink)
+												if addon.variables.allowedEnchantTypesForOffhand[itemEquipLoc] then
+													if showMissingOverlay then
+														element.borderGradient:Show()
+													else
+														element.borderGradient:Hide()
+													end
+													element.enchant:SetFormattedText(("|cff%02x%02x%02x"):format(255, 0, 0) .. L["MissingEnchant"] .. "|r")
+												end
+											else
 												if showMissingOverlay then
 													element.borderGradient:Show()
 												else
@@ -438,27 +490,30 @@ local function onInspect(arg1)
 												end
 												element.enchant:SetFormattedText(("|cff%02x%02x%02x"):format(255, 0, 0) .. L["MissingEnchant"] .. "|r")
 											end
-										else
-											if showMissingOverlay then
-												element.borderGradient:Show()
-											else
-												element.borderGradient:Hide()
-											end
-											element.enchant:SetFormattedText(("|cff%02x%02x%02x"):format(255, 0, 0) .. L["MissingEnchant"] .. "|r")
 										end
 									end
 								end
+							else
+								if element.borderGradient then element.borderGradient:Hide() end
+								if element.enchant then element.enchant:SetText("") end
 							end
-						else
-							if element.borderGradient then element.borderGradient:Hide() end
-							if element.enchant then element.enchant:SetText("") end
-						end
-					end)
+						end)
+					else
+						inspectDone[key] = true
+					end
+				else
+					inspectDone[key] = true
 				end
 			end
 		end
 	end
-	if InspectOpt("ilvl") and ilvlSum > 0 then pdElement.ilvl:SetText("" .. (math.floor((ilvlSum / 16) * 100 + 0.5) / 100)) end
+
+	if C_PaperDollInfo and C_PaperDollInfo.GetInspectItemLevel then
+		local ilvl = C_PaperDollInfo.GetInspectItemLevel(unit)
+		if ilvl then pdElement.ilvl:SetFormattedText(string.format("%.1f", ilvl)) end
+	else
+		pdElement.ilvl:SetFormattedText("")
+	end
 end
 
 addon.functions.onInspect = onInspect
@@ -584,6 +639,7 @@ local function setIlvlText(element, slot)
 				end
 
 				if CharOpt("enchants") and element.borderGradient then
+					applyMissingEnchantOverlayStyle(element.borderGradient)
 					element.borderGradient:Hide()
 					local showMissingOverlay = addon.db["showMissingEnchantOverlayOnCharframe"] ~= false
 					local foundEnchant = enchantText ~= nil
@@ -687,20 +743,10 @@ local function UpdateItemLevel()
 	local statFrame = CharacterStatsPane and CharacterStatsPane.ItemLevelFrame
 	if not (statFrame and statFrame.Value and GetAverageItemLevel) then return end
 
+	if not CharOpt("ilvl") then return end
+
 	local avgItemLevel, equippedItemLevel = GetAverageItemLevel()
 	if not avgItemLevel or not equippedItemLevel then return end
-
-	local showDetailed = addon.db and addon.db.charDisplayOptions and addon.db.charDisplayOptions["ilvl"]
-	if not showDetailed then
-		local minItemLevel = C_PaperDollInfo and C_PaperDollInfo.GetMinItemLevel and C_PaperDollInfo.GetMinItemLevel()
-		local displayItemLevel = math.max(minItemLevel or 0, equippedItemLevel)
-		statFrame.Value:SetText(math.floor(displayItemLevel))
-		if GetItemLevelColor then
-			local r, g, b = GetItemLevelColor()
-			if r and g and b then statFrame.Value:SetTextColor(r, g, b) end
-		end
-		return
-	end
 
 	local equippedText = string.format("%.2f", equippedItemLevel)
 	local avgText = string.format("%.2f", avgItemLevel)
@@ -718,6 +764,11 @@ end
 hooksecurefunc("PaperDollFrame_SetItemLevel", function(statFrame, unit) UpdateItemLevel() end)
 
 local function setCharFrame()
+	if InCombatLockdown and InCombatLockdown() then
+		addon.variables = addon.variables or {}
+		addon.variables.pendingCharFrameUpdate = true
+		return
+	end
 	UpdateItemLevel()
 	if not addon.general.iconFrame then addon.functions.catalystChecks() end
 	if addon.db["showCatalystChargesOnCharframe"] and addon.variables.catalystID and addon.general.iconFrame and not addon.functions.IsTimerunner() then
@@ -770,7 +821,7 @@ local function updateFlyoutButtonInfo(button)
 		if not location then return end
 
 		-- TODO 12.0: EquipmentManager_UnpackLocation will change once Void Storage is removed
-		local itemLink, _, _, bags, _, slot, bag
+		local itemLink, _, _, bags, _, slot, bag, itemLevel
 		if type(button.location) == "number" then
 			local locationData = EquipmentManager_GetLocationData(location)
 			bags = locationData.isBags or false
@@ -789,7 +840,14 @@ local function updateFlyoutButtonInfo(button)
 			local eItem = Item:CreateFromItemLink(itemLink)
 			if eItem and not eItem:IsItemEmpty() then
 				eItem:ContinueOnItemLoad(function()
-					local itemLevel = eItem:GetCurrentItemLevel()
+					if bags then
+						local loc = ItemLocation:CreateFromBagAndSlot(bag, slot)
+						if loc then itemLevel = C_Item.GetCurrentItemLevel(loc) end
+					elseif slot then
+						local loc = ItemLocation:CreateFromEquipmentSlot(slot)
+						if loc then itemLevel = C_Item.GetCurrentItemLevel(loc) end
+					end
+					if not itemLevel then itemLevel = eItem:GetCurrentItemLevel() end
 					local quality = eItem:GetItemQualityColor()
 
 					if not button.ItemLevelText then
@@ -1476,6 +1534,7 @@ function addon.functions.initItemInventory()
 	addon.functions.InitDBValue("showGemsTooltipOnCharframe", false)
 	addon.functions.InitDBValue("showEnchantOnCharframe", false)
 	addon.functions.InitDBValue("showMissingEnchantOverlayOnCharframe", true)
+	addon.functions.InitDBValue("missingEnchantOverlayColor", { r = 1, g = 0, b = 0, a = 0.6 })
 	addon.functions.InitDBValue("showCatalystChargesOnCharframe", false)
 	addon.functions.InitDBValue("movementSpeedStatEnabled", false)
 	addon.functions.InitDBValue("characterStatsFormattingEnabled", false)
@@ -1557,8 +1616,7 @@ function addon.functions.initItemInventory()
 			value.borderGradient = value:CreateTexture(nil, "ARTWORK")
 			value.borderGradient:SetPoint("TOPLEFT", value, "TOPLEFT", -2, 2)
 			value.borderGradient:SetPoint("BOTTOMRIGHT", value, "BOTTOMRIGHT", 2, -2)
-			value.borderGradient:SetColorTexture(1, 0, 0, 0.6) -- Grundfarbe Rot
-			value.borderGradient:SetGradient("VERTICAL", CreateColor(1, 0, 0, 1), CreateColor(1, 0.3, 0.3, 0.5))
+			applyMissingEnchantOverlayStyle(value.borderGradient)
 			value.borderGradient:Hide()
 		end
 		-- Text für das Item-Level
@@ -1600,8 +1658,6 @@ function addon.functions.initItemInventory()
 			value.gems[i]:Hide()
 		end
 	end
-
-	PaperDollFrame:HookScript("OnShow", function(self) addon.functions.setCharFrame() end)
 end
 
 ---- END REGION
@@ -1913,7 +1969,30 @@ addon.functions.SettingsCreateDropdown(cInventory, {
 
 ---- REGION END
 
+local function ensureCharFrameOnShowHook()
+	if addon.variables and addon.variables.eqolCharFrameHooked then return end
+	if not _G.PaperDollFrame then return end
+	addon.variables = addon.variables or {}
+	addon.variables.eqolCharFrameHooked = true
+	_G.PaperDollFrame:HookScript("OnShow", function()
+		if InCombatLockdown and InCombatLockdown() then
+			addon.variables.pendingCharFrameUpdate = true
+			return
+		end
+		setCharFrame()
+	end)
+end
+
 local eventHandlers = {
+	["ADDON_LOADED"] = function(arg1)
+		if arg1 ~= "Blizzard_UIPanels_Game" then return end
+		ensureCharFrameOnShowHook()
+		if InCombatLockdown and InCombatLockdown() then
+			addon.variables.pendingCharFrameUpdate = true
+			return
+		end
+		setCharFrame()
+	end,
 	["CURRENCY_DISPLAY_UPDATE"] = function(arg1)
 		if arg1 == addon.variables.catalystID and addon.variables.catalystID then
 			local cataclystInfo = C_CurrencyInfo.GetCurrencyInfo(addon.variables.catalystID)
@@ -1954,6 +2033,10 @@ local eventHandlers = {
 	end,
 	["PLAYER_REGEN_ENABLED"] = function()
 		if addon.db["showDurabilityOnCharframe"] then calculateDurability() end
+		if addon.variables and addon.variables.pendingCharFrameUpdate and _G.PaperDollFrame and _G.PaperDollFrame:IsShown() then
+			addon.variables.pendingCharFrameUpdate = nil
+			setCharFrame()
+		end
 	end,
 	["PLAYER_UNGHOST"] = function()
 		if addon.db["showDurabilityOnCharframe"] then calculateDurability() end
@@ -1977,3 +2060,6 @@ local frameLoad = CreateFrame("Frame")
 
 registerEvents(frameLoad)
 frameLoad:SetScript("OnEvent", eventHandler)
+
+-- If Blizzard_UIPanels_Game is already loaded, wire up immediately.
+if _G.PaperDollFrame then ensureCharFrameOnShowHook() end

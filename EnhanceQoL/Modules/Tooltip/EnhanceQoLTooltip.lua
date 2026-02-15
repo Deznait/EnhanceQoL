@@ -14,7 +14,33 @@ local frameLoad = CreateFrame("Frame")
 -- ==== Inspect cache (spec/ilvl/score) ====
 local InspectCache = {} -- [guid] = { ilvl, specName, score, last }
 local CACHE_TTL = 30 -- seconds
+local INSPECT_REQUEST_COOLDOWN = 1.25 -- avoid spamming NotifyInspect while hovering
+local INSPECT_PENDING_TIMEOUT = 2.0 -- fail-safe in case INSPECT_READY is dropped
 local function now() return GetTime() end
+
+local function isSecret(value) return issecretvalue and issecretvalue(value) end
+
+local function isTooltipRestricted() return addon.functions and addon.functions.isRestrictedContent and addon.functions.isRestrictedContent(true) end
+
+local function safeEquals(a, b)
+	if a == nil or b == nil then return false end
+	if isSecret(a) or isSecret(b) then return false end
+	return a == b
+end
+
+local function safeFind(text, pattern, plain)
+	if not text or isSecret(text) then return nil end
+	if pattern == nil or isSecret(pattern) then return nil end
+	if type(text) ~= "string" or type(pattern) ~= "string" then return nil end
+	return string.find(text, pattern, 1, plain)
+end
+
+local function safeMatch(text, pattern)
+	if not text or isSecret(text) then return nil end
+	if pattern == nil or isSecret(pattern) then return nil end
+	if type(text) ~= "string" or type(pattern) ~= "string" then return nil end
+	return string.match(text, pattern)
+end
 
 local function GetUnitTokenFromTooltip(tt)
 	if addon.variables.isMidnight then return "mouseover" end
@@ -32,9 +58,26 @@ end
 
 -- no compact score formatting needed anymore
 
-local pendingGUID, pendingUnit
+local pendingGUID, pendingUnit, pendingRequestedAt
 local EnsureUnitData -- forward declaration
 local fInspect = CreateFrame("Frame")
+
+local function IsInspectUIBusy()
+	if InspectFrame and InspectFrame.IsShown and InspectFrame:IsShown() then return true end
+	if PlayerSpellsFrame and PlayerSpellsFrame.IsInspecting and PlayerSpellsFrame:IsInspecting() then return true end
+	return false
+end
+
+local function ClearTooltipInspectState() pendingGUID, pendingUnit, pendingRequestedAt = nil, nil, nil end
+
+local function FinishTooltipInspectRequest()
+	ClearTooltipInspectState()
+	if C_Timer and C_Timer.After and ClearInspectPlayer and not IsInspectUIBusy() then
+		C_Timer.After(0, function()
+			if ClearInspectPlayer and not IsInspectUIBusy() then ClearInspectPlayer() end
+		end)
+	end
+end
 
 -- Decide whether we need INSPECT_READY at all (opt-in)
 local function ShouldUseInspectFeature() return (addon.db and (addon.db["TooltipUnitShowSpec"] or addon.db["TooltipUnitShowItemLevel"])) or false end
@@ -71,7 +114,7 @@ local function UpdateInspectEventRegistration()
 		fInspect:RegisterEvent("INSPECT_READY")
 		if addon.db["TooltipUnitInspectRequireModifier"] then fInspect:RegisterEvent("MODIFIER_STATE_CHANGED") end
 	else
-		pendingGUID, pendingUnit = nil, nil
+		ClearTooltipInspectState()
 	end
 end
 
@@ -87,7 +130,7 @@ local function FindLineIndexByLabel(tt, label)
 	for i = 1, tt:NumLines() do
 		local left = _G[name .. "TextLeft" .. i]
 		local text = left and left:GetText()
-		if text and text:find(label, 1, true) then return i end
+		if safeFind(text, label, true) then return i end
 	end
 	return nil
 end
@@ -98,7 +141,7 @@ local function RefreshTooltipForGUID(guid)
 	local unit = GetUnitTokenFromTooltip(tt)
 	if not unit then return end
 	local uGuid = UnitGUID(unit)
-	if uGuid ~= guid then return end
+	if not safeEquals(uGuid, guid) then return end
 	local c = InspectCache[guid]
 	if not c then return end
 
@@ -143,15 +186,15 @@ end
 fInspect:SetScript("OnEvent", function(_, ev, arg1, arg2)
 	if ev == "INSPECT_READY" then
 		local guid = arg1
-		if issecretvalue(guid) or issecretvalue(arg1) or issecretvalue(arg2) or issecretvalue(pendingGUID) then return end
-		if not guid or guid ~= pendingGUID then return end
+		if isSecret(guid) or isSecret(arg1) or isSecret(arg2) or isSecret(pendingGUID) then return end
+		if not safeEquals(guid, pendingGUID) then return end
 		local unitGuid = pendingUnit and UnitGUID(pendingUnit)
-		if issecretvalue(unitGuid) or issecretvalue(pendingUnit) then
-			pendingGUID, pendingUnit = nil, nil
+		if isSecret(unitGuid) or isSecret(pendingUnit) then
+			FinishTooltipInspectRequest()
 			return
 		end
 		local unit = (unitGuid == guid) and pendingUnit or nil
-		pendingGUID, pendingUnit = nil, nil
+		FinishTooltipInspectRequest()
 		if not unit or not UnitExists(unit) then return end
 
 		local ilvl
@@ -198,12 +241,18 @@ end)
 
 EnsureUnitData = function(unit)
 	if not unit or not UnitIsPlayer(unit) then return end
+	if isTooltipRestricted() then return end
 	-- Only fetch if at least one feature is enabled (opt-in)
 	if not (addon.db["TooltipUnitShowSpec"] or addon.db["TooltipUnitShowItemLevel"]) then return end
 	local guid = UnitGUID(unit)
+	if type(guid) == "nil" or issecretvalue(guid) then return end
 	if not guid then return end
+	local tNow = now()
 	local c = InspectCache[guid]
-	if c and (now() - (c.last or 0) < CACHE_TTL) then return end
+	if c then
+		if tNow - (c.last or 0) < CACHE_TTL then return end
+		if tNow - (c.requestAt or 0) < INSPECT_REQUEST_COOLDOWN then return end
+	end
 
 	-- Self: no inspect needed
 	if UnitIsUnit(unit, "player") then
@@ -222,18 +271,33 @@ EnsureUnitData = function(unit)
 
 	if addon.db["TooltipUnitInspectRequireModifier"] and not IsConfiguredModifierDown() then return end
 
+	if IsInspectUIBusy() then
+		ClearTooltipInspectState()
+		return
+	end
+
+	if pendingGUID and pendingRequestedAt and (tNow - pendingRequestedAt) >= INSPECT_PENDING_TIMEOUT then FinishTooltipInspectRequest() end
+
 	-- Others: request inspect if possible
 	if CanInspect and CanInspect(unit) and not InCombatLockdown() and not issecretvalue(unit) then
 		if pendingGUID and pendingUnit then
 			local pendingUnitGuid = UnitGUID(pendingUnit)
 			if issecretvalue(pendingUnitGuid) or issecretvalue(pendingGUID) or issecretvalue(guid) then
-				pendingGUID, pendingUnit = nil, nil
+				ClearTooltipInspectState()
 			elseif pendingUnitGuid == pendingGUID and pendingGUID == guid then
 				return
+			elseif pendingRequestedAt and (tNow - pendingRequestedAt) < INSPECT_PENDING_TIMEOUT then
+				return
+			else
+				ClearTooltipInspectState()
 			end
 		end
+		local cacheEntry = c or {}
+		cacheEntry.requestAt = tNow
+		InspectCache[guid] = cacheEntry
 		pendingGUID = guid
 		pendingUnit = unit
+		pendingRequestedAt = tNow
 		if NotifyInspect then NotifyInspect(unit) end
 	end
 end
@@ -247,8 +311,12 @@ local function GetNPCIDFromGUID(guid)
 end
 
 local function FormatUnitName(unit)
-	if not unit then return nil end
-	if UnitIsUnit and UnitIsUnit(unit, "player") then return "<YOU>" end
+	if not unit or (issecretvalue and issecretvalue(unit)) then return nil end
+	if UnitIsUnit then
+		local same = UnitIsUnit(unit, "player")
+		if issecretvalue and issecretvalue(same) then return nil end
+		if same then return "<YOU>" end
+	end
 	local name, realm = UnitName(unit)
 	if not name then return nil end
 	if issecretvalue and issecretvalue(name) then return nil end
@@ -329,7 +397,8 @@ local function checkCurrency(tooltip, id)
 		for i = tooltip:NumLines(), 1, -1 do
 			local left = _G[tooltip:GetName() .. "TextLeft" .. i]
 			local right = _G[tooltip:GetName() .. "TextRight" .. i]
-			if left and left:GetText() and left:GetText():match("^" .. TOTAL .. ":") then
+			local text = left and left:GetText()
+			if text and safeMatch(text, "^" .. TOTAL .. ":") then
 				-- wipe both columns and break; there is only one such line
 				left:SetText("")
 				if right then right:SetText("") end
@@ -372,7 +441,7 @@ local function checkSpell(tooltip, id, name, isSpell)
 			local line = tooltip and _G[tooltip:GetName() .. "TextLeft1"]
 			if line then
 				local current = line:GetText()
-				if ((issecretvalue and not issecretvalue(current)) or not issecretvalue) and current and not current:find("|T", 1, true) then
+				if current and not isSecret(current) and not safeFind(current, "|T", true) then
 					local size = addon.db and addon.db["TooltipItemIconSize"] or 16
 					if size < 10 then
 						size = 10
@@ -422,7 +491,39 @@ local function ResolveTooltipUnit(tooltip)
 	return nil
 end
 
+local function HasUnitTooltipOptions()
+	local db = addon.db
+	if not db then return false end
+	if db["TooltipUnitHideType"] and db["TooltipUnitHideType"] ~= 1 then return true end
+	if db["TooltipUnitHideInCombat"] or db["TooltipUnitHideInDungeon"] then return true end
+	if db["TooltipUnitHideHealthBar"] then return true end
+	if db["TooltipShowMythicScore"] then return true end
+	if db["TooltipShowClassColor"] then return true end
+	if db["TooltipShowNPCID"] then return true end
+	if db["TooltipHideFaction"] or db["TooltipHidePVP"] then return true end
+	if db["TooltipShowGuildRank"] or db["TooltipColorGuildName"] then return true end
+	if db["TooltipUnitShowTargetOfTarget"] then return true end
+	if db["TooltipUnitShowMount"] then return true end
+	if db["TooltipUnitShowSpec"] or db["TooltipUnitShowItemLevel"] then return true end
+	return false
+end
+
+local function ShouldRunAdditionalTooltip()
+	local db = addon.db
+	if not db then return false end
+	return db["TooltipShowNPCID"]
+		or db["TooltipShowClassColor"]
+		or db["TooltipHideFaction"]
+		or db["TooltipHidePVP"]
+		or db["TooltipShowGuildRank"]
+		or db["TooltipColorGuildName"]
+		or db["TooltipUnitShowTargetOfTarget"]
+		or db["TooltipUnitShowMount"]
+		or db["TooltipShowMythicScore"]
+end
+
 local function checkAdditionalTooltip(tooltip)
+	if not ShouldRunAdditionalTooltip() then return end
 	local unit = ResolveTooltipUnit(tooltip)
 	local function challengeLabel(mapId)
 		if addon.Tooltip and addon.Tooltip.variables and addon.Tooltip.variables.challengeMapID then
@@ -450,7 +551,7 @@ local function checkAdditionalTooltip(tooltip)
 			for i = 1, tooltip:NumLines() do
 				local line = _G[tooltip:GetName() .. "TextLeft" .. i]
 				local text = line and line:GetText()
-				if text and (not issecretvalue or not issecretvalue(text)) and text:find(classDisplayName) then
+				if safeFind(text, classDisplayName, true) then
 					line:SetTextColor(r, g, b)
 					break
 				end
@@ -467,10 +568,10 @@ local function checkAdditionalTooltip(tooltip)
 				local line = _G[ttName .. "TextLeft" .. i]
 				local text = line and line:GetText()
 				if text then
-					if factionName and text == factionName then
+					if factionName and safeEquals(text, factionName) then
 						line:SetText("")
 						line:Hide()
-					elseif pvpText and text == pvpText then
+					elseif pvpText and safeEquals(text, pvpText) then
 						line:SetText("")
 						line:Hide()
 					end
@@ -484,7 +585,7 @@ local function checkAdditionalTooltip(tooltip)
 			for i = 1, tooltip:NumLines() do
 				local line = _G[ttName .. "TextLeft" .. i]
 				local text = line and line:GetText()
-				if text and (not issecretvalue or not issecretvalue(text)) and text:find(guildName, 1, true) then
+				if safeFind(text, guildName, true) then
 					guildLine = line
 					guildLineText = text
 					break
@@ -506,7 +607,7 @@ local function checkAdditionalTooltip(tooltip)
 
 			if guildLine then
 				newText = nameText
-				if rankText and guildLineText and not guildLineText:find(guildRank or "", 1, true) then newText = newText .. " - " .. rankText end
+				if rankText and guildLineText and not isSecret(guildLineText) and not safeFind(guildLineText, guildRank or "", true) then newText = newText .. " - " .. rankText end
 				guildLine:SetText(newText)
 			else
 				if rankText then
@@ -689,6 +790,7 @@ end
 local function UpdateTooltipHealthBarVisibility(tooltip)
 	if not tooltip or not addon.db then return end
 	local hideBar = addon.db["TooltipUnitHideHealthBar"] and true or false
+	if not hideBar and not tooltip.__EnhanceQoLTooltipHealthBarTouched then return end
 
 	local function handleAlpha(obj)
 		if not obj or not obj.SetAlpha then return end
@@ -758,10 +860,12 @@ local function UpdateTooltipHealthBarVisibility(tooltip)
 		handleAlpha(GameTooltipStatusBarTexture)
 		handleAlpha(GameTooltipStatusBarBackground)
 	end
+	tooltip.__EnhanceQoLTooltipHealthBarTouched = hideBar or nil
 end
 
 local function checkUnit(tooltip)
 	UpdateTooltipHealthBarVisibility(tooltip)
+	if not HasUnitTooltipOptions() then return end
 	if addon.db["TooltipUnitHideInDungeon"] and select(1, IsInInstance()) == false then
 		checkAdditionalTooltip(tooltip)
 		return
@@ -839,7 +943,7 @@ local function checkItem(tooltip, id, name, guid)
 		if line then
 			local current = line:GetText()
 
-			if current and icon and not current:find("|T", 1, true) then
+			if current and icon and not isSecret(current) and not safeFind(current, "|T", true) then
 				local size = addon.db and addon.db["TooltipItemIconSize"] or 16
 				if size < 10 then
 					size = 10
@@ -933,10 +1037,7 @@ local function checkAura(tooltip, id, name)
 			local line = tooltip and _G[tooltip:GetName() .. "TextLeft1"]
 			if line then
 				local current = line:GetText()
-				if
-					current
-					--and not current:find("|T", 1, true)
-				then
+				if current and not isSecret(current) then
 					local size = addon.db and addon.db["TooltipItemIconSize"] or 16
 					if size < 10 then
 						size = 10
@@ -970,13 +1071,15 @@ end
 
 local function checkAdditionalUnit(tt)
 	if not (addon.db["TooltipUnitShowSpec"] or addon.db["TooltipUnitShowItemLevel"]) then return end
+	if isTooltipRestricted() then return end
 
 	local unit = GetUnitTokenFromTooltip(tt)
 	if not unit or not UnitIsPlayer(unit) then return end
 
 	EnsureUnitData(unit)
 	local guid = UnitGUID(unit)
-	local c = guid and InspectCache[guid] or nil
+	if not guid or isSecret(guid) then return end
+	local c = InspectCache[guid]
 	if not c then return end
 
 	local showSpec = addon.db["TooltipUnitShowSpec"] and c.specName
@@ -999,7 +1102,7 @@ if TooltipDataProcessor then
 		if not addon.db then return end
 		if not data or not data.type then return end
 
-		local restricted = addon.functions.isRestrictedContent and addon.functions.isRestrictedContent()
+		local restricted = addon.functions.isRestrictedContent and addon.functions.isRestrictedContent(true)
 		local id, name, _, timeLimit, kind
 
 		if issecretvalue and issecretvalue(data.type) then
@@ -1186,13 +1289,14 @@ local function registerTooltipHooks()
 		local line = _G[tt:GetName() .. "TextLeft" .. i]
 		if line then
 			local tmpText = line:GetText()
-			if issecretvalue and issecretvalue(tmpText) then return end
-			if line:GetText() == text then
+			if isSecret(tmpText) then return end
+			if safeEquals(tmpText, text) then
 				line:SetText("")
 				line:Hide()
 
 				local mLine = _G[tt:GetName() .. "TextLeft" .. (i - 1)]
-				if mLine and mLine.GetText and mLine:GetText() == " " then mLine:Hide() end
+				local mText = mLine and mLine.GetText and mLine:GetText()
+				if safeEquals(mText, " ") then mLine:Hide() end
 				tt:Show()
 			end
 		end

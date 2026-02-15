@@ -1,17 +1,13 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
-	<Script file="widgets\DragTreeGroup.lua" />
-	<Script file="Aura.lua" />
-	<Script file="BuffTracker.lua" />
 	<Script file="CooldownPanels_Helper.lua" />
 	<Script file="CooldownPanels_AnchorHelper.lua" />
 	<Script file="CooldownPanels.lua" />
 	<Script file="UF_Helper.lua" />
 	<Script file="UF.lua" />
-	<!--@debug@-->
+	<!-- <Script file="UF_StandaloneCastbar.lua" /> -->
 	<Include file="UF_GroupFrames.xml" />
 	<Script file="UF_GroupFrames_Helper.lua" />
 	<Script file="UF_GroupFrames.lua" />
-	<!--@end-debug@-->
 	<Script file="ShamanMaelstromWeaponBar.lua" />
 	<Script file="Settings_UF.lua" />
 </Ui>
