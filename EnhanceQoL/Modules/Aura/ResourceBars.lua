@@ -3623,6 +3623,16 @@ updateBarSeparators = function(pType)
 	if pType ~= "RUNES" and (not eligible or not eligible[pType]) then return end
 	local bar = powerbar[pType]
 	if not bar then return end
+	if pType == "RUNES" then
+		-- RUNES separators are handled as real gaps in layoutRunes.
+		if bar.separatorMarks then
+			for _, tx in ipairs(bar.separatorMarks) do
+				tx:Hide()
+			end
+		end
+		if bar:IsShown() then layoutRunes(bar) end
+		return
+	end
 	local cfg = getBarSettings(pType)
 	if not (cfg and cfg.showSeparator) then
 		if pType ~= "RUNES" and pType ~= "ESSENCE" then
@@ -3933,12 +3943,19 @@ function layoutRunes(bar)
 	if not bar then return end
 	bar.runes = bar.runes or {}
 	local count = 6
-	local gap = 0
 	local inner = bar._rbInner or bar
 	local overlay = ensureTextOverlayFrame(bar) or bar
 	local w = max(1, inner:GetWidth() or (bar:GetWidth() or 0))
 	local h = max(1, inner:GetHeight() or (bar:GetHeight() or 0))
 	local cfg = getBarSettings("RUNES") or {}
+	local showSeparator = cfg.showSeparator == true
+	local gap = 0
+	if showSeparator then
+		local configured = tonumber(cfg.separatorThickness)
+		if configured == nil then configured = RB.SEPARATOR_THICKNESS end
+		if configured == nil then configured = 1 end
+		gap = max(0, floor(configured + 0.5))
+	end
 	if nil == cfg.showCooldownText then cfg.showCooldownText = true end
 	local show = cfg.showCooldownText ~= false -- default on
 	local size = cfg.cooldownTextFontSize or cfg.fontSize or 16
@@ -3947,11 +3964,16 @@ function layoutRunes(bar)
 	local fr, fg, fb, fa = resolveFontColor(cfg)
 	local vertical = cfg.verticalFill == true
 	local readyR, readyG, readyB, readyA = resolveRuneReadyColor(cfg)
+	local span = vertical and h or w
+	local maxGap = (count > 1) and max(0, floor((span - count) / (count - 1))) or 0
+	if gap > maxGap then gap = maxGap end
 	local segPrimary
+	local available = span - (gap * (count - 1))
+	if available < count then available = count end
 	if vertical then
-		segPrimary = max(1, floor((h - gap * (count - 1)) / count + 0.5))
+		segPrimary = max(1, floor((available / count) + 0.5))
 	else
-		segPrimary = max(1, floor((w - gap * (count - 1)) / count + 0.5))
+		segPrimary = max(1, floor((available / count) + 0.5))
 	end
 	for i = 1, count do
 		local sb = bar.runes[i]
@@ -4024,6 +4046,47 @@ function layoutRunes(bar)
 			sb._rbColorInitialized = true
 		elseif ResourceBars.RefreshStatusBarGradient then
 			ResourceBars.RefreshStatusBarGradient(sb, cfg)
+		end
+	end
+
+	local gapColor = cfg.separatorColor or RB.SEP_DEFAULT
+	local gapR = gapColor[1] or 1
+	local gapG = gapColor[2] or 1
+	local gapB = gapColor[3] or 1
+	local gapA = gapColor[4] or 0.5
+	bar.runeGapMarks = bar.runeGapMarks or {}
+	local gapMarks = bar.runeGapMarks
+	local neededGaps = count - 1
+	if showSeparator and gap > 0 and neededGaps > 0 then
+		for i = 1, neededGaps do
+			local mark = gapMarks[i]
+			if not mark then
+				mark = inner:CreateTexture(nil, "BACKGROUND", nil, 1)
+				gapMarks[i] = mark
+			elseif mark:GetParent() ~= inner then
+				mark:SetParent(inner)
+			end
+			mark:ClearAllPoints()
+			mark:SetColorTexture(gapR, gapG, gapB, gapA)
+			if vertical then
+				mark:SetPoint("BOTTOM", bar.runes[i], "TOP", 0, 0)
+				mark:SetPoint("LEFT", inner, "LEFT", 0, 0)
+				mark:SetPoint("RIGHT", inner, "RIGHT", 0, 0)
+				mark:SetHeight(gap)
+			else
+				mark:SetPoint("LEFT", bar.runes[i], "RIGHT", 0, 0)
+				mark:SetPoint("TOP", inner, "TOP", 0, 0)
+				mark:SetPoint("BOTTOM", inner, "BOTTOM", 0, 0)
+				mark:SetWidth(gap)
+			end
+			if not mark:IsShown() then mark:Show() end
+		end
+		for i = neededGaps + 1, #gapMarks do
+			if gapMarks[i] then gapMarks[i]:Hide() end
+		end
+	else
+		for i = 1, #gapMarks do
+			if gapMarks[i] then gapMarks[i]:Hide() end
 		end
 	end
 end
