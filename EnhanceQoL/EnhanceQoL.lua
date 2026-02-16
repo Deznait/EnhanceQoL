@@ -3467,10 +3467,13 @@ local function initChatFrame()
 		local cache = addon.variables.chatEditBoxAnchorCache
 		if cache[editBox] then return end
 		local points = {}
-		for i = 1, editBox:GetNumPoints() do
+		local numPoints = editBox.GetNumPoints and tonumber(editBox:GetNumPoints()) or 0
+		for i = 1, numPoints do
 			points[i] = { editBox:GetPoint(i) }
 		end
-		cache[editBox] = { points = points, width = editBox:GetWidth(), height = editBox:GetHeight() }
+		local width = editBox.GetWidth and tonumber(editBox:GetWidth()) or nil
+		local height = editBox.GetHeight and tonumber(editBox:GetHeight()) or nil
+		cache[editBox] = { points = points, width = width, height = height }
 	end
 
 	local function restoreEditBoxPoints(editBox)
