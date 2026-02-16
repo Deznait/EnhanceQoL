@@ -3479,8 +3479,11 @@ function updatePowerBar(type, runeSlot)
 
 	local useHolyThreeColor = (type == "HOLY_POWER") and cfg.useHolyThreeColor == true
 	local holyThreeThreshold = 3
-	local reachedThree = useHolyThreeColor and curPower >= holyThreeThreshold
-	if not addon.variables.isMidnight or (issecretvalue and not issecretvalue(curPower) and not issecretvalue(maxPower)) then
+	local curPowerSecret = addon.variables.isMidnight and issecretvalue and issecretvalue(curPower)
+	local maxPowerSecret = addon.variables.isMidnight and issecretvalue and issecretvalue(maxPower)
+	local hasSecretPower = curPowerSecret or maxPowerSecret
+	local reachedThree = useHolyThreeColor and not curPowerSecret and curPower >= holyThreeThreshold
+	if not hasSecretPower then
 		local reachedCap = curPower >= max(maxPower, 1)
 		local useMaxColor = cfg.useMaxColor == true
 		local targetR, targetG, targetB, targetA = bar._baseColor[1], bar._baseColor[2], bar._baseColor[3], bar._baseColor[4]
@@ -3512,18 +3515,28 @@ function updatePowerBar(type, runeSlot)
 			local br, bgc, bb, ba = base[1] or 1, base[2] or 1, base[3] or 1, base[4] or 1
 			local targetR, targetG, targetB, targetA = br, bgc, bb, ba
 			local useMaxColor = cfg.useMaxColor == true
-			local reachedCap = (issecretvalue and not issecretvalue(curPower) or not addon.variables.isMidnight) and curPower >= max(maxPower, 1)
-			if useMaxColor and issecretvalue and issecretvalue(curPower) and UnitPowerPercent and curvePower[type] then
-				local curveColor = UnitPowerPercent("player", pType, false, curvePower[type])
-				bar:GetStatusBarTexture():SetVertexColor(curveColor:GetRGBA())
-			else
-				if useMaxColor and reachedCap then
-					local maxCol = cfg.maxColor or RB.DEFAULT_MAX_COLOR
-					targetR, targetG, targetB, targetA = maxCol[1] or br, maxCol[2] or bgc, maxCol[3] or bb, maxCol[4] or ba
-				elseif reachedThree then
+			local flag
+			if useMaxColor and UnitPowerPercent then
+				if not curvePower[type] then SetColorCurvePointsPower(type, cfg.maxColor or RB.DEFAULT_MAX_COLOR, { br, bgc, bb, ba }) end
+				if curvePower[type] then
+					local curveColor = UnitPowerPercent("player", pType, false, curvePower[type])
+					if curveColor then
+						local cr, cg, cb, ca = curveColor:GetRGBA()
+						local tex = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+						if tex and tex.SetVertexColor then tex:SetVertexColor(cr, cg, cb, ca) end
+						lc[1], lc[2], lc[3], lc[4] = cr, cg, cb, ca
+						bar._lastColor = lc
+						flag = "maxCurve"
+					end
+				end
+			end
+			if not flag then
+				if reachedThree then
 					targetR, targetG, targetB, targetA = getHolyThreeColor(cfg)
+					flag = "holy3"
 				end
 				if lc[1] ~= targetR or lc[2] ~= targetG or lc[3] ~= targetB or lc[4] ~= targetA then
+					lc[1], lc[2], lc[3], lc[4] = targetR, targetG, targetB, targetA
 					bar._lastColor = lc
 					if cfg.useBarColor and not cfg.useMaxColor and not reachedThree then bar:GetStatusBarTexture():SetVertexColor(1, 1, 1, 1) end
 					if ResourceBars.SetStatusBarColorWithGradient then
@@ -3533,9 +3546,9 @@ function updatePowerBar(type, runeSlot)
 					end
 				end
 			end
+			bar._usingMaxColor = flag == "maxCurve"
+			bar._usingHolyThreeColor = flag == "holy3"
 		end
-		bar._usingMaxColor = (cfg.useMaxColor == true)
-		bar._usingHolyThreeColor = reachedThree and not bar._usingMaxColor
 	end
 
 	if type == "ESSENCE" then

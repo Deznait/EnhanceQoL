@@ -1,5 +1,15 @@
 # Changelog
 
+## [7.17.1] - 2026-02-16
+
+### 🐛 Fixed
+
+- Group Frames: Border offset now expands the border outward, so increasing it no longer makes the actual frame content area smaller.
+- Resource Bars: Max color now stays active more reliably on affected classes/specs.
+- Unit Frames: Name/level text layering now stays above absorb clip layers, preventing status text from being hidden behind absorb bars.
+
+---
+
 ## [7.17.0] - 2026-02-16
 
 ### ✨ Added
