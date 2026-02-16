@@ -15571,7 +15571,7 @@ local function buildEditModeSettings(kind, editModeId)
 			defaultCollapsed = true,
 		}
 		settings[#settings + 1] = {
-			name = "Hide myself",
+			name = L["UFGroupHideSelf"] or "Hide myself",
 			kind = SettingType.Checkbox,
 			field = "hideSelf",
 			parentId = "raid",
