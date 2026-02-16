@@ -1962,7 +1962,13 @@ function AuraUtil.applyAuraToButton(btn, aura, ac, isDebuff, unitToken)
 	local dispelR, dispelG, dispelB
 	if btn.border then
 		local useMasqueBorder = btn._eqolMasqueType ~= nil
-		if isDebuff then
+		local borderKey = ac and ac.borderTexture
+		local showBorder = isDebuff == true
+		if not showBorder then
+			local borderKeyName = borderKey and tostring(borderKey):upper() or "DEFAULT"
+			showBorder = borderKeyName ~= "" and borderKeyName ~= "DEFAULT"
+		end
+		if showBorder then
 			local r, g, b = 1, 0.25, 0.25
 			local usedApiColor
 			if not aura.isSample and aura.auraInstanceID and aura.auraInstanceID > 0 and C_UnitAuras and C_UnitAuras.GetAuraDispelTypeColor and UFHelper and UFHelper.debuffColorCurve then
@@ -1979,19 +1985,24 @@ function AuraUtil.applyAuraToButton(btn, aura, ac, isDebuff, unitToken)
 			if not usedApiColor then
 				local fr, fg, fb
 				if UFHelper and UFHelper.getDebuffColorFromName then
-					fr, fg, fb = UFHelper.getDebuffColorFromName(aura.dispelName or "None")
+					local dispelName = aura.dispelName
+					local canActivePlayerDispel = aura.canActivePlayerDispel
+					if issecretvalue and issecretvalue(canActivePlayerDispel) then canActivePlayerDispel = nil end
+					if (not dispelName or dispelName == "") and canActivePlayerDispel == true then dispelName = "Magic" end
+					fr, fg, fb = UFHelper.getDebuffColorFromName(dispelName or "None")
 				end
 				if fr then
 					r, g, b = fr, fg, fb
 				end
 			end
-			dispelR, dispelG, dispelB = r, g, b
+			if isDebuff then
+				dispelR, dispelG, dispelB = r, g, b
+			end
 			if useMasqueBorder then
 				if UFHelper and UFHelper.hideAuraBorderFrame then UFHelper.hideAuraBorderFrame(btn) end
 				btn.border:SetVertexColor(r, g, b, 1)
 				btn.border:Show()
 			else
-				local borderKey = ac and ac.borderTexture
 				local borderMode = tostring((ac and ac.borderRenderMode) or "EDGE"):upper()
 				local useOverlayBorderMode = borderMode == "OVERLAY"
 				local borderTex, borderCoords, borderIsEdge

@@ -1,5 +1,15 @@
 # Changelog
 
+## [7.18.1] - 2026-02-16
+
+### 🐛 Fixed
+
+- Chat: Fixed a Lua error in `chatEditBoxOnTop` (`'for' limit must be a number`) when temporary chat windows open and edit box anchor points are cached.
+- Unit Frames (Auras): Custom aura borders now apply to Target/Boss buffs as expected (not only debuffs), including configured border texture/size/offset behavior.
+- Unit Frames (Auras): Fixed a secret-value/taint Lua error in aura border color fallback handling (`canActivePlayerDispel`) during aura updates.
+
+---
+
 ## [7.18.0] - 2026-02-16
 
 ### ✨ Added
