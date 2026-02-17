@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.18.1] - 2026-02-17
+
+### 🐛 Fixed
+
+- LFG additional dungeon filter had a secret error
+- Unit Frames (Party): Custom sort was always reset
+
+---
+
 ## [7.18.0] - 2026-02-16
 
 ### ✨ Added

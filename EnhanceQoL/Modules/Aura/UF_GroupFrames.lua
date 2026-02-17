@@ -16910,23 +16910,36 @@ local function applyEditModeData(kind, data)
 		if data.showPlayer ~= nil then cfg.showPlayer = data.showPlayer and true or false end
 		if data.showSolo ~= nil then cfg.showSolo = data.showSolo and true or false end
 		local custom = GFH.EnsureCustomSortConfig(cfg)
+		local incomingSortMethod
 		if data.sortMethod ~= nil then
 			local sortMethod = tostring(data.sortMethod):upper()
 			if sortMethod == "CUSTOM" then sortMethod = "NAMELIST" end
 			if sortMethod ~= "INDEX" and sortMethod ~= "NAME" and sortMethod ~= "NAMELIST" then sortMethod = (DEFAULTS.party and DEFAULTS.party.sortMethod) or "INDEX" end
-			cfg.sortMethod = sortMethod
-			if custom then custom.enabled = sortMethod == "NAMELIST" end
+			incomingSortMethod = sortMethod
 		end
 		if data.sortDir ~= nil then
 			local sortDir = tostring(data.sortDir):upper()
 			cfg.sortDir = (GFH and GFH.NormalizeSortDir and GFH.NormalizeSortDir(sortDir)) or ((sortDir == "DESC") and "DESC" or "ASC")
 		end
-		if data.customSortEnabled ~= nil then
-			custom.enabled = data.customSortEnabled and true or false
-			if custom.enabled then
+		if data.customSortEnabled == true then
+			custom.enabled = true
+			cfg.sortMethod = "NAMELIST"
+		end
+		if incomingSortMethod == "NAMELIST" then
+			cfg.sortMethod = "NAMELIST"
+			if custom then custom.enabled = true end
+		elseif incomingSortMethod ~= nil then
+			local defaultPartySort = (DEFAULTS.party and DEFAULTS.party.sortMethod) or "INDEX"
+			local currentlyCustom = resolveSortMethod(cfg) == "NAMELIST" or (custom and custom.enabled == true)
+			if not currentlyCustom then
+				cfg.sortMethod = incomingSortMethod
+				if custom then custom.enabled = false end
+			elseif custom then
+				-- Prevent stale EditMode defaults from downgrading a persisted custom party sort after reload.
+				custom.enabled = true
 				cfg.sortMethod = "NAMELIST"
-			elseif resolveSortMethod(cfg) == "NAMELIST" then
-				cfg.sortMethod = (DEFAULTS.party and DEFAULTS.party.sortMethod) or "INDEX"
+			else
+				cfg.sortMethod = defaultPartySort
 			end
 		end
 	elseif isRaidLikeKind(kind) then
