@@ -3396,6 +3396,7 @@ function updatePowerBar(type, runeSlot)
 	local barValue = curPower
 	local essenceFraction
 	local essenceSecret
+	local usingDiscreteSegments = false
 	if type == "ESSENCE" then
 		essenceSecret = issecretvalue and (issecretvalue(curPower) or issecretvalue(maxPower))
 		if not essenceSecret and maxPower and maxPower > 0 then
@@ -3622,11 +3623,15 @@ function updatePowerBar(type, runeSlot)
 	else
 		local discreteCur = isSoulShards and displayCur or curPower
 		local discreteMax = isSoulShards and displayMax or maxPower
-		refreshDiscreteSegmentsForBar(type, bar, cfg, discreteCur, discreteMax)
+		usingDiscreteSegments = refreshDiscreteSegmentsForBar(type, bar, cfg, discreteCur, discreteMax)
 	end
 
 	configureSpecialTexture(bar, type, cfg)
-	if ResourceBars.RefreshStatusBarGradient then ResourceBars.RefreshStatusBarGradient(bar, cfg) end
+	if usingDiscreteSegments then
+		setParentBarTextureVisible(bar, false)
+	elseif ResourceBars.RefreshStatusBarGradient then
+		ResourceBars.RefreshStatusBarGradient(bar, cfg)
+	end
 end
 
 function forceColorUpdate(pType)
@@ -3659,7 +3664,9 @@ end
 
 shouldUseDiscreteSeparatorSegments = function(pType, cfg)
 	if pType == "RUNES" or pType == "ESSENCE" then return false end
-	return ResourceBars.separatorEligible and ResourceBars.separatorEligible[pType] and cfg and cfg.showSeparator == true
+	if not (ResourceBars.separatorEligible and ResourceBars.separatorEligible[pType] and cfg) then return false end
+	if cfg.showSeparator == true then return true end
+	return cfg.useGradient == true
 end
 
 refreshDiscreteSegmentsForBar = function(pType, bar, cfg, value, maxValue)
@@ -3682,6 +3689,7 @@ refreshDiscreteSegmentsForBar = function(pType, bar, cfg, value, maxValue)
 	if sourceMax > 0 and sourceMax ~= segments then scaledValue = (scaledValue / sourceMax) * segments end
 
 	if ResourceBars.UpdateDiscreteSegments then
+		local separatorThickness = (cfg and cfg.showSeparator == true and ((cfg and cfg.separatorThickness) or RB.SEPARATOR_THICKNESS)) or 0
 		ResourceBars.UpdateDiscreteSegments(
 			bar,
 			cfg,
@@ -3689,7 +3697,7 @@ refreshDiscreteSegmentsForBar = function(pType, bar, cfg, value, maxValue)
 			scaledValue,
 			bar._lastColor or bar._baseColor or RB.WHITE,
 			resolveTexture(cfg),
-			(cfg and cfg.separatorThickness) or RB.SEPARATOR_THICKNESS,
+			separatorThickness,
 			(cfg and cfg.separatorColor) or RB.SEP_DEFAULT
 		)
 		setParentBarTextureVisible(bar, false)
@@ -3717,7 +3725,8 @@ updateBarSeparators = function(pType)
 		return
 	end
 	local cfg = getBarSettings(pType)
-	if not (cfg and cfg.showSeparator) then
+	local useDiscrete = shouldUseDiscreteSeparatorSegments(pType, cfg)
+	if not (cfg and (cfg.showSeparator == true or useDiscrete)) then
 		if pType ~= "RUNES" and pType ~= "ESSENCE" then
 			if ResourceBars.HideDiscreteSegments then ResourceBars.HideDiscreteSegments(bar) end
 			setParentBarTextureVisible(bar, true)
@@ -3730,10 +3739,11 @@ updateBarSeparators = function(pType)
 		return
 	end
 
-	if shouldUseDiscreteSeparatorSegments(pType, cfg) then
+	if useDiscrete then
 		local segCount = getSeparatorSegmentCount(pType, cfg)
+		local separatorThickness = (cfg and cfg.showSeparator == true and ((cfg and cfg.separatorThickness) or RB.SEPARATOR_THICKNESS)) or 0
 		if ResourceBars.LayoutDiscreteSegments and segCount and segCount >= 2 then
-			ResourceBars.LayoutDiscreteSegments(bar, cfg, segCount, resolveTexture(cfg), (cfg and cfg.separatorThickness) or RB.SEPARATOR_THICKNESS, (cfg and cfg.separatorColor) or RB.SEP_DEFAULT)
+			ResourceBars.LayoutDiscreteSegments(bar, cfg, segCount, resolveTexture(cfg), separatorThickness, (cfg and cfg.separatorColor) or RB.SEP_DEFAULT)
 			setParentBarTextureVisible(bar, false)
 		else
 			if ResourceBars.HideDiscreteSegments then ResourceBars.HideDiscreteSegments(bar) end
@@ -3763,6 +3773,7 @@ updateBarSeparators = function(pType)
 
 	local inset = bar._rbContentInset or RB.ZERO_INSETS
 	local inner = bar._rbInner or bar
+	local overlay = ensureTextOverlayFrame(bar) or bar
 
 	-- Legacy overlay cleanup: no longer needed
 	if bar._sepOverlay then
@@ -3776,19 +3787,19 @@ updateBarSeparators = function(pType)
 	local function AcquireMark(index)
 		local tex = bar.separatorMarks[index]
 		if not tex then
-			tex = bar:CreateTexture(nil, "OVERLAY", nil, 7)
+			tex = overlay:CreateTexture(nil, "ARTWORK", nil, 7)
 			bar.separatorMarks[index] = tex
-		elseif tex.GetParent and tex:GetParent() ~= bar then
-			tex:SetParent(bar)
+		elseif tex.GetParent and tex:GetParent() ~= overlay then
+			tex:SetParent(overlay)
 		end
-		if tex.SetDrawLayer then tex:SetDrawLayer("OVERLAY", 7) end
+		if tex.SetDrawLayer then tex:SetDrawLayer("ARTWORK", 7) end
 		return tex
 	end
 
 	for _, tx in ipairs(bar.separatorMarks) do
 		if tx then
-			if tx.GetParent and tx:GetParent() ~= bar then tx:SetParent(bar) end
-			if tx.SetDrawLayer then tx:SetDrawLayer("OVERLAY", 7) end
+			if tx.GetParent and tx:GetParent() ~= overlay then tx:SetParent(overlay) end
+			if tx.SetDrawLayer then tx:SetDrawLayer("ARTWORK", 7) end
 		end
 	end
 
@@ -3962,24 +3973,25 @@ updateBarThresholds = function(pType)
 
 	local inset = bar._rbContentInset or RB.ZERO_INSETS
 	local inner = bar._rbInner or bar
+	local overlay = ensureTextOverlayFrame(bar) or bar
 	bar.thresholdMarks = bar.thresholdMarks or {}
 
 	local function AcquireMark(index)
 		local tex = bar.thresholdMarks[index]
 		if not tex then
-			tex = bar:CreateTexture(nil, "OVERLAY", nil, 6)
+			tex = overlay:CreateTexture(nil, "ARTWORK", nil, 6)
 			bar.thresholdMarks[index] = tex
-		elseif tex.GetParent and tex:GetParent() ~= bar then
-			tex:SetParent(bar)
+		elseif tex.GetParent and tex:GetParent() ~= overlay then
+			tex:SetParent(overlay)
 		end
-		if tex.SetDrawLayer then tex:SetDrawLayer("OVERLAY", 6) end
+		if tex.SetDrawLayer then tex:SetDrawLayer("ARTWORK", 6) end
 		return tex
 	end
 
 	for _, tx in ipairs(bar.thresholdMarks) do
 		if tx then
-			if tx.GetParent and tx:GetParent() ~= bar then tx:SetParent(bar) end
-			if tx.SetDrawLayer then tx:SetDrawLayer("OVERLAY", 6) end
+			if tx.GetParent and tx:GetParent() ~= overlay then tx:SetParent(overlay) end
+			if tx.SetDrawLayer then tx:SetDrawLayer("ARTWORK", 6) end
 		end
 	end
 
