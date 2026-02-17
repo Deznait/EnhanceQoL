@@ -2135,6 +2135,7 @@ local function buildUnitSettings(unit)
 	list[#list + 1] = powerDetachedSetting
 
 	local function isPowerDetachedEnabled() return isPowerEnabled() and isPowerDetached() end
+	local function isDetachedPowerWidthMatched() return getValue(unit, { "power", "detachedMatchHealthWidth" }, powerDef.detachedMatchHealthWidth == true) == true end
 
 	local powerEmptyFallbackSetting = checkbox(
 		L["UFPowerEmptyFallback"] or "Handle empty power bars (max 0)",
@@ -2151,6 +2152,15 @@ local function buildUnitSettings(unit)
 	powerEmptyFallbackSetting.isShown = isPowerDetachedEnabled
 	list[#list + 1] = powerEmptyFallbackSetting
 
+	local powerMatchWidthSetting = checkbox(L["UFPowerDetachedMatchHealthWidth"] or "Match health width", isDetachedPowerWidthMatched, function(val)
+		setValue(unit, { "power", "detachedMatchHealthWidth" }, val and true or false)
+		refresh()
+		refreshSettingsUI()
+	end, powerDef.detachedMatchHealthWidth == true, "power", isPowerDetachedEnabled)
+	powerMatchWidthSetting.isEnabled = isPowerDetachedEnabled
+	powerMatchWidthSetting.isShown = isPowerDetachedEnabled
+	list[#list + 1] = powerMatchWidthSetting
+
 	local powerWidthSetting = slider(L["UFPowerWidth"] or "Power width", MIN_WIDTH, 800, 1, function()
 		local fallback = getValue(unit, { "width" }, def.width or MIN_WIDTH)
 		return getValue(unit, { "power", "width" }, fallback)
@@ -2160,9 +2170,24 @@ local function buildUnitSettings(unit)
 			refresh()
 		end)
 	end, def.width or MIN_WIDTH, "power", true)
-	powerWidthSetting.isEnabled = isPowerDetachedEnabled
+	powerWidthSetting.isEnabled = function() return isPowerDetachedEnabled() and not isDetachedPowerWidthMatched() end
 	powerWidthSetting.isShown = isPowerDetachedEnabled
 	list[#list + 1] = powerWidthSetting
+
+	local powerGrowFromCenterSetting = checkbox(
+		L["UFPowerDetachedGrowFromCenter"] or "Grow from center",
+		function() return getValue(unit, { "power", "detachedGrowFromCenter" }, powerDef.detachedGrowFromCenter == true) == true end,
+		function(val)
+			setValue(unit, { "power", "detachedGrowFromCenter" }, val and true or false)
+			refresh()
+		end,
+		powerDef.detachedGrowFromCenter == true,
+		"power",
+		isPowerDetachedEnabled
+	)
+	powerGrowFromCenterSetting.isEnabled = isPowerDetachedEnabled
+	powerGrowFromCenterSetting.isShown = isPowerDetachedEnabled
+	list[#list + 1] = powerGrowFromCenterSetting
 
 	local powerOffsetX = slider(L["Offset X"] or "Offset X", -OFFSET_RANGE, OFFSET_RANGE, 1, function() return getValue(unit, { "power", "offset", "x" }, 0) end, function(val)
 		debounced(unit .. "_powerOffsetX", function()

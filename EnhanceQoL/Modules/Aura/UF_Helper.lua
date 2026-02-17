@@ -246,11 +246,19 @@ function H.setupAbsorbClamp(health, absorb)
 		local clip = CreateFrame("Frame", nil, health)
 		clip:SetAllPoints(health)
 		clip:SetClipsChildren(true)
-		clip:SetFrameLevel(health:GetFrameLevel() + 5)
 		health.absorbClip = clip
 	end
 
 	local clip = health.absorbClip
+	clip:SetAllPoints(health)
+	if clip.SetFrameStrata and health.GetFrameStrata then
+		local healthStrata = health:GetFrameStrata()
+		if healthStrata and clip:GetFrameStrata() ~= healthStrata then clip:SetFrameStrata(healthStrata) end
+	end
+	if clip.SetFrameLevel and health.GetFrameLevel then
+		local desiredLevel = (health:GetFrameLevel() or 0) + 1
+		if clip:GetFrameLevel() ~= desiredLevel then clip:SetFrameLevel(desiredLevel) end
+	end
 
 	absorb:SetParent(clip)
 	absorb:ClearAllPoints()
@@ -299,11 +307,18 @@ function H.setupAbsorbOverShift(healthBar, overAbsorbBar, height, maxHeight)
 	if not healthBar._healthFillClip then
 		local clip = CreateFrame("Frame", nil, healthBar)
 		clip:SetClipsChildren(true)
-		clip:SetFrameLevel(healthBar:GetFrameLevel() + 6)
 		healthBar._healthFillClip = clip
 	end
 
 	local clip = healthBar._healthFillClip
+	if clip.SetFrameStrata and healthBar.GetFrameStrata then
+		local healthStrata = healthBar:GetFrameStrata()
+		if healthStrata and clip:GetFrameStrata() ~= healthStrata then clip:SetFrameStrata(healthStrata) end
+	end
+	if clip.SetFrameLevel and healthBar.GetFrameLevel then
+		local desiredLevel = (healthBar:GetFrameLevel() or 0) + 1
+		if clip:GetFrameLevel() ~= desiredLevel then clip:SetFrameLevel(desiredLevel) end
+	end
 	clip:ClearAllPoints()
 
 	if healthBar:GetReverseFill() then

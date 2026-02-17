@@ -1010,6 +1010,7 @@ local DEFAULTS = {
 		tooltip = {
 			mode = "OFF",
 			modifier = "ALT",
+			useEditMode = false,
 		},
 		width = 180,
 		height = 100,
@@ -1398,6 +1399,7 @@ local DEFAULTS = {
 		tooltip = {
 			mode = "OFF",
 			modifier = "ALT",
+			useEditMode = false,
 		},
 		width = 100,
 		height = 80,
@@ -2113,6 +2115,7 @@ local function updateButtonConfig(self, cfg)
 	if tooltipMode == "OOC" then tooltipMode = "OUT_OF_COMBAT" end
 	st._tooltipMode = tooltipMode
 	st._tooltipModifier = tostring(tooltipCfg.modifier or tooltipDef.modifier or "ALT"):upper()
+	st._tooltipUseEditMode = (tooltipCfg.useEditMode ~= nil and tooltipCfg.useEditMode == true) or ((tooltipCfg.useEditMode == nil) and tooltipDef.useEditMode == true)
 
 	local wantsPower = true
 	local powerHeight = cfg.powerHeight
@@ -5613,7 +5616,20 @@ function GF.UnitButton_OnEnter(self)
 	local unit = getUnit(self)
 	if not unit then return end
 	if not GameTooltip or GameTooltip:IsForbidden() then return end
-	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+	local useEditMode = st and st._tooltipUseEditMode
+	if useEditMode == nil then
+		local kind = (self and self._eqolGroupKind) or "party"
+		local cfg = (self and (self._eqolCfg or getCfg(kind))) or getCfg(kind)
+		local tc = cfg and cfg.tooltip or nil
+		local def = (DEFAULTS[kind] and DEFAULTS[kind].tooltip) or (DEFAULTS.party and DEFAULTS.party.tooltip) or nil
+		useEditMode = tc and tc.useEditMode
+		if useEditMode == nil then useEditMode = def and def.useEditMode end
+	end
+	if useEditMode == true and GameTooltip_SetDefaultAnchor then
+		GameTooltip_SetDefaultAnchor(GameTooltip, self)
+	else
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+	end
 	GameTooltip:SetUnit(unit)
 	GameTooltip:Show()
 end
@@ -8169,6 +8185,33 @@ local function buildEditModeSettings(kind, editModeId)
 				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "tooltipMode", cfg.tooltip.mode, nil, true) end
 			end,
 			generator = tooltipModeGenerator(),
+		},
+		{
+			name = L["UFTooltipUseEditMode"] or "Use Edit Mode tooltip position",
+			kind = SettingType.Checkbox,
+			field = "tooltipUseEditMode",
+			parentId = "frame",
+			default = (DEFAULTS[kind] and DEFAULTS[kind].tooltip and DEFAULTS[kind].tooltip.useEditMode) == true,
+			get = function()
+				local cfg = getCfg(kind)
+				local tc = cfg and cfg.tooltip or {}
+				local defTooltip = (DEFAULTS[kind] and DEFAULTS[kind].tooltip) or {}
+				if tc.useEditMode == nil then return defTooltip.useEditMode == true end
+				return tc.useEditMode == true
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.tooltip = cfg.tooltip or {}
+				cfg.tooltip.useEditMode = value and true or false
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "tooltipUseEditMode", cfg.tooltip.useEditMode, nil, true) end
+			end,
+			isEnabled = function()
+				local cfg = getCfg(kind)
+				local tc = cfg and cfg.tooltip or {}
+				local mode = tc.mode or (DEFAULTS[kind] and DEFAULTS[kind].tooltip and DEFAULTS[kind].tooltip.mode) or "OFF"
+				return tostring(mode):upper() ~= "OFF"
+			end,
 		},
 		{
 			name = "Tooltip modifier",
@@ -16155,9 +16198,10 @@ local function applyEditModeData(kind, data)
 	if data.width ~= nil then cfg.width = clampNumber(data.width, 40, 600, cfg.width or 100) end
 	if data.height ~= nil then cfg.height = clampNumber(data.height, 10, 200, cfg.height or 24) end
 	if data.powerHeight ~= nil then cfg.powerHeight = clampNumber(data.powerHeight, 0, 50, cfg.powerHeight or 6) end
-	if data.tooltipMode ~= nil or data.tooltipModifier ~= nil then cfg.tooltip = cfg.tooltip or {} end
+	if data.tooltipMode ~= nil or data.tooltipModifier ~= nil or data.tooltipUseEditMode ~= nil then cfg.tooltip = cfg.tooltip or {} end
 	if data.tooltipMode ~= nil then cfg.tooltip.mode = tostring(data.tooltipMode):upper() end
 	if data.tooltipModifier ~= nil then cfg.tooltip.modifier = tostring(data.tooltipModifier):upper() end
+	if data.tooltipUseEditMode ~= nil then cfg.tooltip.useEditMode = data.tooltipUseEditMode and true or false end
 	if data.hideInClientScene ~= nil then cfg.hideInClientScene = data.hideInClientScene and true or false end
 	if data.tooltipAuras ~= nil then
 		local ac = ensureAuraConfig(cfg)
@@ -17102,6 +17146,7 @@ function GF:EnsureEditMode()
 				targetHighlightOffset = (cfg.highlightTarget and cfg.highlightTarget.offset) or (def.highlightTarget and def.highlightTarget.offset) or 0,
 				tooltipMode = tcfg.mode or defTooltip.mode or "OFF",
 				tooltipModifier = tcfg.modifier or defTooltip.modifier or "ALT",
+				tooltipUseEditMode = (tcfg.useEditMode ~= nil and tcfg.useEditMode == true) or ((tcfg.useEditMode == nil) and defTooltip.useEditMode == true),
 				tooltipAuras = ac.buff.showTooltip == true and ac.debuff.showTooltip == true and ac.externals.showTooltip == true,
 				showPlayer = cfg.showPlayer == true,
 				showSolo = cfg.showSolo == true,

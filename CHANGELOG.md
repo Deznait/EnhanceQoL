@@ -6,12 +6,16 @@
 
 - Button Sink (Minimap toggle): Added an optional click-toggle mode so the flyout opens/closes with left-click instead of hover.
 - Combat Text: Added separate Edit Mode color settings for entering combat and leaving combat text.
+- Unit Frames: Added detached power bar options `Match health width` and `Grow from center`.
+- Cooldown Panels: Added an option to configure the border
 
 ### 🐛 Fixed
 
 - LFG additional dungeon filter had a secret error
 - Unit Frames (Party): Custom sort was always reset
+- Group Frames (Party/Raid): Added `Use Edit Mode tooltip position` so unit tooltips can follow the configured Edit Mode anchor instead of showing at the cursor.
 - Chat Frame: Move editbox to top had a secret caching error
+- Unit Frames: Absorb/heal-absorb layering now stays below the health border, fixing cases where absorb textures could appear above the border.
 
 ---
 

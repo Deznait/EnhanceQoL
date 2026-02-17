@@ -323,6 +323,8 @@ local defaults = {
 		power = {
 			enabled = true,
 			detached = false,
+			detachedGrowFromCenter = false,
+			detachedMatchHealthWidth = false,
 			detachedFrameLevelOffset = 5,
 			detachedStrata = nil,
 			emptyMaxFallback = false,
@@ -4128,6 +4130,37 @@ local function setFrameLevelAbove(child, parent, offset)
 	child:SetFrameLevel(level)
 end
 
+function UF.syncAbsorbFrameLevels(st)
+	if not st or not st.health then return end
+	local health = st.health
+	local healthLevel = (health.GetFrameLevel and health:GetFrameLevel()) or 0
+	local overlayLevel = max(0, healthLevel + 1)
+	local healthStrata = health.GetFrameStrata and health:GetFrameStrata()
+	local borderFrame = st.barGroup and st.barGroup._ufBorder
+	if borderFrame and borderFrame.GetFrameLevel then
+		local borderLevel = borderFrame:GetFrameLevel() or (overlayLevel + 1)
+		if overlayLevel >= borderLevel then overlayLevel = max(0, borderLevel - 1) end
+	end
+	local function apply(frame)
+		if not frame then return end
+		if healthStrata and frame.SetFrameStrata and frame:GetFrameStrata() ~= healthStrata then frame:SetFrameStrata(healthStrata) end
+		if frame.SetFrameLevel and frame:GetFrameLevel() ~= overlayLevel then frame:SetFrameLevel(overlayLevel) end
+	end
+	apply(health.absorbClip)
+	apply(health._healthFillClip)
+	apply(st.absorb)
+	apply(st.absorb2)
+	apply(st.healAbsorb)
+	if borderFrame and st.barGroup and borderFrame.SetFrameStrata and st.barGroup.GetFrameStrata then
+		local borderStrata = st.barGroup:GetFrameStrata()
+		if borderStrata and borderFrame:GetFrameStrata() ~= borderStrata then borderFrame:SetFrameStrata(borderStrata) end
+	end
+	if borderFrame and borderFrame.SetFrameLevel then
+		local desiredBorderLevel = overlayLevel + 1
+		if borderFrame:GetFrameLevel() < desiredBorderLevel then borderFrame:SetFrameLevel(desiredBorderLevel) end
+	end
+end
+
 local function getHealthTextAnchor(st, includeStatus)
 	if not st or not st.health then return nil end
 	local anchor = st.health
@@ -4667,8 +4700,10 @@ local function layoutFrame(cfg, unit)
 	if st.health.SetFrameLevel then st.health:SetFrameLevel(frameLevel + 2) end
 	st.status:SetHeight(statusHeight)
 	st.health:SetSize(width, healthHeight)
+	local detachedGrowFromCenter = powerDetached and pcfg.detachedGrowFromCenter == true
+	local detachedMatchHealthWidth = powerDetached and pcfg.detachedMatchHealthWidth == true
 	local powerWidth = width
-	if powerDetached and pcfg.width and pcfg.width > 0 then powerWidth = pcfg.width end
+	if powerDetached and not detachedMatchHealthWidth and pcfg.width and pcfg.width > 0 then powerWidth = pcfg.width end
 	st.power:SetSize(powerWidth, powerHeight)
 	st.power:SetShown(powerEnabled)
 
@@ -4719,12 +4754,21 @@ local function layoutFrame(cfg, unit)
 			if st.power.GetParent and st.power:GetParent() ~= st.powerGroup then st.power:SetParent(st.powerGroup) end
 			st.powerGroup:Show()
 			st.powerGroup:SetSize(powerWidth + detachedPowerOffset * 2, powerHeight + detachedPowerOffset * 2)
-			st.powerGroup:SetPoint("TOPLEFT", st.health, "BOTTOMLEFT", ox - detachedPowerOffset, oy + detachedPowerOffset)
-			st.power:SetPoint("TOPLEFT", st.powerGroup, "TOPLEFT", detachedPowerOffset, -detachedPowerOffset)
+			if detachedGrowFromCenter then
+				st.powerGroup:SetPoint("TOP", st.health, "BOTTOM", ox, oy + detachedPowerOffset)
+				st.power:SetPoint("TOP", st.powerGroup, "TOP", 0, -detachedPowerOffset)
+			else
+				st.powerGroup:SetPoint("TOPLEFT", st.health, "BOTTOMLEFT", ox - detachedPowerOffset, oy + detachedPowerOffset)
+				st.power:SetPoint("TOPLEFT", st.powerGroup, "TOPLEFT", detachedPowerOffset, -detachedPowerOffset)
+			end
 		else
 			if st.powerGroup then st.powerGroup:Hide() end
 			if st.power.GetParent and st.power:GetParent() ~= st.barGroup then st.power:SetParent(st.barGroup) end
-			st.power:SetPoint("TOPLEFT", st.health, "BOTTOMLEFT", ox, oy)
+			if detachedGrowFromCenter then
+				st.power:SetPoint("TOP", st.health, "BOTTOM", ox, oy)
+			else
+				st.power:SetPoint("TOPLEFT", st.health, "BOTTOMLEFT", ox, oy)
+			end
 		end
 	else
 		if st.powerGroup then st.powerGroup:Hide() end
@@ -4826,6 +4870,7 @@ local function layoutFrame(cfg, unit)
 		end
 		setBackdrop(st.powerGroup, powerBorderCfg, nil, false)
 	end
+	UF.syncAbsorbFrameLevels(st)
 	UFHelper.applyHighlightStyle(st, st._highlightCfg)
 
 	if (unit == UNIT.PLAYER or unit == "target" or unit == UNIT.FOCUS or isBossUnit(unit)) and st.auraContainer then
@@ -5169,6 +5214,7 @@ local function applyBars(cfg, unit)
 		st.healAbsorb:SetValue(0, interpolation)
 		-- no heal absorb glow
 	end
+	UF.syncAbsorbFrameLevels(st)
 	if st.castBar and (unit == UNIT.PLAYER or unit == UNIT.TARGET or unit == UNIT.FOCUS or isBossUnit(unit)) then
 		local defc = (defaultsFor(unit) and defaultsFor(unit).cast) or {}
 		local ccfg = cfg.cast or defc
