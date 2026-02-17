@@ -5,6 +5,7 @@
 ### ✨ Added
 
 - Button Sink (Minimap toggle): Added an optional click-toggle mode so the flyout opens/closes with left-click instead of hover.
+- Combat Text: Added separate Edit Mode color settings for entering combat and leaving combat text.
 
 ### 🐛 Fixed
 
