@@ -4126,10 +4126,13 @@ local function updateHealth(cfg, unit)
 	end
 	st.health:SetValue(cur or 0, interpolation)
 	local hc = cfg.health or {}
-	local healthGuid = UnitGUID and UnitGUID(unit) or nil
-	if issecretvalue and issecretvalue(healthGuid) then healthGuid = nil end
-	if st._healthColorGuid ~= healthGuid then
-		st._healthColorGuid = healthGuid
+	local cacheGuid = UnitGUID and UnitGUID(unit) or nil
+	local guidComparable = cacheGuid ~= nil and not (issecretvalue and issecretvalue(cacheGuid))
+	if not guidComparable then
+		st._healthColorGuid = nil
+		st._healthColorDirty = true
+	elseif st._healthColorGuid ~= cacheGuid then
+		st._healthColorGuid = cacheGuid
 		st._healthColorDirty = true
 	end
 

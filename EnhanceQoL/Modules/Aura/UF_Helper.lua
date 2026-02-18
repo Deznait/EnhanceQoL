@@ -131,7 +131,27 @@ function H.getNPCSelectionKey(unit)
 	if not npcColorUnits[unit] then return nil end
 	if UnitIsPlayer and UnitIsPlayer(unit) then return nil end
 	local t = UnitSelectionType and UnitSelectionType(unit)
-	return selectionKeyByType[t]
+	if issecretvalue and issecretvalue(t) then t = nil end
+	local key = selectionKeyByType[t]
+
+	local reaction = UnitReaction and UnitReaction("player", unit)
+	if issecretvalue and issecretvalue(reaction) then reaction = nil end
+	if reaction then
+		if reaction <= 3 then return "enemy" end
+		if reaction == 4 then return "neutral" end
+		return "friendly"
+	end
+
+	if key == "friendly" and UnitCanAttack and UnitCanAttack("player", unit) then
+		if UnitIsEnemy and UnitIsEnemy("player", unit) then return "enemy" end
+		return "neutral"
+	end
+
+	if key then return key end
+	if UnitIsEnemy and UnitIsEnemy("player", unit) then return "enemy" end
+	if UnitCanAttack and UnitCanAttack("player", unit) then return "neutral" end
+	if UnitIsFriend and UnitIsFriend("player", unit) then return "friendly" end
+	return nil
 end
 
 function H.getNPCOverrideColor(unit)
