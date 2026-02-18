@@ -16,4 +16,8 @@ addon.variables.NewVersionTableEQOL = {
 	["EQOL_ilvlFontFace"] = true,
 	["EQOL_ilvlFontSize"] = true,
 	["EQOL_ilvlFontOutline"] = true,
+
+	-- UI -> Castbars & Cooldowns
+	["EQOL_CastbarsAndCooldowns"] = true,
+	["EQOL_useCustomPlayerCastbar"] = true,
 }

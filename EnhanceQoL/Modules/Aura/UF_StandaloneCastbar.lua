@@ -49,6 +49,11 @@ local VALID_ANCHOR_POINTS = {
 	BOTTOM = true,
 	BOTTOMRIGHT = true,
 }
+local STRATA_ORDER = { "BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN", "FULLSCREEN_DIALOG", "TOOLTIP" }
+local STRATA_INDEX = {}
+for i = 1, #STRATA_ORDER do
+	STRATA_INDEX[STRATA_ORDER[i]] = i
+end
 
 local state = Castbar._state or {}
 Castbar._state = state
@@ -101,6 +106,13 @@ local function mergeDefaults(target, defaults)
 			mergeDefaults(target[key], value)
 		end
 	end
+end
+
+local function normalizeStrataToken(value)
+	if type(value) ~= "string" or value == "" then return nil end
+	local token = string.upper(value)
+	if STRATA_INDEX[token] then return token end
+	return nil
 end
 
 local function normalizeAnchorPoint(value, fallback)
@@ -660,6 +672,14 @@ local function applyCastLayout(castCfg, castDefaults)
 	local width = resolveCastbarWidth(castCfg, castDefaults, height)
 	if width < MIN_CASTBAR_WIDTH then width = MIN_CASTBAR_WIDTH end
 	state.castBar:SetSize(width, height)
+	local castStrata = normalizeStrataToken(castCfg.strata) or normalizeStrataToken(castDefaults.strata) or ((state.frame and state.frame.GetFrameStrata and state.frame:GetFrameStrata()) or "MEDIUM")
+	local castLevelOffset = tonumber(castCfg.frameLevelOffset)
+	if castLevelOffset == nil then castLevelOffset = tonumber(castDefaults.frameLevelOffset) end
+	if castLevelOffset == nil then castLevelOffset = 1 end
+	local baseFrameLevel = (state.frame and state.frame.GetFrameLevel and state.frame:GetFrameLevel()) or 0
+	local castFrameLevel = math.max(0, baseFrameLevel + castLevelOffset)
+	if state.castBar.GetFrameStrata and state.castBar.SetFrameStrata and state.castBar:GetFrameStrata() ~= castStrata then state.castBar:SetFrameStrata(castStrata) end
+	if state.castBar.GetFrameLevel and state.castBar.SetFrameLevel and state.castBar:GetFrameLevel() ~= castFrameLevel then state.castBar:SetFrameLevel(castFrameLevel) end
 
 	local anchor = ensureAnchorConfig(castCfg, castDefaults)
 	if (anchor.relativeFrame or "UIParent") ~= "UIParent" then ensureRelativeFrameHooks(anchor.relativeFrame) end

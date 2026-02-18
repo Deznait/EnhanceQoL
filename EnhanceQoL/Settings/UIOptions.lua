@@ -1235,6 +1235,7 @@ local function createCastbarCategory()
 		name = label,
 		expanded = false,
 		colorizeTitle = false,
+		newTagID = "CastbarsAndCooldowns",
 	})
 	addon.SettingsLayout.uiCastbarsExpandable = expandable
 

@@ -2362,7 +2362,7 @@ function GF:BuildButton(self)
 			local lvl = st.healthTextLayer:GetFrameLevel() or 0
 			st.dispelTint:SetFrameLevel(lvl)
 		end
-		st.dispelTint:SetAllPoints(st.barGroup)
+		st.dispelTint:SetAllPoints(st.health)
 	end
 
 	if not st.healthTextLeft then st.healthTextLeft = st.healthTextLayer:CreateFontString(nil, "OVERLAY", "GameFontHighlight") end
@@ -2509,7 +2509,10 @@ function GF:LayoutButton(self)
 	applyBarBackdrop(st.power, cfg.power or {})
 
 	self.powerBarUsedHeight = powerH > 0 and powerH or 0
-	if st.dispelTint and st.dispelTint.SetOrientation and DispelOverlayOrientation then st.dispelTint:SetOrientation(self, DispelOverlayOrientation.VerticalTopToBottom, 0, 0) end
+	if st.dispelTint then
+		st.dispelTint:SetAllPoints(st.health)
+		if st.dispelTint.SetOrientation and DispelOverlayOrientation then st.dispelTint:SetOrientation(self, DispelOverlayOrientation.VerticalTopToBottom, 0, 0) end
+	end
 
 	if UFHelper and UFHelper.applyFont then
 		UFHelper.applyFont(st.healthTextLeft, hc.font, hc.fontSize or 12, hc.fontOutline)

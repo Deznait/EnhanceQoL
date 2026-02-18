@@ -15,6 +15,7 @@
 - Group Frames: Added `Copy settings` with selectable sections, including copy from Unit Frames (Player/Target/ToT/Pet/Focus/Boss) and cross-copy between Party/Raid/MT/MA.
 - Group Frames: Added a dedicated `Settings` section at the top of Edit Mode settings for `Copy settings`.
 - Group Frames: Added a `Target highlight` layer selector (`Above border` / `Behind border`) with the current behavior kept as default.
+- Standalone Castbar implemented to move and configure in Edit Mode.
 
 ### 🐛 Fixed
 
@@ -24,6 +25,7 @@
 - Unit Frames: Absorb/heal-absorb layering now stays below the health border, fixing cases where absorb textures could appear above the border.
 - Group Frames (Party/Raid): Added `Use Edit Mode tooltip position` so unit tooltips can follow the configured Edit Mode anchor instead of showing at the cursor.
 - Group Frames (Party): Role icons are now anchored to the frame container instead of the health bar, so icons stay in the correct corner when power bars are hidden for selected roles.
+- Group Frames (Party/Raid): Dispel overlay border now stays aligned to the health area when power bars are shown, so it no longer renders outside the frame.
 - Chat Frame: Move editbox to top had a secret caching error
 
 ---
