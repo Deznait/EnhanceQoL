@@ -114,6 +114,7 @@ addon.functions.SettingsCreateCheckboxes(cVendorEconomy, data)
 
 local bankExpandable = addon.functions.SettingsCreateExpandableSection(cVendorEconomy, {
 	name = _G.BANK or BANK or "Bank",
+	newTagID = "Bank",
 	expanded = false,
 	colorizeTitle = false,
 })
@@ -171,9 +172,7 @@ data = {
 
 					local sliderEntry = addon.SettingsLayout and addon.SettingsLayout.elements and addon.SettingsLayout.elements["autoWarbandGoldTargetGoldPerCharacter"]
 					local sliderVariable = sliderEntry and sliderEntry.setting and sliderEntry.setting.GetVariable and sliderEntry.setting:GetVariable()
-					if sliderVariable and Settings and Settings.NotifyUpdate then
-						Settings.NotifyUpdate(sliderVariable)
-					end
+					if sliderVariable and Settings and Settings.NotifyUpdate then Settings.NotifyUpdate(sliderVariable) end
 				end,
 				default = "",
 				type = Settings.VarType.String,
