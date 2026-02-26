@@ -5489,6 +5489,7 @@ function loadMain()
 	-- Slash-Command hinzufügen
 	SLASH_ENHANCEQOL1 = "/eqol"
 	SlashCmdList["ENHANCEQOL"] = function(msg)
+		msg = tostring(msg or "")
 		if msg:match("^aag%s*(%d+)$") then
 			local id = tonumber(msg:match("^aag%s*(%d+)$")) -- Extrahiere die ID
 			if id then
@@ -5521,6 +5522,29 @@ function loadMain()
 			end
 		elseif msg == "rq" then
 			if addon.Query and addon.Query.frame then addon.Query.frame:Show() end
+		elseif msg:match("^hbp") then
+			if InCombatLockdown and InCombatLockdown() then return end
+
+			local kind = "raid"
+			local arg = msg:match("^hbp%s+(%S+)")
+			arg = arg and arg:lower() or ""
+			if arg == "party" or arg == "p" then kind = "party" end
+			if arg == "raid" or arg == "r" then kind = "raid" end
+
+			local function openHealerBuffEditor()
+				local UF = addon.Aura and addon.Aura.UF
+				local editor = UF and UF.GroupFramesHealerBuffEditor
+				if editor and editor.Toggle then
+					editor:Toggle(kind)
+					return
+				end
+				local GF = UF and UF.GroupFrames
+				if GF and GF.ToggleHealerBuffPlacementEditor then
+					GF:ToggleHealerBuffPlacementEditor(kind)
+				end
+			end
+
+			openHealerBuffEditor()
 		else
 			OpenSettingsRoot()
 		end

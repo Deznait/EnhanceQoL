@@ -7,7 +7,9 @@
 	<Script file="UF_StandaloneCastbar.lua" />
 	<Include file="UF_GroupFrames.xml" />
 	<Script file="UF_GroupFrames_Helper.lua" />
+	<Script file="UF_GroupFrames_HealerBuffs.lua" />
 	<Script file="UF_GroupFrames.lua" />
+	<Script file="UF_GroupFrames_HealerBuffs_Editor.lua" />
 	<Script file="ShamanMaelstromWeaponBar.lua" />
 	<Script file="Settings_Castbar.lua" />
 	<Script file="Settings_UF.lua" />

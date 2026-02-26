@@ -1954,7 +1954,16 @@ applyClassResourceLayout = function(cfg)
 				if frame.SetScale then frame:SetScale(scale) end
 				if frame.SetFrameStrata and st.frame.GetFrameStrata then frame:SetFrameStrata(resourceStrata or st.frame:GetFrameStrata()) end
 				if frame.SetFrameLevel then frame:SetFrameLevel(minLevel) end
-				if frame.Show and frame.IsShown and not frame:IsShown() then frame:Show() end
+				local shouldForceShow = true
+				if type(frame.eqolShouldShowClassResource) == "function" then
+					local ok, result = pcall(frame.eqolShouldShowClassResource, frame)
+					if ok and result == false then shouldForceShow = false end
+				end
+				if shouldForceShow then
+					if frame.Show and frame.IsShown and not frame:IsShown() then frame:Show() end
+				elseif frame.Hide then
+					frame:Hide()
+				end
 			else
 				ClassResourceUtil.restoreClassResourceFrame(frame)
 				if frame.Hide then frame:Hide() end
