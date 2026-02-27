@@ -139,6 +139,7 @@ globals = {
 	"EquipmentManager_UnpackLocation",
 	"AccountBankPanel",
 	"StaticPopup_Resize",
+	"ProfessionsRecipeSchematicFormMixin",
 	"ChatThrottleLib",
 	"BankPanel",
 	"ChatFrameUtil",
