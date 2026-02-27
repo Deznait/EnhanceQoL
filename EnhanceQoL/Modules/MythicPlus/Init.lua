@@ -959,6 +959,7 @@ addon.MythicPlus.variables.portalCompendium = {
 			[126892] = { text = "CLASS", isClassTP = "MONK", x = 0.5133, y = 0.4992, zoneID = 709, locID = 709 },
 			[265225] = { text = RACIAL_TRAITS_TOOLTIP, isRaceTP = "DarkIronDwarf" },
 			[312372] = { text = RACIAL_TRAITS_TOOLTIP, isRaceTP = "Vulpera" },
+			[430265] = { text = "Gilneas", isRaceTP = "Worgen", isToy = true, toyID = 211788, isHearthstone = true, icon = 133939, x = 0.5939, y = 0.4820, zoneID = 218, locID = 217 },
 		},
 	},
 }
@@ -1003,9 +1004,7 @@ local hearthstoneID = {
 		icon = 1686574,
 		id = 210455,
 		spellID = 438606,
-		usable = function()
-			return addon.variables.unitRace == "LightforgedDraenei" or addon.variables.unitRace == "Draenei"
-		end,
+		usable = function() return addon.variables.unitRace == "LightforgedDraenei" or addon.variables.unitRace == "Draenei" end,
 	}, -- Draenic Hologem
 
 	-- Covenent Hearthstones
