@@ -7,6 +7,7 @@ local expandable = addon.functions.SettingsCreateExpandableSection(cLoot, {
 	name = L["Loot"],
 	expanded = false,
 	colorizeTitle = false,
+	newTagID = "Loot",
 })
 addon.SettingsLayout.vendorEconomyCalootCategorytegory = cLoot
 
@@ -127,6 +128,25 @@ data = {
 		children = {
 			{
 				text = "|cffffd700" .. L["lootToastAnchorEditModeHint"] .. "|r",
+				sType = "hint",
+				parentSection = expandable,
+			},
+		},
+	},
+	{
+		var = "enableMajorFactionsRenownToastAnchor",
+		text = L["moveMajorFactionsRenownToast"],
+		desc = L["moveMajorFactionsRenownToastDesc"],
+		default = false,
+		func = function(value)
+			addon.db.enableMajorFactionsRenownToastAnchor = value and true or false
+			if addon.LootToast and addon.LootToast.OnRenownToastAnchorOptionChanged then addon.LootToast:OnRenownToastAnchorOptionChanged(addon.db.enableMajorFactionsRenownToastAnchor) end
+			addon.functions.initLootToast()
+		end,
+		parentSection = expandable,
+		children = {
+			{
+				text = "|cffffd700" .. L["majorFactionsRenownToastAnchorEditModeHint"] .. "|r",
 				sType = "hint",
 				parentSection = expandable,
 			},

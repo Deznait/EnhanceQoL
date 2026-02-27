@@ -1,5 +1,13 @@
 # Changelog
 
+## [8.1.0] - 2026-02-27
+
+### ✨ Added
+
+- Loot Toasts (Major Factions): Added Edit Mode support for the Renown toast anchor, so the toast can be repositioned directly in Edit Mode.
+
+---
+
 ## [8.0.0] - 2026-02-27
 
 ### ⚠️ Important Profile Notice

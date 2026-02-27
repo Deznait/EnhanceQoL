@@ -3055,6 +3055,7 @@ end
 
 local function initLoot()
 	addon.functions.InitDBValue("enableLootToastAnchor", false)
+	addon.functions.InitDBValue("enableMajorFactionsRenownToastAnchor", false)
 	addon.functions.InitDBValue("enableLootToastFilter", false)
 	addon.functions.InitDBValue("lootToastItemLevels", {
 		[Enum.ItemQuality.Rare] = 0,
@@ -3081,6 +3082,7 @@ local function initLoot()
 	addon.functions.InitDBValue("lootToastUseCustomSound", false)
 	addon.functions.InitDBValue("lootToastCustomSoundFile", "")
 	addon.functions.InitDBValue("lootToastAnchor", { point = "BOTTOM", relativePoint = "BOTTOM", x = 0, y = 240 })
+	addon.functions.InitDBValue("majorFactionsRenownToastAnchor", { point = "TOP", relativePoint = "TOP", x = 0, y = -250 })
 	-- migrate legacy LootRollMover-inspired settings to the new group-loot anchor keys
 	if addon.db.enableLootRollAnchor ~= nil then
 		if addon.db.enableGroupLootAnchor == nil then addon.db.enableGroupLootAnchor = addon.db.enableLootRollAnchor == true end
@@ -3743,7 +3745,11 @@ end
 local initLootToast
 
 initLootToast = function()
-	if (addon.db.enableLootToastFilter or addon.db.enableLootToastAnchor or addon.db.enableGroupLootAnchor) and addon.LootToast and addon.LootToast.Enable then
+	if
+		(addon.db.enableLootToastFilter or addon.db.enableLootToastAnchor or addon.db.enableGroupLootAnchor or addon.db.enableMajorFactionsRenownToastAnchor)
+		and addon.LootToast
+		and addon.LootToast.Enable
+	then
 		addon.LootToast:Enable()
 	elseif addon.LootToast and addon.LootToast.Disable then
 		addon.LootToast:Disable()
@@ -5539,9 +5545,7 @@ function loadMain()
 					return
 				end
 				local GF = UF and UF.GroupFrames
-				if GF and GF.ToggleHealerBuffPlacementEditor then
-					GF:ToggleHealerBuffPlacementEditor(kind)
-				end
+				if GF and GF.ToggleHealerBuffPlacementEditor then GF:ToggleHealerBuffPlacementEditor(kind) end
 			end
 
 			openHealerBuffEditor()

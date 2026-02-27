@@ -220,6 +220,7 @@ function LootToast:Enable()
 
 	if addon.db.enableLootToastAnchor then self:ApplyAnchorPosition() end
 	if addon.db.enableGroupLootAnchor then self:ApplyGroupLootLayout() end
+	if addon.db.enableMajorFactionsRenownToastAnchor then self:ApplyMajorFactionsRenownToastAnchor() end
 end
 
 function LootToast:Disable()
@@ -259,18 +260,23 @@ end
 
 local DEFAULT_TOAST_ANCHOR = { point = "BOTTOM", relativePoint = "BOTTOM", x = 0, y = 240 }
 local DEFAULT_GROUPROLL_ANCHOR = { point = "BOTTOM", relativePoint = "BOTTOM", x = 0, y = 300 }
+local DEFAULT_RENOWN_TOAST_ANCHOR = { point = "TOP", relativePoint = "TOP", x = 0, y = -250 }
 local TOAST_EDITMODE_ID = "lootToastAnchor"
 local GROUPROLL_EDITMODE_ID = "groupLootAnchor"
+local RENOWN_TOAST_EDITMODE_ID = "majorFactionsRenownToastAnchor"
 LootToast.toastAnchorFrame = LootToast.toastAnchorFrame
 LootToast.groupRollAnchorFrame = LootToast.groupRollAnchorFrame
+LootToast.renownToastAnchorFrame = LootToast.renownToastAnchorFrame
 LootToast.defaultAlertAnchor = LootToast.defaultAlertAnchor
 LootToast.handleToasts = LootToast.handleToasts or false
 LootToast.alertFrameHooked = LootToast.alertFrameHooked
 local GroupLootContainer = _G.GroupLootContainer
 LootToast.defaultGroupLootAnchor = LootToast.defaultGroupLootAnchor
 LootToast.defaultBonusRollAnchor = LootToast.defaultBonusRollAnchor
+LootToast.defaultRenownToastAnchor = LootToast.defaultRenownToastAnchor
 LootToast.toastAnchorApplied = LootToast.toastAnchorApplied or false
 LootToast.groupLootAnchorApplied = LootToast.groupLootAnchorApplied or false
+LootToast.renownToastAnchorApplied = LootToast.renownToastAnchorApplied or false
 
 local DEFAULT_GROUPROLL_LAYOUT = { scale = 1, offsetX = 0, offsetY = 0, spacing = 4 }
 
@@ -278,6 +284,12 @@ local function FrameIsAccessible(frame)
 	if not frame then return false end
 	if frame.IsForbidden and frame:IsForbidden() then return false end
 	return true
+end
+
+local function GetMajorFactionsRenownToastFrame()
+	local frame = _G.MajorFactionsRenownToast
+	if not FrameIsAccessible(frame) then return nil end
+	return frame
 end
 
 local function RememberDefaultAnchors()
@@ -294,6 +306,13 @@ local function RememberDefaultAnchors()
 		if FrameIsAccessible(bonusFrame) then
 			local point, relativeTo, relativePoint, x, y = bonusFrame:GetPoint()
 			if point then LootToast.defaultBonusRollAnchor = { point = point, relativeTo = relativeTo, relativePoint = relativePoint, x = x, y = y } end
+		end
+	end
+	if not LootToast.defaultRenownToastAnchor then
+		local renownToast = GetMajorFactionsRenownToastFrame()
+		if FrameIsAccessible(renownToast) then
+			local point, relativeTo, relativePoint, x, y = renownToast:GetPoint()
+			if point then LootToast.defaultRenownToastAnchor = { point = point, relativeTo = relativeTo, relativePoint = relativePoint, x = x, y = y } end
 		end
 	end
 end
@@ -340,6 +359,18 @@ function LootToast:RestoreDefaultAnchors(force)
 		end
 		self.groupLootAnchorApplied = false
 	end
+
+	local restoreRenown = (force or not addon.db.enableMajorFactionsRenownToastAnchor) and self.renownToastAnchorApplied
+	if restoreRenown then
+		if self.renownToastAnchorFrame then self.renownToastAnchorFrame:Hide() end
+		local renownToast = GetMajorFactionsRenownToastFrame()
+		if FrameIsAccessible(renownToast) then
+			local saved = self.defaultRenownToastAnchor
+			renownToast:ClearAllPoints()
+			if saved and saved.point then renownToast:SetPoint(saved.point, saved.relativeTo, saved.relativePoint, saved.x, saved.y) end
+		end
+		self.renownToastAnchorApplied = false
+	end
 end
 
 local function GetToastAnchorConfig()
@@ -376,6 +407,26 @@ end
 local function UpdateGroupRollAnchorConfig(data)
 	if not data then return end
 	local cfg = GetGroupRollAnchorConfig()
+	if data.point then cfg.point = data.point end
+	if data.relativePoint then cfg.relativePoint = data.relativePoint end
+	if data.x ~= nil then cfg.x = data.x end
+	if data.y ~= nil then cfg.y = data.y end
+end
+
+local function GetRenownToastAnchorConfig()
+	addon.db.majorFactionsRenownToastAnchor = addon.db.majorFactionsRenownToastAnchor or {}
+	local cfg = addon.db.majorFactionsRenownToastAnchor
+
+	cfg.point = cfg.point or DEFAULT_RENOWN_TOAST_ANCHOR.point
+	cfg.relativePoint = cfg.relativePoint or DEFAULT_RENOWN_TOAST_ANCHOR.relativePoint
+	cfg.x = cfg.x or DEFAULT_RENOWN_TOAST_ANCHOR.x
+	cfg.y = cfg.y or DEFAULT_RENOWN_TOAST_ANCHOR.y
+	return cfg
+end
+
+local function UpdateRenownToastAnchorConfig(data)
+	if not data then return end
+	local cfg = GetRenownToastAnchorConfig()
 	if data.point then cfg.point = data.point end
 	if data.relativePoint then cfg.relativePoint = data.relativePoint end
 	if data.x ~= nil then cfg.x = data.x end
@@ -467,6 +518,20 @@ function LootToast:SyncRollEditModePosition()
 		cfg.relativePoint or cfg.point or DEFAULT_GROUPROLL_ANCHOR.relativePoint
 	)
 	self.groupRollAnchorSuspendEditSync = nil
+end
+
+function LootToast:SyncRenownToastEditModePosition()
+	if not EditMode or not self.renownToastAnchorEditModeId or self.renownToastAnchorSuspendEditSync or self.renownToastAnchorApplyingFromEditMode then return end
+	self.renownToastAnchorSuspendEditSync = true
+	local cfg = GetRenownToastAnchorConfig()
+	EditMode:SetFramePosition(
+		self.renownToastAnchorEditModeId,
+		cfg.point or DEFAULT_RENOWN_TOAST_ANCHOR.point,
+		cfg.x or DEFAULT_RENOWN_TOAST_ANCHOR.x,
+		cfg.y or DEFAULT_RENOWN_TOAST_ANCHOR.y,
+		cfg.relativePoint or cfg.point or DEFAULT_RENOWN_TOAST_ANCHOR.relativePoint
+	)
+	self.renownToastAnchorSuspendEditSync = nil
 end
 
 function LootToast:RegisterToastAnchorWithEditMode(anchor)
@@ -571,6 +636,58 @@ function LootToast:RegisterGroupRollAnchorWithEditMode(anchor)
 	anchor:SetScript("OnDragStop", nil)
 
 	self:SyncRollEditModePosition()
+end
+
+function LootToast:RegisterRenownToastAnchorWithEditMode(anchor)
+	if self.renownToastAnchorRegistered or self.renownToastAnchorRegistering then return end
+	if not EditMode or not EditMode.RegisterFrame or not EditMode:IsAvailable() then return end
+
+	self.renownToastAnchorRegistering = true
+
+	local cfg = GetRenownToastAnchorConfig()
+	local title = L["majorFactionsRenownToastAnchorLabel"] or "Renown Toast Anchor"
+	anchor.editModeName = title
+
+	local defaults = {
+		point = cfg.point or DEFAULT_RENOWN_TOAST_ANCHOR.point,
+		relativePoint = cfg.relativePoint or cfg.point or DEFAULT_RENOWN_TOAST_ANCHOR.relativePoint,
+		x = cfg.x or DEFAULT_RENOWN_TOAST_ANCHOR.x,
+		y = cfg.y or DEFAULT_RENOWN_TOAST_ANCHOR.y,
+		width = anchor:GetWidth(),
+		height = anchor:GetHeight(),
+	}
+
+	EditMode:RegisterFrame(RENOWN_TOAST_EDITMODE_ID, {
+		frame = anchor,
+		title = title,
+		layoutDefaults = defaults,
+		isEnabled = function() return addon.db.enableMajorFactionsRenownToastAnchor end,
+		onApply = function(_, _, data)
+			if not data then return end
+			LootToast.renownToastAnchorApplyingFromEditMode = true
+			UpdateRenownToastAnchorConfig(data)
+			LootToast:ApplyMajorFactionsRenownToastAnchor()
+			LootToast.renownToastAnchorApplyingFromEditMode = nil
+		end,
+		onPositionChanged = function(_, _, data)
+			if not data then return end
+			LootToast.renownToastAnchorApplyingFromEditMode = true
+			UpdateRenownToastAnchorConfig(data)
+			LootToast:ApplyMajorFactionsRenownToastAnchor()
+			LootToast.renownToastAnchorApplyingFromEditMode = nil
+		end,
+	})
+
+	self.renownToastAnchorEditModeId = RENOWN_TOAST_EDITMODE_ID
+	self.renownToastAnchorRegistered = true
+	self.renownToastAnchorRegistering = nil
+
+	anchor:EnableMouse(false)
+	anchor:RegisterForDrag()
+	anchor:SetScript("OnDragStart", nil)
+	anchor:SetScript("OnDragStop", nil)
+
+	self:SyncRenownToastEditModePosition()
 end
 
 function LootToast:GetToastAnchorFrame()
@@ -704,6 +821,79 @@ function LootToast:GetGroupRollAnchorFrame()
 	return frame
 end
 
+function LootToast:GetRenownToastAnchorFrame()
+	if self.renownToastAnchorFrame then return self.renownToastAnchorFrame end
+
+	local width = 256
+	local height = 112
+	local renownToast = GetMajorFactionsRenownToastFrame()
+	if renownToast then
+		local w = renownToast:GetWidth()
+		local h = renownToast:GetHeight()
+		if w and w > 0 then width = w end
+		if h and h > 0 then height = h end
+	end
+
+	local frame = CreateFrame("Frame", "EnhanceQoL_MajorFactionsRenownToastAnchor", UIParent, "BackdropTemplate")
+	frame:SetSize(width, height)
+	frame:SetFrameStrata("HIGH")
+	frame:SetClampedToScreen(true)
+	frame:SetMovable(true)
+	frame:EnableMouse(false)
+
+	frame:SetBackdrop({
+		bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+		edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+		edgeSize = 12,
+		insets = { left = 2, right = 2, top = 2, bottom = 2 },
+	})
+	frame:SetBackdropColor(0.07, 0.25, 0.52, 0.35)
+	frame:SetBackdropBorderColor(0.2, 0.62, 0.95, 0.9)
+
+	local label = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	label:SetPoint("CENTER")
+	label:SetText(L["majorFactionsRenownToastAnchorLabel"] or "Renown Toast Anchor")
+	frame.label = label
+
+	frame:Hide()
+	self.renownToastAnchorFrame = frame
+	self:RegisterRenownToastAnchorWithEditMode(frame)
+	return frame
+end
+
+function LootToast:ApplyMajorFactionsRenownToastAnchor()
+	if not addon.db then return end
+	if not addon.db.enableMajorFactionsRenownToastAnchor then return end
+
+	RememberDefaultAnchors()
+
+	local cfg = GetRenownToastAnchorConfig()
+	local anchor = self:GetRenownToastAnchorFrame()
+	self:RegisterRenownToastAnchorWithEditMode(anchor)
+	anchor:ClearAllPoints()
+	anchor:SetPoint(cfg.point, UIParent, cfg.relativePoint, cfg.x, cfg.y)
+	UpdateAnchorLabel(anchor, nil, "majorFactionsRenownToastAnchorLabel")
+
+	local renownToast = GetMajorFactionsRenownToastFrame()
+	if renownToast then
+		renownToast:ClearAllPoints()
+		renownToast:SetPoint("TOP", anchor, "TOP", 0, 0)
+		self.renownToastAnchorApplied = true
+	end
+
+	self:SyncRenownToastEditModePosition()
+end
+
+function LootToast:OnRenownToastAnchorOptionChanged(enabled)
+	if not enabled then
+		if self.renownToastAnchorFrame then self.renownToastAnchorFrame:Hide() end
+		self:RestoreDefaultAnchors()
+	else
+		self:ApplyMajorFactionsRenownToastAnchor()
+	end
+	if EditMode and EditMode.RefreshFrame then EditMode:RefreshFrame(RENOWN_TOAST_EDITMODE_ID) end
+end
+
 function LootToast:ToggleGroupRollAnchorPreview()
 	if not addon.db.enableGroupLootAnchor then return end
 	local anchor = self:GetGroupRollAnchorFrame()
@@ -726,8 +916,10 @@ function LootToast:OnGroupRollAnchorOptionChanged(enabled)
 end
 
 local function ReanchorAlerts()
+	if not addon.db then return end
 	if addon.db.enableLootToastAnchor then LootToast:ApplyAnchorPosition() end
 	if addon.db.enableGroupLootAnchor then LootToast:ApplyGroupLootLayout() end
+	if addon.db.enableMajorFactionsRenownToastAnchor then LootToast:ApplyMajorFactionsRenownToastAnchor() end
 end
 
 local hookedGroupLootCallbacks = {}
@@ -756,11 +948,13 @@ end
 SetupGroupLootHooks()
 
 local f = CreateFrame("Frame")
+f:RegisterEvent("ADDON_LOADED")
 f:RegisterEvent("PLAYER_LOGIN")
 f:RegisterEvent("UI_SCALE_CHANGED")
 f:RegisterEvent("DISPLAY_SIZE_CHANGED")
 local anchorsHooked = false
-f:SetScript("OnEvent", function()
+f:SetScript("OnEvent", function(_, event, arg1)
+	if event == "ADDON_LOADED" and arg1 ~= "Blizzard_MajorFactions" then return end
 	RememberDefaultAnchors()
 	SetupGroupLootHooks()
 	if not anchorsHooked then
