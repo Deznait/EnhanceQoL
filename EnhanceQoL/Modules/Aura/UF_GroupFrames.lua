@@ -75,89 +75,17 @@ local AURA_FILTERS = GFH.AuraFilters
 local SECRET_TEXT_UPDATE_INTERVAL = 0.1
 local FONT_DROPDOWN_SCROLL_HEIGHT = 220
 
--- !Harreks integration (EQoL <-> HarreksAdvancedRaidFrames)
-function GF.HarreksAPI()
-	local api = _G.AdvancedRaidFramesAPI
-	if api and api.RegisterFrameForUnit and api.UnregisterFrameForUnit then return api end
-	return nil
+function GF.NormalizeBuffHelpfulFilterMode(value)
+	value = tostring(value or ""):upper()
+	if value == "RAID" then return "RAID" end
+	return "RAID_IN_COMBAT"
 end
 
-function GF.IsHarreksSupportedUnit(unit)
-	if unit == "player" then return true end
-	local partyIndex = unit and unit:match("^party(%d)$")
-	if partyIndex then
-		local n = tonumber(partyIndex)
-		return n and n >= 1 and n <= 4
-	end
-	local raidIndex = unit and unit:match("^raid(%d+)$")
-	if raidIndex then
-		local n = tonumber(raidIndex)
-		return n and n >= 1 and n <= 30
-	end
-	return false
+function GF.GetBuffHelpfulFilter(ac)
+	local mode = GF.NormalizeBuffHelpfulFilterMode(ac and ac.buff and ac.buff.helpfulFilterMode)
+	if mode == "RAID" then return "HELPFUL|INCLUDE_NAME_PLATE_ONLY|RAID|PLAYER" end
+	return (AURA_FILTERS and AURA_FILTERS.helpful) or "HELPFUL|INCLUDE_NAME_PLATE_ONLY|RAID_IN_COMBAT|PLAYER"
 end
-
-function GF.HarfColoringFunc(frame, shouldBeColored, color)
-	local glow = LCG
-	if not glow and LibStub then glow = LibStub("LibCustomGlow-1.0", true) end
-	if not (glow and glow.PixelGlow_Start and glow.PixelGlow_Stop) then return end
-
-	local target = (frame and frame._eqolUFState and frame._eqolUFState.barGroup) or frame
-	if not target then return end
-
-	if shouldBeColored then
-		color = color or EMPTY
-		local c = frame._eqolHarfGlowColor
-		if not c then
-			c = { 1, 1, 1, 1 }
-			frame._eqolHarfGlowColor = c
-		end
-		c[1], c[2], c[3], c[4] = color.r or 1, color.g or 1, color.b or 1, color.a or 1
-		glow.PixelGlow_Start(target, c, 8, 0.25, nil, 3, 0, 0, nil, "EQOL_HARF_HEALTHCOLOR")
-	else
-		glow.PixelGlow_Stop(target, "EQOL_HARF_HEALTHCOLOR")
-	end
-end
-
-function GF.HarfUnregister(btn)
-	local api = GF.HarreksAPI()
-	local glow = LCG
-	if not glow and LibStub then glow = LibStub("LibCustomGlow-1.0", true) end
-	local target = btn and ((btn._eqolUFState and btn._eqolUFState.barGroup) or btn)
-	if glow and target and glow.PixelGlow_Stop then glow.PixelGlow_Stop(target, "EQOL_HARF_HEALTHCOLOR") end
-	if api and btn and btn._eqolHarfUnit and btn._eqolHarfIndex then api.UnregisterFrameForUnit(btn._eqolHarfUnit, btn._eqolHarfIndex) end
-	if btn then
-		btn._eqolHarfUnit = nil
-		btn._eqolHarfIndex = nil
-	end
-end
-
-function GF.HarfRegister(btn)
-	if not btn then return end
-	if btn._eqolPreview then return end
-	local kind = btn._eqolGroupKind
-	if kind == "mt" or kind == "ma" then return end
-
-	local api = GF.HarreksAPI()
-	if not api then return end
-
-	local unit = btn.unit
-	if not (unit and GF.IsHarreksSupportedUnit(unit)) then
-		GF.HarfUnregister(btn)
-		return
-	end
-
-	if btn._eqolHarfUnit == unit and btn._eqolHarfIndex then return end
-
-	GF.HarfUnregister(btn)
-
-	local idx = api.RegisterFrameForUnit(unit, btn, GF.HarfColoringFunc)
-	if idx then
-		btn._eqolHarfUnit = unit
-		btn._eqolHarfIndex = idx
-	end
-end
--- !HarreksAdvancedRaidFrames end
 
 local function queryAuraSlots(unit, filter, maxCount)
 	if not filter then return nil end
@@ -1480,6 +1408,7 @@ local DEFAULTS = {
 			enabled = false,
 			buff = {
 				enabled = false,
+				helpfulFilterMode = "RAID_IN_COMBAT",
 				size = 26,
 				perRow = 3,
 				max = 6,
@@ -1866,6 +1795,7 @@ local DEFAULTS = {
 			enabled = false,
 			buff = {
 				enabled = false,
+				helpfulFilterMode = "RAID_IN_COMBAT",
 				size = 20,
 				perRow = 5,
 				max = 5,
@@ -4687,7 +4617,7 @@ function GF:UpdateAuras(self, updateInfo)
 			GF:LayoutAuras(self)
 		end
 	end
-	local helpfulFilter = AURA_FILTERS.helpful
+	local helpfulFilter = GF.GetBuffHelpfulFilter(ac)
 	local harmfulFilter = AURA_FILTERS.harmful
 	local dispelFilter = AURA_FILTERS.dispellable
 	local externalFilter = AURA_FILTERS.bigDefensive
@@ -6236,13 +6166,6 @@ function GF:UnitButton_ClearUnit(self)
 		if UFHelper.RemovePrivateAuras then UFHelper.RemovePrivateAuras(st.privateAuras) end
 		if UFHelper.UpdatePrivateAuraSound then UFHelper.UpdatePrivateAuraSound(st.privateAuras, nil, (self._eqolCfg and self._eqolCfg.privateAuras) or {}) end
 	end
-end
-
--- !Remove when HarreksAdvancedRaidFrames gets blocked or removed
-if hooksecurefunc then
-	hooksecurefunc(GF, "UnitButton_SetUnit", function(_, btn) GF.HarfRegister(btn) end)
-
-	hooksecurefunc(GF, "UnitButton_ClearUnit", function(_, btn) GF.HarfUnregister(btn) end)
 end
 
 function GF:UnitButton_RegisterUnitEvents(self, unit)
@@ -15336,6 +15259,37 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 		},
 		{
+			name = L["UFGroupBuffFilter"] or "Buff filter",
+			kind = SettingType.Dropdown,
+			field = "buffHelpfulFilterMode",
+			parentId = "buffs",
+			values = {
+				{
+					value = "RAID_IN_COMBAT",
+					label = L["UFGroupBuffFilterRaidInCombat"] or "Healer buffs",
+					text = L["UFGroupBuffFilterRaidInCombat"] or "Healer buffs",
+				},
+				{
+					value = "RAID",
+					label = L["UFGroupBuffFilterRaid"] or "Helpful effects",
+					text = L["UFGroupBuffFilterRaid"] or "Helpful effects",
+				},
+			},
+			get = function()
+				local cfg = getCfg(kind)
+				local ac = ensureAuraConfig(cfg)
+				local def = (DEFAULTS[kind] and DEFAULTS[kind].auras and DEFAULTS[kind].auras.buff) or {}
+				return GF.NormalizeBuffHelpfulFilterMode(ac.buff.helpfulFilterMode or def.helpfulFilterMode)
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				local ac = ensureAuraConfig(cfg)
+				ac.buff.helpfulFilterMode = GF.NormalizeBuffHelpfulFilterMode(value)
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "buffHelpfulFilterMode", ac.buff.helpfulFilterMode, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+		},
+		{
 			name = "Buff anchor",
 			kind = SettingType.Dropdown,
 			field = "buffAnchor",
@@ -19020,6 +18974,7 @@ local function applyEditModeData(kind, data)
 	if data.buffPerRow ~= nil then ac.buff.perRow = data.buffPerRow end
 	if data.buffMax ~= nil then ac.buff.max = data.buffMax end
 	if data.buffSpacing ~= nil then ac.buff.spacing = data.buffSpacing end
+	if data.buffHelpfulFilterMode ~= nil then ac.buff.helpfulFilterMode = GF.NormalizeBuffHelpfulFilterMode(data.buffHelpfulFilterMode) end
 	if data.buffCooldownTextEnabled ~= nil then ac.buff.showCooldownText = data.buffCooldownTextEnabled and true or false end
 	if data.buffCooldownTextAnchor ~= nil then ac.buff.cooldownAnchor = data.buffCooldownTextAnchor end
 	if data.buffCooldownTextOffsetX ~= nil or data.buffCooldownTextOffsetY ~= nil then
@@ -19626,6 +19581,7 @@ function GF:EnsureEditMode()
 				buffPerRow = ac.buff.perRow or 6,
 				buffMax = ac.buff.max or 6,
 				buffSpacing = ac.buff.spacing or 2,
+				buffHelpfulFilterMode = GF.NormalizeBuffHelpfulFilterMode(ac.buff.helpfulFilterMode or defBuff.helpfulFilterMode),
 				buffCooldownTextEnabled = (ac.buff.showCooldownText ~= nil and ac.buff.showCooldownText ~= false) or (ac.buff.showCooldownText == nil and defBuff.showCooldownText ~= false),
 				buffCooldownTextAnchor = ac.buff.cooldownAnchor or defBuff.cooldownAnchor or "CENTER",
 				buffCooldownTextOffsetX = (ac.buff.cooldownOffset and ac.buff.cooldownOffset.x) or (defBuff.cooldownOffset and defBuff.cooldownOffset.x) or 0,

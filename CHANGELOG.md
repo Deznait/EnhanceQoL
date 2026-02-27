@@ -1,5 +1,17 @@
 # Changelog
 
+## [8.2.0] - 2026-02-27
+
+### ✨ Added
+
+- Group Frames (Party/Raid): Added a new Buff filter dropdown in Edit Mode (`Buffs`) to choose whether buffs are tracked with `RAID_IN_COMBAT` (healer buffs/HoTs) or `RAID` (broader helpful effects).
+
+### 🔄 Changed
+
+- Group Frames: Removed obsolete external raid-frame integration hooks.
+
+---
+
 ## [8.1.2] - 2026-02-27
 
 ### 🐛 Fixed
@@ -54,7 +66,6 @@
 - Unit Frames (Profiles): Added optional spec mapping, so each specialization can auto-switch to a selected UF profile.
 - Unit Frames (Profiles): Added create/copy/delete actions on the Profiles page.
 - Unit Frames (Profiles): Added quick UF profile switching in the minimap right-click menu.
-- Group Frames (Party/Raid): Added optional integration with `HarreksAdvancedRaidFrames`.
 - Group Frames (Party/Raid): Added a new `Healer Buff Placement` editor to place healer spell indicators exactly where you want them on frames.
 - Group Frames (Party/Raid): You can now create custom indicators with different visual styles (Icon, Square, Bar, Border, Tint) and assign healer spells to them.
 - Group Frames (Party/Raid): Indicators can now also be used as reminders when important buffs are missing.

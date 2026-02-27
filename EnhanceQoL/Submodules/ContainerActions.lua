@@ -18,6 +18,8 @@ local EDITMODE_ID = "containerActionsButton"
 local BUTTON_SIZE = 48
 local PREVIEW_ICON = "Interface\\Icons\\INV_Misc_Bag_10"
 local DEFAULT_ANCHOR = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -200 }
+local DEFAULT_ICON_TEXCOORD = { 0.08, 0.92, 0.08, 0.92 }
+local FULL_ICON_TEXCOORD = { 0, 1, 0, 1 }
 
 local ITEM_CLASS = Enum and Enum.ItemClass
 local MISC_SUBCLASS = Enum and Enum.ItemMiscellaneousSubclass
@@ -107,6 +109,131 @@ end
 local function SetButtonIconTexCoord(button, ...)
 	local icon = GetButtonIcon(button)
 	if icon and icon.SetTexCoord then icon:SetTexCoord(...) end
+end
+
+local function SetTextureVisibility(texture, visible)
+	if not texture then return end
+	if visible then
+		texture:SetAlpha(1)
+		texture:Show()
+	else
+		texture:SetAlpha(0)
+		texture:Hide()
+	end
+end
+
+function ContainerActions:GetButtonBorderEnabled()
+	if not addon.db then return true end
+	return addon.db.containerActionButtonShowBorder ~= false
+end
+
+function ContainerActions:GetButtonIconCropEnabled()
+	if not addon.db then return true end
+	return addon.db.containerActionButtonCropIcon ~= false
+end
+
+function ContainerActions:ApplyButtonAppearance()
+	local button = self.button
+	if not button then return end
+
+	local showBorder = self:GetButtonBorderEnabled()
+	local cropIcon = self:GetButtonIconCropEnabled()
+
+	local normal = button.NormalTexture
+	if not normal and button.GetName then
+		local name = button:GetName()
+		if name and _G then normal = _G[name .. "NormalTexture"] end
+	end
+	if normal then
+		if showBorder then
+			normal:Show()
+		else
+			normal:Hide()
+		end
+	end
+
+	if button.FloatingBG then
+		if showBorder then
+			button.FloatingBG:Show()
+		else
+			button.FloatingBG:Hide()
+		end
+	end
+
+	local pushed = button.GetPushedTexture and button:GetPushedTexture() or button.PushedTexture
+	local highlight = button.GetHighlightTexture and button:GetHighlightTexture() or button.HighlightTexture
+	local checked = button.GetCheckedTexture and button:GetCheckedTexture() or button.CheckedTexture
+
+	SetTextureVisibility(pushed, showBorder)
+	SetTextureVisibility(highlight, showBorder)
+	SetTextureVisibility(checked, showBorder)
+	SetTextureVisibility(button.Border, showBorder)
+	SetTextureVisibility(button.IconBorder, showBorder)
+	SetTextureVisibility(button.SlotArt, showBorder)
+
+	local coords = cropIcon and DEFAULT_ICON_TEXCOORD or FULL_ICON_TEXCOORD
+	SetButtonIconTexCoord(button, coords[1], coords[2], coords[3], coords[4])
+end
+
+function ContainerActions:IsEditModePreviewActive()
+	return self.editModePreviewActive == true
+end
+
+function ContainerActions:UpdateEditModePreviewState()
+	local inEditMode = EditMode and EditMode.IsInEditMode and EditMode:IsInEditMode()
+	self.editModePreviewActive = inEditMode and true or false
+
+	local button = self.button
+	if not button then return end
+
+	if self.editModePreviewActive then
+		self:ApplyButtonAppearance()
+		if not button.entry then
+			SetButtonIconTexture(button, PREVIEW_ICON)
+			if button.Count then button.Count:SetText("") end
+		end
+		self:RequestVisibility(true, true)
+	else
+		if not button.entry then
+			SetButtonIconTexture(button, nil)
+			if button.Count then button.Count:SetText("") end
+		end
+		local shouldShow = self.desiredVisibility
+		if shouldShow == nil then
+			local hasItems = type(self.secureItems) == "table" and #self.secureItems > 0
+			shouldShow = self:IsEnabled() and hasItems
+		end
+		self:RequestVisibility(shouldShow, true)
+	end
+end
+
+function ContainerActions:RequestEditModeRefresh()
+	if EditMode and EditMode.RefreshFrame then
+		if InCombatLockdown and InCombatLockdown() then
+			self.deferEditModeRefresh = true
+		else
+			EditMode:RefreshFrame(EDITMODE_ID)
+		end
+	end
+end
+
+function ContainerActions:OnAppearanceSettingChanged()
+	self:ApplyButtonAppearance()
+	self:RequestEditModeRefresh()
+end
+
+function ContainerActions:SetButtonBorderEnabled(enabled)
+	local value = enabled and true or false
+	if addon.db and addon.db.containerActionButtonShowBorder == value then return end
+	if addon.db then addon.db.containerActionButtonShowBorder = value end
+	self:OnAppearanceSettingChanged()
+end
+
+function ContainerActions:SetButtonIconCropEnabled(enabled)
+	local value = enabled and true or false
+	if addon.db and addon.db.containerActionButtonCropIcon == value then return end
+	if addon.db then addon.db.containerActionButtonCropIcon = value end
+	self:OnAppearanceSettingChanged()
 end
 
 local AREA_BLOCKS = {
@@ -280,15 +407,30 @@ function ContainerActions:EnsureAnchor()
 
 	if EditMode and EditMode.IsAvailable and EditMode:IsAvailable() and not self.anchorRegistered then
 		local defaults = BuildAnchorLayoutSnapshot()
-		local dropdownSetting
+		local settings
 		local settingType = EditMode.lib and EditMode.lib.SettingType
 		if settingType then
-			dropdownSetting = {
-				name = L["containerActionsAreaHeader"],
-				kind = settingType.Dropdown,
-				height = 180,
-				default = {},
-				set = function() end,
+			settings = {
+				{
+					name = L["containerActionsShowBorder"] or "Show button border",
+					kind = settingType.Checkbox,
+					default = true,
+					get = function() return ContainerActions:GetButtonBorderEnabled() end,
+					set = function(_, value) ContainerActions:SetButtonBorderEnabled(value) end,
+				},
+				{
+					name = L["containerActionsCropIcon"] or "Crop icon to Blizzard style",
+					kind = settingType.Checkbox,
+					default = true,
+					get = function() return ContainerActions:GetButtonIconCropEnabled() end,
+					set = function(_, value) ContainerActions:SetButtonIconCropEnabled(value) end,
+				},
+				{
+					name = L["containerActionsAreaHeader"],
+					kind = settingType.Dropdown,
+					height = 180,
+					default = {},
+					set = function() end,
 					generator = function(_, rootDescription)
 						for _, areaKey in ipairs(AREA_BLOCK_ORDER) do
 							local key = areaKey
@@ -303,6 +445,7 @@ function ContainerActions:EnsureAnchor()
 						end
 					end,
 				}
+			}
 		end
 
 		EditMode:RegisterFrame(EDITMODE_ID, {
@@ -322,7 +465,9 @@ function ContainerActions:EnsureAnchor()
 				end
 				ContainerActions:ApplyAnchorLayout(data)
 			end,
-			settings = dropdownSetting and { dropdownSetting } or nil,
+			onEnter = function() ContainerActions:UpdateEditModePreviewState() end,
+			onExit = function() ContainerActions:UpdateEditModePreviewState() end,
+			settings = settings,
 		})
 		self.anchorRegistered = true
 	end
@@ -364,7 +509,6 @@ function ContainerActions:EnsureButton()
 	button:RegisterForClicks("LeftButtonUp", "LeftButtonDown")
 	button:SetAttribute("pressAndHoldAction", false) -- verhindert Wiederholen beim Halten
 	button:SetAttribute("*type*", nil)
-	SetButtonIconTexCoord(button, 0.08, 0.92, 0.08, 0.92)
 	if button.HotKey then button.HotKey:SetText("") end
 	if button.Name then button.Name:Hide() end
 	button:SetPoint("CENTER", self:EnsureAnchor(), "CENTER")
@@ -403,6 +547,7 @@ function ContainerActions:EnsureButton()
 
 	self.button = button
 	self.buttonIcon = GetButtonIcon(button)
+	self:ApplyButtonAppearance()
 	self:EnsureButtonVisibilityDriver()
 
 	self:ApplyAnchorLayout(BuildAnchorLayoutSnapshot())
@@ -777,6 +922,7 @@ function ContainerActions:ApplyButtonEntry(entry)
 		button:SetAttribute("*type*", nil)
 		button:SetAttribute("item", nil)
 	end
+	self:ApplyButtonAppearance()
 	self:UpdateCount()
 end
 
@@ -812,7 +958,17 @@ function ContainerActions:RequestVisibility(show, skipDesiredUpdate)
 	if not skipDesiredUpdate then self.desiredVisibility = show and true or false end
 	local button = self:EnsureButton()
 	local desired = show and true or false
-	if self:HasVisibilityBlock() then desired = false end
+	if self:IsEditModePreviewActive() then
+		desired = true
+	elseif self:HasVisibilityBlock() then
+		desired = false
+	end
+
+	if self:IsEditModePreviewActive() and not button.entry then
+		SetButtonIconTexture(button, PREVIEW_ICON)
+		if button.Count then button.Count:SetText("") end
+	end
+
 	button:SetAlpha(desired and 1 or 0)
 	if InCombat() then
 		self.pendingVisibility = desired
@@ -913,13 +1069,7 @@ end
 
 function ContainerActions:OnAreaBlockSettingChanged()
 	self:UpdateAreaBlocks()
-	if EditMode and EditMode.RefreshFrame then
-		if InCombatLockdown and InCombatLockdown() then
-			self.deferEditModeRefresh = true
-		else
-			EditMode:RefreshFrame(EDITMODE_ID)
-		end
-	end
+	self:RequestEditModeRefresh()
 end
 
 function ContainerActions:FlushDeferredEditRefresh()
@@ -1163,6 +1313,8 @@ end
 
 function ContainerActions:OnSettingChanged(enabled)
 	self:Init()
+	self:ApplyButtonAppearance()
+	self:UpdateEditModePreviewState()
 	if not enabled then
 		self:UpdateItems({})
 	else
@@ -1174,6 +1326,7 @@ function ContainerActions:OnSettingChanged(enabled)
 end
 
 function ContainerActions:OnPostClick()
+	self:ApplyButtonAppearance()
 	if not self:IsEnabled() then return end
 	if self.awaitingRefresh then return end
 	self.awaitingRefresh = true

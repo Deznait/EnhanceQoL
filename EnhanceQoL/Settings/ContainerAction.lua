@@ -197,6 +197,8 @@ function addon.functions.initContainerAction()
 	addon.functions.InitDBValue("containerActionAnchor", { point = "CENTER", relativePoint = "CENTER", x = 0, y = -200 })
 	addon.functions.InitDBValue("containerAutoOpenDisabled", {})
 	addon.functions.InitDBValue("containerActionAreaBlocks", {})
+	addon.functions.InitDBValue("containerActionButtonShowBorder", true)
+	addon.functions.InitDBValue("containerActionButtonCropIcon", true)
 
 	if addon.ContainerActions and addon.ContainerActions.Init then
 		addon.ContainerActions:Init()
