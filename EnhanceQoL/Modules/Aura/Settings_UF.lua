@@ -783,6 +783,10 @@ local function refreshCopySelectionDialog(dialog)
 	if dialog.button1 and dialog.button1.SetEnabled then dialog.button1:SetEnabled(selectedCount > 0) end
 end
 
+local function isPlayerScopedFrameVisibilityRule(key) return key == "PLAYER_CASTING" or key == "PLAYER_MOUNTED" or key == "PLAYER_NOT_MOUNTED" or key == "PLAYER_HAS_TARGET" or key == "PLAYER_IN_GROUP" end
+
+local function supportsPlayerScopedFrameVisibility(unitToken) return unitToken == "player" or unitToken == "target" or unitToken == "targettarget" or unitToken == "focus" or unitToken == "pet" end
+
 local function getVisibilityRuleOptions(unit)
 	if not GetVisibilityRuleMetadata then return {} end
 	local options = {}
@@ -790,7 +794,11 @@ local function getVisibilityRuleOptions(unit)
 	for key, data in pairs(GetVisibilityRuleMetadata() or {}) do
 		local allowed = data.appliesTo and data.appliesTo.frame
 		if allowed and data.unitRequirement and data.unitRequirement ~= unitToken then
-			if not (key == "PLAYER_HAS_TARGET" and unitToken == "target") then allowed = false end
+			if data.unitRequirement == "player" and isPlayerScopedFrameVisibilityRule(key) and supportsPlayerScopedFrameVisibility(unitToken) then
+				allowed = true
+			else
+				allowed = false
+			end
 		end
 		if allowed then options[#options + 1] = { value = key, label = data.label or key, order = data.order or 999 } end
 	end

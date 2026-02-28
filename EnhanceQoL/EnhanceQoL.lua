@@ -975,11 +975,11 @@ local function ApplyVisibilityToUnitFrame(frameName, cbData, config, opts)
 	state.isBossFrame = frameName == BOSS_FRAME_CONTAINER_NAME
 	local unitToken = cbData.unitToken
 	local isPlayerUnit = (unitToken == "player")
-	local isTargetUnit = (unitToken == "target")
-	state.supportsPlayerTargetRule = isPlayerUnit or isTargetUnit
-	state.supportsPlayerCastingRule = isPlayerUnit
-	state.supportsPlayerMountedRule = isPlayerUnit
-	state.supportsGroupRule = isPlayerUnit
+	local supportsPlayerScopedRules = isPlayerUnit or unitToken == "target" or unitToken == "targettarget" or unitToken == "focus" or unitToken == "pet"
+	state.supportsPlayerTargetRule = supportsPlayerScopedRules
+	state.supportsPlayerCastingRule = supportsPlayerScopedRules
+	state.supportsPlayerMountedRule = supportsPlayerScopedRules
+	state.supportsGroupRule = supportsPlayerScopedRules
 
 	local driverExpression = BuildUnitFrameDriverExpression(config)
 	local usesManualRules = config and (config.MOUSEOVER or config.PLAYER_HAS_TARGET or config.PLAYER_CASTING or config.PLAYER_MOUNTED or config.PLAYER_NOT_MOUNTED or config.PLAYER_IN_GROUP)

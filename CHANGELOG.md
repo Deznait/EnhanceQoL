@@ -10,6 +10,7 @@
 
 - Castbars (Unit Frames + Standalone): Increased `Cast bar height` slider maximum from `40` to `200`.
 - Square Minimap Stats: Added configurable coordinate precision (`0-3` decimals) and automatic location text truncation (`...`) to fit minimap width.
+- Unit Frames (Focus/ToT/Pet): Extended `Show when` rules with player-scoped conditions such as `Mounted`, `Not mounted`, `Player is casting`, `When I have a target`, and `In party/raid` (same rule handling as Player/Target).
 
 ---
 
