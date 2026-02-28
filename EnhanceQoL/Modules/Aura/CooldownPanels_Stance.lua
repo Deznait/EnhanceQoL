@@ -20,9 +20,21 @@ local DEFAULT_STANCE_LABEL = _G.STANCE or "Stance"
 local DEFAULT_BEAR_LABEL = _G.BEAR_FORM or "Bear Form"
 local DEFAULT_CAT_LABEL = _G.CAT_FORM or "Cat Form"
 local DEFAULT_MOONKIN_LABEL = _G.MOONKIN_FORM or "Moonkin Form"
+local DEFAULT_DEVOTION_AURA_LABEL = _G.DEVOTION_AURA or "Devotion Aura"
+local DEFAULT_CONCENTRATION_AURA_LABEL = _G.CONCENTRATION_AURA or "Concentration Aura"
+local DEFAULT_CRUSADER_AURA_LABEL = _G.CRUSADER_AURA or "Crusader Aura"
+local DEFAULT_BATTLE_STANCE_LABEL = _G.BATTLE_STANCE or "Battle Stance"
+local DEFAULT_DEFENSIVE_STANCE_LABEL = _G.DEFENSIVE_STANCE or "Defensive Stance"
+local DEFAULT_BERSERKER_STANCE_LABEL = _G.BERSERKER_STANCE or "Berserker Stance"
 local BEAR_ICON = "Interface\\Icons\\Ability_Racial_BearForm"
 local CAT_ICON = "Interface\\Icons\\Ability_Druid_CatForm"
 local MOONKIN_ICON = 136036
+local DEVOTION_AURA_ICON = "Interface\\Icons\\Spell_Holy_DevotionAura"
+local CONCENTRATION_AURA_ICON = "Interface\\Icons\\Spell_Holy_MindSooth"
+local CRUSADER_AURA_ICON = "Interface\\Icons\\Spell_Holy_CrusaderAura"
+local BATTLE_STANCE_ICON = "Interface\\Icons\\Ability_Warrior_OffensiveStance"
+local DEFENSIVE_STANCE_ICON = "Interface\\Icons\\Ability_Warrior_DefensiveStance"
+local BERSERKER_STANCE_ICON = "Interface\\Icons\\Ability_Racial_Avatar"
 
 local STANCE_DEFINITIONS = {
 	DRUID_STEALTH = {
@@ -69,6 +81,60 @@ local STANCE_DEFINITIONS = {
 		label = DEFAULT_STEALTH_LABEL,
 		icon = STEALTH_ICON,
 		condition = "[stealth] show; hide",
+	},
+	PALADIN_DEVOTION_AURA = {
+		id = "PALADIN_DEVOTION_AURA",
+		classTag = "PALADIN",
+		stanceKey = "DEVOTION_AURA",
+		spellID = 465, -- Devotion Aura
+		label = DEFAULT_DEVOTION_AURA_LABEL,
+		icon = DEVOTION_AURA_ICON,
+		condition = "[stance:2] show; hide",
+	},
+	PALADIN_CONCENTRATION_AURA = {
+		id = "PALADIN_CONCENTRATION_AURA",
+		classTag = "PALADIN",
+		stanceKey = "CONCENTRATION_AURA",
+		spellID = 317920, -- Concentration Aura
+		label = DEFAULT_CONCENTRATION_AURA_LABEL,
+		icon = CONCENTRATION_AURA_ICON,
+		condition = "[stance:3] show; hide",
+	},
+	PALADIN_CRUSADER_AURA = {
+		id = "PALADIN_CRUSADER_AURA",
+		classTag = "PALADIN",
+		stanceKey = "CRUSADER_AURA",
+		spellID = 32223, -- Crusader Aura
+		label = DEFAULT_CRUSADER_AURA_LABEL,
+		icon = CRUSADER_AURA_ICON,
+		condition = "[stance:1] show; hide",
+	},
+	WARRIOR_DEFENSIVE_STANCE = {
+		id = "WARRIOR_DEFENSIVE_STANCE",
+		classTag = "WARRIOR",
+		stanceKey = "DEFENSIVE_STANCE",
+		spellID = 386208,
+		label = DEFAULT_DEFENSIVE_STANCE_LABEL,
+		icon = DEFENSIVE_STANCE_ICON,
+		condition = "[stance:1] show; hide",
+	},
+	WARRIOR_BATTLE_STANCE = {
+		id = "WARRIOR_BATTLE_STANCE",
+		classTag = "WARRIOR",
+		stanceKey = "BATTLE_STANCE",
+		spellID = 386164,
+		label = DEFAULT_BATTLE_STANCE_LABEL,
+		icon = BATTLE_STANCE_ICON,
+		condition = "[noknown:386196,stance:2] show; hide",
+	},
+	WARRIOR_BERSERKER_STANCE = {
+		id = "WARRIOR_BERSERKER_STANCE",
+		classTag = "WARRIOR",
+		stanceKey = "BERSERKER_STANCE",
+		spellID = 386196,
+		label = DEFAULT_BERSERKER_STANCE_LABEL,
+		icon = BERSERKER_STANCE_ICON,
+		condition = "[known:386196,stance:2] show; hide",
 	},
 }
 
@@ -189,9 +255,10 @@ local function registerDriversNow()
 	local tracker = getTrackerRuntime()
 	local playerClass = getPlayerClassTag()
 	for _, def in pairs(STANCE_DEFINITIONS) do
-		if def.classTag == playerClass then
+		local condition = type(def.condition) == "string" and def.condition or nil
+		local canUseStateDriver = condition and condition ~= ""
+		if def.classTag == playerClass and canUseStateDriver then
 			local driver = ensureStateDriver(def)
-			local condition = def.condition
 			if driver._eqolRegistered ~= true or driver._eqolCondition ~= condition then
 				if UnregisterStateDriver then pcall(UnregisterStateDriver, driver, "visibility") end
 				RegisterStateDriver(driver, "visibility", condition)
@@ -261,13 +328,13 @@ function Stance:GetMenuEntries()
 				}
 				grouped[classTag] = classGroup
 			end
-				classGroup.entries[#classGroup.entries + 1] = {
-					id = def.id,
-					label = getDefinitionLabel(def),
-					icon = getDefinitionIcon(def),
-				}
-			end
+			classGroup.entries[#classGroup.entries + 1] = {
+				id = def.id,
+				label = getDefinitionLabel(def),
+				icon = getDefinitionIcon(def),
+			}
 		end
+	end
 
 	local menu = {}
 	for _, classGroup in pairs(grouped) do
@@ -331,13 +398,16 @@ function Stance:IsEntryActive(entry)
 	local playerClass = getPlayerClassTag()
 	if playerClass ~= def.classTag then return false end
 
+	local condition = type(def.condition) == "string" and def.condition or nil
+	if not condition or condition == "" then return false end
+
 	self:EnsureStateDrivers()
 
 	local tracker = getTrackerRuntime()
 	local state = tracker.states[def.id]
 	if state ~= nil then return state == true end
 
-	if SecureCmdOptionParse then return SecureCmdOptionParse(def.condition) == "show" end
+	if SecureCmdOptionParse then return SecureCmdOptionParse(condition) == "show" end
 	if IsStealthed then return IsStealthed() == true end
 	return false
 end

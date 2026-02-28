@@ -1574,7 +1574,9 @@ function Reminder:RegisterEditMode()
 		end,
 		isEnabled = function() return addon.db and addon.db[DB_ENABLED] == true end,
 		settings = settings,
-		showOutsideEditMode = true,
+		-- Runtime visibility is controlled by UpdateDisplay/Render.
+		-- Keep this false so EditMode doesn't force-show the frame on login.
+		showOutsideEditMode = false,
 	})
 
 	self.editModeRegistered = true

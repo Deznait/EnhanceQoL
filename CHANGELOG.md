@@ -7,7 +7,7 @@
 - Unit Frames (Health): Added `Use health percent gradient` with configurable curve type (`Cosine`, `Linear`, `Step`) and up to 5 custom gradient points (each with percent + color). The max-health color remains driven by class/custom/default health color.
 - Action Bars (Button text): Added color pickers for macro name, keybind, and charge/stack text when their font overrides are enabled.
 - Cooldown Panels (Edit Mode): Added a `Static text color` option for static entry text.
-- Cooldown Panels (Edit Mode): Added `Stance` entries under `Add more` with class submenus (`Druid`: Stealth/Bear/Cat/Moonkin, `Rogue`: Stealth) and `Show when missing` + `Glow` options.
+- Cooldown Panels (Edit Mode): Added `Stance` entries under `Add more` with class submenus for `Druid`, `Rogue`, `Paladin`, and `Warrior`, including `Show when missing` + `Glow`.
 - Square Minimap Stats (Location): Added `Show zone` so zone and subzone can be toggled independently (`zone only`, `subzone only`, or both).
 
 ### 🔄 Changed
