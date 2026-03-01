@@ -51,6 +51,35 @@ local function getClassColor(class)
 	return c.r or 1, c.g or 1, c.b or 1
 end
 
+local function normalizeRealmForCompare(realm)
+	if type(realm) ~= "string" then return "" end
+	return realm:gsub("[%s%-']", ""):lower()
+end
+
+local function buildRecipientForMail(name, realm, fallback)
+	local recipientName = name
+	local recipientRealm = realm
+
+	if (not recipientName or recipientName == "") and type(fallback) == "string" and fallback ~= "" then
+		recipientName, recipientRealm = fallback:match("^([^%-]+)%-(.+)$")
+		if not recipientName or recipientName == "" then
+			recipientName = fallback
+			recipientRealm = recipientRealm or ""
+		end
+	end
+
+	if not recipientName or recipientName == "" then return fallback end
+
+	local myRealm = select(2, UnitFullName("player")) or GetRealmName() or ""
+	local normalizedRecipientRealm = normalizeRealmForCompare(recipientRealm)
+	local normalizedMyRealm = normalizeRealmForCompare(myRealm)
+	if normalizedRecipientRealm == "" or normalizedRecipientRealm == normalizedMyRealm then
+		return recipientName
+	end
+
+	return string.format("%s-%s", recipientName, recipientRealm or "")
+end
+
 local function rememberRecipientEnabled() return addon.db and addon.db.mailboxRememberLastRecipient end
 
 local function clearRememberedRecipient() Mailbox.lastRecipient = nil end
@@ -189,6 +218,8 @@ end
 
 function RowMixin:Init(elementData)
 	self.key = elementData.key
+	self.name = elementData.name
+	self.realm = elementData.realm
 	self.cols[1]:SetText(elementData.nameColored or elementData.name or "")
 	self.cols[2]:SetText(elementData.realm or "")
 end
@@ -210,7 +241,8 @@ function RowMixin:OnClick(button)
 	end
 
 	if SendMailNameEditBox and self.key then
-		SendMailNameEditBox:SetText(self.key)
+		local recipient = buildRecipientForMail(self.name, self.realm, self.key)
+		SendMailNameEditBox:SetText(recipient or self.key)
 		SendMailNameEditBox:HighlightText(0, 0)
 		SendMailNameEditBox:ClearFocus()
 	end
