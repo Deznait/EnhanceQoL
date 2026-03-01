@@ -9,6 +9,7 @@
 - Aura (Experience Bar): Added a fully customizable Experience Bar with Edit Mode integration (anchor target/point/offset, optional match-width, texture/background/border, and hide options for pet battles + Blizzard tracking bars).
 - Aura (Experience Bar): Added text customization with independent `Left / Center / Right` slots and selectable content (`Level`, `Current/Max`, `Percent`, rested variants), plus font, size, outline, and text color controls.
 - Aura (Experience Bar): Added separate fill colors for rested and non-rested XP states.
+- Mythic+ (World Map Dungeon Portals): Added Midnight spells `Teleport: Silvermoon City` (`1259190`), `Portal: Silvermoon City` (`1259194`), and `Personal Key to the Arcantina` (`1255801`).
 
 ### 🔄 Changed
 
