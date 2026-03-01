@@ -206,6 +206,39 @@ local function applyEnchantTextStyle(fontString)
 	if ok == false then fontString:SetFont(defaultFace, 12, outline) end
 end
 
+local ENCHANT_DISPLAY_MODE_FULL = "FULL"
+local ENCHANT_DISPLAY_MODE_BADGE = "BADGE"
+local ENCHANT_DISPLAY_MODE_WARNING = "WARNING"
+
+local function getEnchantDisplayMode()
+	local mode = addon.db and addon.db["charEnchantDisplayMode"]
+	if mode ~= ENCHANT_DISPLAY_MODE_BADGE and mode ~= ENCHANT_DISPLAY_MODE_WARNING then return ENCHANT_DISPLAY_MODE_FULL end
+	return mode
+end
+
+local function shouldShowMissingEnchant(slot, link, itemLevel)
+	if
+		nil ~= addon.variables.shouldEnchantedChecks[slot]
+		and not addon.variables.shouldEnchantedChecks[slot].func(itemLevel)
+	then
+		return false
+	end
+	if slot ~= 17 then return true end
+	local _, _, _, _, _, _, _, _, itemEquipLoc = C_Item.GetItemInfoInstant(link)
+	return addon.variables.allowedEnchantTypesForOffhand[itemEquipLoc] == true
+end
+
+local function getEnchantDisplayText(mode, enchantText, missingEnchant)
+	if missingEnchant then
+		if mode == ENCHANT_DISPLAY_MODE_BADGE then return "|cffff4040E|r" end
+		return ("|cff%02x%02x%02x"):format(255, 0, 0) .. L["MissingEnchant"] .. "|r"
+	end
+	if not enchantText then return nil end
+	if mode == ENCHANT_DISPLAY_MODE_BADGE then return "|cff00ff00E|r" end
+	if mode == ENCHANT_DISPLAY_MODE_WARNING then return nil end
+	return enchantText
+end
+
 local function CheckItemGems(element, itemLink, emptySocketsCount, key, pdElement, attempts)
 	attempts = attempts or 1 -- Anzahl der Versuche
 	if attempts > 10 then -- Abbruch nach 5 Versuchen, um Endlosschleifen zu vermeiden
@@ -528,45 +561,28 @@ local function onInspect(arg1)
 									end
 								end
 								applyEnchantTextStyle(element.enchant)
+								local mode = getEnchantDisplayMode()
+								local showMissingOverlay = addon.db["showMissingEnchantOverlayOnCharframe"] ~= false
+								local enchantText = getTooltipInfoFromLink(itemLink)
+								local foundEnchant = enchantText ~= nil
+								local showMissingEnchant = false
 								if element.borderGradient then
 									applyMissingEnchantOverlayStyle(element.borderGradient)
 									element.borderGradient:Hide()
-									local showMissingOverlay = addon.db["showMissingEnchantOverlayOnCharframe"] ~= false
-									local enchantText = getTooltipInfoFromLink(itemLink)
-									local foundEnchant = enchantText ~= nil
-									element.enchant:SetText("")
-									if foundEnchant then
-										element.enchant:SetFormattedText(enchantText)
-										if element.borderGradient then element.borderGradient:Hide() end
-									end
-
-									if not foundEnchant and UnitLevel(inspectUnit) == addon.variables.maxLevel then
-										element.enchant:SetText("")
-										if
-											nil == addon.variables.shouldEnchantedChecks[key]
-											or (nil ~= addon.variables.shouldEnchantedChecks[key] and addon.variables.shouldEnchantedChecks[key].func(eItem:GetCurrentItemLevel()))
-										then
-											if key == 17 then
-												local _, _, _, _, _, _, _, _, itemEquipLoc = C_Item.GetItemInfoInstant(itemLink)
-												if addon.variables.allowedEnchantTypesForOffhand[itemEquipLoc] then
-													if showMissingOverlay then
-														element.borderGradient:Show()
-													else
-														element.borderGradient:Hide()
-													end
-													element.enchant:SetFormattedText(("|cff%02x%02x%02x"):format(255, 0, 0) .. L["MissingEnchant"] .. "|r")
-												end
-											else
-												if showMissingOverlay then
-													element.borderGradient:Show()
-												else
-													element.borderGradient:Hide()
-												end
-												element.enchant:SetFormattedText(("|cff%02x%02x%02x"):format(255, 0, 0) .. L["MissingEnchant"] .. "|r")
-											end
-										end
+								end
+								if not foundEnchant and UnitLevel(inspectUnit) == addon.variables.maxLevel then
+									showMissingEnchant = shouldShowMissingEnchant(key, itemLink, eItem:GetCurrentItemLevel())
+								end
+								if element.borderGradient then
+									if showMissingEnchant and showMissingOverlay then
+										element.borderGradient:Show()
+									else
+										element.borderGradient:Hide()
 									end
 								end
+								local displayText = getEnchantDisplayText(mode, enchantText, showMissingEnchant)
+								element.enchant:SetText("")
+								if displayText then element.enchant:SetFormattedText(displayText) end
 							else
 								if element.borderGradient then element.borderGradient:Hide() end
 								if element.enchant then element.enchant:SetText("") end
@@ -725,32 +741,30 @@ local function setIlvlText(element, slot)
 					applyGemLayout(element, slot, displayCount, outsideWithIlvl)
 				end
 
-				if CharOpt("enchants") and element.borderGradient then
+				if CharOpt("enchants") then
 					applyEnchantTextStyle(element.enchant)
-					applyMissingEnchantOverlayStyle(element.borderGradient)
-					element.borderGradient:Hide()
+					local mode = getEnchantDisplayMode()
 					local showMissingOverlay = addon.db["showMissingEnchantOverlayOnCharframe"] ~= false
+					local showMissingEnchant = false
+					if element.borderGradient then
+						applyMissingEnchantOverlayStyle(element.borderGradient)
+						element.borderGradient:Hide()
+					end
 					local foundEnchant = enchantText ~= nil
-					element.enchant:SetText("")
-					if foundEnchant then element.enchant:SetFormattedText(enchantText) end
 
 					if not foundEnchant and UnitLevel("player") == addon.variables.maxLevel then
-						if
-							nil == addon.variables.shouldEnchantedChecks[slot]
-							or (nil ~= addon.variables.shouldEnchantedChecks[slot] and addon.variables.shouldEnchantedChecks[slot].func(eItem:GetCurrentItemLevel()))
-						then
-							if slot == 17 then
-								local _, _, _, _, _, _, _, _, itemEquipLoc = C_Item.GetItemInfoInstant(link)
-								if addon.variables.allowedEnchantTypesForOffhand[itemEquipLoc] then
-									if showMissingOverlay then element.borderGradient:Show() end
-									element.enchant:SetFormattedText(("|cff%02x%02x%02x"):format(255, 0, 0) .. L["MissingEnchant"] .. "|r")
-								end
-							else
-								if showMissingOverlay then element.borderGradient:Show() end
-								element.enchant:SetFormattedText(("|cff%02x%02x%02x"):format(255, 0, 0) .. L["MissingEnchant"] .. "|r")
-							end
+						showMissingEnchant = shouldShowMissingEnchant(slot, link, eItem:GetCurrentItemLevel())
+					end
+					if element.borderGradient then
+						if showMissingEnchant and showMissingOverlay then
+							element.borderGradient:Show()
+						else
+							element.borderGradient:Hide()
 						end
 					end
+					local displayText = getEnchantDisplayText(mode, enchantText, showMissingEnchant)
+					element.enchant:SetText("")
+					if displayText then element.enchant:SetFormattedText(displayText) end
 				else
 					element.enchant:SetText("")
 				end
@@ -1620,6 +1634,7 @@ function addon.functions.initItemInventory()
 	addon.functions.InitDBValue("showGemsOnCharframe", false)
 	addon.functions.InitDBValue("showGemsTooltipOnCharframe", false)
 	addon.functions.InitDBValue("showEnchantOnCharframe", false)
+	addon.functions.InitDBValue("charEnchantDisplayMode", ENCHANT_DISPLAY_MODE_FULL)
 	addon.functions.InitDBValue("showMissingEnchantOverlayOnCharframe", true)
 	addon.functions.InitDBValue("missingEnchantOverlayColor", { r = 1, g = 0, b = 0, a = 0.6 })
 	addon.functions.InitDBValue("showCatalystChargesOnCharframe", false)

@@ -98,6 +98,12 @@ local ilvlOutlineOptions = {
 	THICKOUTLINE = L["fontOutlineThick"] or "Thick Outline",
 	MONOCHROMEOUTLINE = L["fontOutlineMono"] or "Monochrome Outline",
 }
+local enchantDisplayModeOrder = { "FULL", "BADGE", "WARNING" }
+local enchantDisplayModeOptions = {
+	FULL = L["gearEnchantDisplayModeFull"] or "Full",
+	BADGE = L["gearEnchantDisplayModeBadge"] or "Badge (E)",
+	WARNING = L["gearEnchantDisplayModeWarningOnly"] or "Warning only",
+}
 
 local function buildIlvlFontDropdown()
 	local map = {
@@ -135,6 +141,27 @@ local charDisplayDropdown = addon.functions.SettingsCreateMultiDropdown(cGearUpg
 	setSelection = applyCharDisplaySelection,
 	parentSection = expandable,
 	notify = "showMissingEnchantOverlayOnCharframe",
+})
+
+addon.functions.SettingsCreateDropdown(cGearUpgrade, {
+	var = "charEnchantDisplayMode",
+	text = L["gearEnchantDisplayMode"] or "Enchant display",
+	desc = L["gearEnchantDisplayModeDesc"] or "Full: show full enchant text.\nBadge (E): show a green E if enchanted and red E if missing.\nWarning only: hide enchant text and only show missing enchant warning.",
+	list = enchantDisplayModeOptions,
+	order = enchantDisplayModeOrder,
+	default = "FULL",
+	get = function()
+		local mode = addon.db["charEnchantDisplayMode"]
+		if mode ~= "BADGE" and mode ~= "WARNING" then mode = "FULL" end
+		return mode
+	end,
+	set = function(key)
+		addon.db["charEnchantDisplayMode"] = key
+		refreshItemLevelDisplays()
+	end,
+	parent = charDisplayDropdown,
+	parentCheck = function() return isCharDisplaySelected("enchants") end,
+	parentSection = expandable,
 })
 
 local missingOverlayCheckbox = addon.functions.SettingsCreateCheckbox(cGearUpgrade, {
@@ -374,6 +401,7 @@ addon.functions.SettingsCreateCheckboxes(cGearUpgrade, data)
 function addon.functions.initGearUpgrade()
 	addon.functions.InitDBValue("charDisplayOptions", {})
 	addon.functions.InitDBValue("inspectDisplayOptions", {})
+	addon.functions.InitDBValue("charEnchantDisplayMode", "FULL")
 	addon.functions.InitDBValue("missingEnchantOverlayColor", { r = 1, g = 0, b = 0, a = 0.6 })
 	addon.functions.InitDBValue("ilvlUseItemQualityColor", true)
 	addon.functions.InitDBValue("ilvlTextColor", { r = 1, g = 1, b = 1, a = 1 })
