@@ -358,7 +358,10 @@ local function buildCrosshairVisibilityContext()
 	local inGroup = IsInGroup and IsInGroup() and true or false
 	local inRaid = IsInRaid and IsInRaid() and true or false
 	local inParty = inGroup and not inRaid
-	local inInstance, instanceType = IsInInstance and IsInInstance()
+	local inInstance, instanceType = false, nil
+	if IsInInstance then
+		inInstance, instanceType = IsInInstance()
+	end
 	local inPartyInstance = inInstance and instanceType == "party"
 	local inRaidInstance = inInstance and instanceType == "raid"
 	local hasTarget = UnitExists and UnitExists("target") and true or false
