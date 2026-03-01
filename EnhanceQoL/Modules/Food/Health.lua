@@ -45,11 +45,14 @@ local function checkForTalent(spellID)
 	return false
 end
 
-local function GetPotionHeal(totalHealth)
-	local raw = totalHealth * 0.25
+local function GetPercentPotionHeal(totalHealth, pct)
+	local raw = (totalHealth or 0) * (pct or 0)
 	local heal = raw - (raw % 50)
 	return heal
 end
+
+local function GetPotionHeal(totalHealth) return GetPercentPotionHeal(totalHealth, 0.25) end
+local function GetPotentPotionHeal(totalHealth) return GetPercentPotionHeal(totalHealth, 0.50) end
 
 local function GetStoneHeal(totalHealth) return (totalHealth or 0) * 0.25 end
 
@@ -108,6 +111,7 @@ addon.Health.healthList = {
 	-- Wrath of the Lich King
 	{ key = "RunicHealingPotion", id = 33447, requiredLevel = 27, heal = 1200, type = "potion" },
 
+	{ key = "PotentHealingPotion", id = 258138, requiredLevel = 5, type = "potion", healFunc = function(maxHP) return GetPotentPotionHeal(maxHP or 0) end },
 	{ key = "SurvivalistsHealingPotion", id = 224021, requiredLevel = 5, type = "potion", healFunc = function(maxHP) return GetPotionHeal(maxHP or 0) end },
 
 	-- Other healing items (examples; toggleable)

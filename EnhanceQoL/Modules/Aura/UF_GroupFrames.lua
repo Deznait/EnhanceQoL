@@ -4053,10 +4053,15 @@ local function getAuraKindFlags(unit, aura, helpfulFilter, harmfulFilter, extern
 	local auraId = aura.auraInstanceID
 	local flags
 	local harmfulMatch, helpfulMatch
+	local healerTracked
 
 	if wantBuff or wantsHealerBuffPlacement then
 		helpfulMatch = isAuraFilteredIn(unit, auraId, helpfulFilter)
 		if helpfulMatch then flags = setAuraFlag(flags, AURA_KIND_HELPFUL) end
+		if wantsHealerBuffPlacement and aura.spellId and UF.GroupFramesHealerBuffs and UF.GroupFramesHealerBuffs.GetFamilyFromSpell then
+			healerTracked = UF.GroupFramesHealerBuffs.GetFamilyFromSpell(aura.spellId) ~= nil
+			if healerTracked then flags = setAuraFlag(flags, 16) end -- internal marker: healer-buff tracked aura
+		end
 	end
 
 	if (wantDebuff or wantsDispel) and not helpfulMatch then
@@ -4452,6 +4457,8 @@ local function fullScanGroupAuras(unit, st, cache, helpfulFilter, harmfulFilter,
 	clearAuraKinds(st)
 	local flagsById = st._auraKindById
 	local seen = {}
+	local helpfulScanFilter = helpfulFilter
+	if wantsHealerBuffPlacement then helpfulScanFilter = "HELPFUL|INCLUDE_NAME_PLATE_ONLY" end
 
 	local function storeAura(aura)
 		local auraId = aura and aura.auraInstanceID
@@ -4461,8 +4468,8 @@ local function fullScanGroupAuras(unit, st, cache, helpfulFilter, harmfulFilter,
 		cacheAuraWithFlags(cache, flagsById, aura, flags, st)
 	end
 
-	if wantBuff and helpfulFilter then
-		local helpfulSlots = queryAuraSlots(unit, helpfulFilter, queryMax and queryMax.helpful)
+	if wantBuff and helpfulScanFilter then
+		local helpfulSlots = queryAuraSlots(unit, helpfulScanFilter, queryMax and queryMax.helpful)
 		for i = 2, (helpfulSlots and #helpfulSlots or 0) do
 			local aura = C_UnitAuras.GetAuraDataBySlot(unit, helpfulSlots[i])
 			if aura then storeAura(aura) end
@@ -4522,16 +4529,14 @@ local function updateGroupAuraCache(unit, st, updateInfo, ac, helpfulFilter, har
 	if updateInfo.updatedAuraInstanceIDs and C_UnitAuras and C_UnitAuras.GetAuraDataByAuraInstanceID then
 		for i = 1, #updateInfo.updatedAuraInstanceIDs do
 			local auraId = updateInfo.updatedAuraInstanceIDs[i]
-			local isKnown = auraId and ((flagsById and flagsById[auraId]) or (cache.auras and cache.auras[auraId]))
-			if isKnown then
-				local aura = C_UnitAuras.GetAuraDataByAuraInstanceID(unit, auraId)
-				if aura then
-					local flags = getAuraKindFlags(unit, aura, helpfulFilter, harmfulFilter, externalFilter, dispelFilter, wantBuff, wantDebuff, wantExternals, wantsDispel, wantsHealerBuffPlacement)
-					cacheAuraWithFlags(cache, flagsById, aura, flags, st)
-				else
-					markDispelAuraDirty(st, auraId)
-					removeAuraFromGroupStore(cache, flagsById, auraId)
-				end
+			local wasKnown = auraId and ((flagsById and flagsById[auraId]) or (cache.auras and cache.auras[auraId]))
+			local aura = auraId and C_UnitAuras.GetAuraDataByAuraInstanceID(unit, auraId)
+			if aura then
+				local flags = getAuraKindFlags(unit, aura, helpfulFilter, harmfulFilter, externalFilter, dispelFilter, wantBuff, wantDebuff, wantExternals, wantsDispel, wantsHealerBuffPlacement)
+				if flags or wasKnown then cacheAuraWithFlags(cache, flagsById, aura, flags, st) end
+			elseif wasKnown then
+				markDispelAuraDirty(st, auraId)
+				removeAuraFromGroupStore(cache, flagsById, auraId)
 			end
 		end
 	end
@@ -4634,7 +4639,10 @@ function GF:UpdateAuras(self, updateInfo)
 	local buffMax = normalizeMax(st._auraLayout and st._auraLayout.buff and st._auraLayout.buff.maxCount)
 	local debuffMax = normalizeMax(st._auraLayout and st._auraLayout.debuff and st._auraLayout.debuff.maxCount)
 	local externalMax = normalizeMax(st._auraLayout and st._auraLayout.externals and st._auraLayout.externals.maxCount)
-	if wantBuff and buffMax then
+	if wantsHealerBuffPlacement then
+		-- Healer buff placement needs the full helpful aura set; capped scans can miss tracked spells.
+		auraQueryMax.helpful = nil
+	elseif wantBuff and buffMax then
 		local extra = (wantExternals and externalMax) or 0
 		local helpfulMax = normalizeMax(buffMax + extra)
 		auraQueryMax.helpful = helpfulMax or buffMax

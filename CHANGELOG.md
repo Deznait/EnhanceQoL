@@ -10,6 +10,7 @@
 ### 🐛 Fixed
 
 - Mouse (Crosshair): Fixed crosshair registration in Edit Mode while the feature is disabled.
+- Group Frames (Healer Buff Placement): Fixed delayed self Earth Shield tracking (`383648`).
 
 ---
 
