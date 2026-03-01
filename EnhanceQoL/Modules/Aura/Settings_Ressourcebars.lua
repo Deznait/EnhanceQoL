@@ -375,22 +375,22 @@ local function registerEditModeBars()
 		local function getBarVisibilitySelection()
 			local c = curSpecCfg()
 			if not c then return nil end
-				local normalized = ResourceBars.NormalizeVisibilityConfig and ResourceBars.NormalizeVisibilityConfig(c.visibility, c) or nil
-				if not normalized then
-					local fallbackLegacy = nil
-					local function ensureFallbackLegacy()
-						if fallbackLegacy == nil then fallbackLegacy = {} end
-					end
-					if getGlobalVisibilityFallback("hideOutOfCombat") then
-						ensureFallbackLegacy()
-						fallbackLegacy.ALWAYS_IN_COMBAT = true
-					end
-					if getGlobalVisibilityFallback("hideMounted") then
-						ensureFallbackLegacy()
-						fallbackLegacy.PLAYER_NOT_MOUNTED = true
-					end
-					if fallbackLegacy and ResourceBars.NormalizeVisibilityConfig then normalized = ResourceBars.NormalizeVisibilityConfig(fallbackLegacy) end
+			local normalized = ResourceBars.NormalizeVisibilityConfig and ResourceBars.NormalizeVisibilityConfig(c.visibility, c) or nil
+			if not normalized then
+				local fallbackLegacy = nil
+				local function ensureFallbackLegacy()
+					if fallbackLegacy == nil then fallbackLegacy = {} end
 				end
+				if getGlobalVisibilityFallback("hideOutOfCombat") then
+					ensureFallbackLegacy()
+					fallbackLegacy.ALWAYS_IN_COMBAT = true
+				end
+				if getGlobalVisibilityFallback("hideMounted") then
+					ensureFallbackLegacy()
+					fallbackLegacy.PLAYER_NOT_MOUNTED = true
+				end
+				if fallbackLegacy and ResourceBars.NormalizeVisibilityConfig then normalized = ResourceBars.NormalizeVisibilityConfig(fallbackLegacy) end
+			end
 			if ResourceBars.CopyVisibilitySelection then return ResourceBars.CopyVisibilitySelection(normalized) end
 			return normalized and CopyTable(normalized) or nil
 		end
@@ -398,6 +398,7 @@ local function registerEditModeBars()
 			local c = curSpecCfg()
 			if not c then return end
 			local normalized = getBarVisibilitySelection() or {}
+			c.visibilityExplicit = true
 			if rule == "ALWAYS_HIDDEN" and state then
 				normalized = { ALWAYS_HIDDEN = true }
 			elseif state then
@@ -3137,75 +3138,6 @@ local function buildSettings()
 			parentSection = expandable,
 			default = false,
 			children = {
-				{
-					var = "resourceBarsHideOutOfCombat",
-					text = L["Hide out of combat"],
-					get = function() return addon.db["resourceBarsHideOutOfCombat"] end,
-					func = function(val)
-						addon.db["resourceBarsHideOutOfCombat"] = val and true or false
-						if ResourceBars.ApplyVisibilityPreference then ResourceBars.ApplyVisibilityPreference("settings") end
-					end,
-					parent = true,
-					parentCheck = function() return addon.db["enableResourceFrame"] == true end,
-					sType = "checkbox",
-					parentSection = expandable,
-				},
-				{
-					var = "resourceBarsHideMounted",
-					text = L["Hide when mounted"],
-					get = function() return addon.db["resourceBarsHideMounted"] end,
-					func = function(val)
-						addon.db["resourceBarsHideMounted"] = val and true or false
-						if ResourceBars.ApplyVisibilityPreference then ResourceBars.ApplyVisibilityPreference("settings") end
-					end,
-					parent = true,
-					parentCheck = function() return addon.db["enableResourceFrame"] == true end,
-					sType = "checkbox",
-					parentSection = expandable,
-				},
-				{
-					var = "resourceBarsHideVehicle",
-					text = L["Hide in vehicles"],
-					get = function() return addon.db["resourceBarsHideVehicle"] end,
-					func = function(val)
-						addon.db["resourceBarsHideVehicle"] = val and true or false
-						if ResourceBars.ApplyVisibilityPreference then ResourceBars.ApplyVisibilityPreference("settings") end
-					end,
-					parent = true,
-					parentCheck = function() return addon.db["enableResourceFrame"] == true end,
-					sType = "checkbox",
-					parentSection = expandable,
-				},
-				{
-					var = "resourceBarsHidePetBattle",
-					text = L["Hide in pet battles"] or "Hide in pet battles",
-					get = function() return addon.db["resourceBarsHidePetBattle"] end,
-					func = function(val)
-						addon.db["resourceBarsHidePetBattle"] = val and true or false
-						applyResourceBarsVisibility("settings")
-					end,
-					parent = true,
-					parentCheck = function() return addon.db["enableResourceFrame"] == true end,
-					sType = "checkbox",
-					parentSection = expandable,
-				},
-				{
-					var = "resourceBarsHideClientScene",
-					text = L["Hide in client scenes"] or "Hide in client scenes",
-					get = function()
-						local value = addon.db["resourceBarsHideClientScene"]
-						if value == nil then return true end
-						return value == true
-					end,
-					func = function(val)
-						addon.db["resourceBarsHideClientScene"] = val and true or false
-						applyResourceBarsVisibility("settings")
-					end,
-					parent = true,
-					parentCheck = function() return addon.db["enableResourceFrame"] == true end,
-					sType = "checkbox",
-					parentSection = expandable,
-				},
 				{
 					var = "resourceBarsAutoEnable",
 					text = L["AutoEnableAllBars"] or "Auto-enable bars for new characters",

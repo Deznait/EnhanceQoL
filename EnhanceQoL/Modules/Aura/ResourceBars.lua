@@ -2352,32 +2352,20 @@ local function ensureDruidShowFormsDefaults(cfg, pType, specInfo)
 		return
 	end
 
-	-- Other bars: only set defaults if the user has not customized the forms table.
-	if type(cfg.showForms) == "table" and next(cfg.showForms) ~= nil then return end
-	local sf = {}
+	-- Other bars: fill missing defaults without overwriting existing user choices.
+	local sf = type(cfg.showForms) == "table" and cfg.showForms or {}
+	local defaults = {}
 	local isSecondaryMana = pType == "MANA" and specInfo and specInfo.MAIN ~= "MANA"
 	local isSecondaryEnergy = pType == "ENERGY" and specInfo and specInfo.MAIN ~= "ENERGY"
 	if isSecondaryMana then
-		sf.HUMANOID = true
-		sf.BEAR = false
-		sf.CAT = false
-		sf.TRAVEL = false
-		sf.MOONKIN = false
-		sf.STAG = false
+		defaults.HUMANOID, defaults.BEAR, defaults.CAT, defaults.TRAVEL, defaults.MOONKIN, defaults.STAG = true, false, false, false, false, false
 	elseif isSecondaryEnergy then
-		sf.HUMANOID = false
-		sf.BEAR = false
-		sf.CAT = true
-		sf.TRAVEL = false
-		sf.MOONKIN = false
-		sf.STAG = false
+		defaults.HUMANOID, defaults.BEAR, defaults.CAT, defaults.TRAVEL, defaults.MOONKIN, defaults.STAG = false, false, true, false, false, false
 	else
-		sf.HUMANOID = true
-		sf.BEAR = true
-		sf.CAT = true
-		sf.TRAVEL = true
-		sf.MOONKIN = true
-		sf.STAG = true
+		defaults.HUMANOID, defaults.BEAR, defaults.CAT, defaults.TRAVEL, defaults.MOONKIN, defaults.STAG = true, true, true, true, true, true
+	end
+	for k, v in pairs(defaults) do
+		if sf[k] == nil then sf[k] = v end
 	end
 	cfg.showForms = sf
 end
@@ -4739,7 +4727,8 @@ function visibilityLogic:NormalizeConfig(config, legacyCfg)
 			end
 		end
 	end
-	if not out and type(legacyCfg) == "table" then
+	if not out and type(legacyCfg) == "table" and legacyCfg.visibilityExplicit == true then out = {} end
+	if not out and type(legacyCfg) == "table" and legacyCfg.visibilityExplicit ~= true then
 		if legacyCfg.hideOutOfCombat == true then
 			out = out or {}
 			out.ALWAYS_IN_COMBAT = true

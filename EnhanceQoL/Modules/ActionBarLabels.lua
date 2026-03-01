@@ -796,6 +796,18 @@ function Labels.RefreshAllCountStyles()
 	ForEachActionButton(function(button) ApplyCountStyling(button) end)
 end
 
+local function RefreshHotkeyColorOverride(button)
+	if not addon.db then return end
+	local hotkey = GetActionButtonHotkey(button)
+	if not hotkey then return end
+	if addon.db.actionBarHotkeyFontOverride then
+		local fontColor = addon.db.actionBarHotkeyFontColor
+		ApplyTextColorOverride(hotkey, fontColor, "EQOL_OriginalHotkeyColor", "EQOL_UsingHotkeyColorOverride")
+	elseif hotkey.EQOL_UsingHotkeyColorOverride then
+		RestoreTextColorOverride(hotkey, "EQOL_OriginalHotkeyColor", "EQOL_UsingHotkeyColorOverride")
+	end
+end
+
 hooksecurefunc("ActionButton_UpdateRangeIndicator", function(self, checksRange, inRange)
 	if not self or not self.action then return end
 	self.EQOL_RangeOutOfRange = checksRange and inRange == false
@@ -804,6 +816,7 @@ hooksecurefunc("ActionButton_UpdateRangeIndicator", function(self, checksRange, 
 	else
 		ShowRangeOverlay(self, false)
 	end
+	RefreshHotkeyColorOverride(self)
 end)
 
 local function EnsureRangeUsableHook()

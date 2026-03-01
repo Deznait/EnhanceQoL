@@ -21,6 +21,7 @@
 - Aura (Experience Bar): Fixed startup/reload timing where the bar could stay visually empty or hidden until Edit Mode was opened once.
 - Aura (Experience Bar): Fixed rested percent text so it no longer shows incorrect values when rested XP is `0`.
 - Aura (Experience Bar): Fixed SharedMedia timing issues by reapplying appearance when matching media keys are registered, ensuring textures/fonts become visible immediately after late media registration.
+- Action Bars (Button text): Fixed a regression where custom keybind text colors could reset to default white/red after action state updates (for example during combat/range checks or key presses).
 
 ---
 
