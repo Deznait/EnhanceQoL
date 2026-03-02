@@ -121,6 +121,8 @@ local BAR_SIZE_MAX = 2000
 local BAR_WIDTH_MAX = 5000
 local TEXT_SIZE_MIN = 8
 local TEXT_SIZE_MAX = 30
+local DEFAULT_SETTINGS_MAX_HEIGHT = 900
+local DEFAULT_SETTINGS_SCREEN_MARGIN = 200
 
 local BLIZZARD_TRACKING_FRAMES = {
 	"MainStatusTrackingBarContainer",
@@ -131,6 +133,7 @@ local BLIZZARD_TRACKING_FRAMES = {
 local XP_BAR_FRAME_NAME = "EQOL_XPBar"
 local XP_BAR_EVENT_FRAME_NAME = "EQOL_XPBarEventDriver"
 local registerEditModeCallbacks
+local settingsMaxHeightWatcher
 
 local function getValue(key, fallback)
 	if not addon.db then return fallback end
@@ -364,6 +367,46 @@ local function refreshSettingsUI()
 	if not (lib and lib.internal) then return end
 	if lib.internal.RefreshSettings then lib.internal:RefreshSettings() end
 	if lib.internal.RefreshSettingValues then lib.internal:RefreshSettingValues() end
+end
+
+local function getSettingsMaxHeight()
+	local screenHeight = addon.variables and tonumber(addon.variables.screenHeight)
+	if (not screenHeight or screenHeight <= 0) and GetScreenHeight then
+		screenHeight = tonumber(GetScreenHeight())
+		if screenHeight and screenHeight > 0 then
+			addon.variables = addon.variables or {}
+			addon.variables.screenHeight = screenHeight
+		end
+	end
+	if not screenHeight or screenHeight <= 0 then return DEFAULT_SETTINGS_MAX_HEIGHT end
+	if screenHeight < DEFAULT_SETTINGS_MAX_HEIGHT then return screenHeight end
+	return math.max(DEFAULT_SETTINGS_MAX_HEIGHT, screenHeight - DEFAULT_SETTINGS_SCREEN_MARGIN)
+end
+
+local function applyFrameSettingsMaxHeight(frame, maxHeight)
+	local lib = addon.EditModeLib or (EditMode and EditMode.lib)
+	if not (lib and lib.SetFrameSettingsMaxHeight and frame) then return end
+	lib:SetFrameSettingsMaxHeight(frame, maxHeight or getSettingsMaxHeight())
+end
+
+local function applyRegisteredSettingsMaxHeight() applyFrameSettingsMaxHeight(ExperienceBar and ExperienceBar.frame, getSettingsMaxHeight()) end
+
+local function ensureSettingsMaxHeightWatcher()
+	if settingsMaxHeightWatcher then return end
+	settingsMaxHeightWatcher = CreateFrame("Frame")
+	settingsMaxHeightWatcher:RegisterEvent("PLAYER_LOGIN")
+	settingsMaxHeightWatcher:RegisterEvent("DISPLAY_SIZE_CHANGED")
+	settingsMaxHeightWatcher:RegisterEvent("UI_SCALE_CHANGED")
+	settingsMaxHeightWatcher:SetScript("OnEvent", function()
+		if GetScreenHeight then
+			local screenHeight = tonumber(GetScreenHeight())
+			if screenHeight and screenHeight > 0 then
+				addon.variables = addon.variables or {}
+				addon.variables.screenHeight = screenHeight
+			end
+		end
+		applyRegisteredSettingsMaxHeight()
+	end)
 end
 
 local function isCustomPlayerCastbarEnabled()
@@ -1811,9 +1854,16 @@ function ExperienceBar:RegisterEditMode(frame)
 
 		settings = {
 			{
+				name = _G.HUD_EDIT_MODE_SETTING_ANCHOR or "Anchor",
+				kind = SettingType.Collapsible,
+				id = "xpBarAnchor",
+				defaultCollapsed = false,
+			},
+			{
 				name = L["xpBarAnchor"] or "Anchor to",
 				kind = SettingType.Dropdown,
 				field = "anchorRelativeFrame",
+				parentId = "xpBarAnchor",
 				height = 180,
 				get = function() return ExperienceBar:GetAnchorRelativeFrame() end,
 				set = function(_, value) applySetting("anchorRelativeFrame", value) end,
@@ -1827,6 +1877,7 @@ function ExperienceBar:RegisterEditMode(frame)
 				name = L["xpBarAnchorPoint"] or "Anchor point",
 				kind = SettingType.Dropdown,
 				field = "anchorPoint",
+				parentId = "xpBarAnchor",
 				height = 180,
 				get = function() return ExperienceBar:GetAnchorPoint() end,
 				set = function(_, value) applySetting("anchorPoint", value) end,
@@ -1840,6 +1891,7 @@ function ExperienceBar:RegisterEditMode(frame)
 				name = L["xpBarAnchorRelativePoint"] or "Relative point",
 				kind = SettingType.Dropdown,
 				field = "anchorRelativePoint",
+				parentId = "xpBarAnchor",
 				height = 180,
 				get = function() return ExperienceBar:GetAnchorRelativePoint() end,
 				set = function(_, value) applySetting("anchorRelativePoint", value) end,
@@ -1853,6 +1905,7 @@ function ExperienceBar:RegisterEditMode(frame)
 				name = L["xpBarAnchorOffsetX"] or "X Offset",
 				kind = SettingType.Slider,
 				field = "anchorOffsetX",
+				parentId = "xpBarAnchor",
 				minValue = -1000,
 				maxValue = 1000,
 				valueStep = 1,
@@ -1864,6 +1917,7 @@ function ExperienceBar:RegisterEditMode(frame)
 				name = L["xpBarAnchorOffsetY"] or "Y Offset",
 				kind = SettingType.Slider,
 				field = "anchorOffsetY",
+				parentId = "xpBarAnchor",
 				minValue = -1000,
 				maxValue = 1000,
 				valueStep = 1,
@@ -1875,15 +1929,23 @@ function ExperienceBar:RegisterEditMode(frame)
 				name = L["xpBarAnchorMatchWidth"] or "Match relative frame width",
 				kind = SettingType.Checkbox,
 				field = "anchorMatchWidth",
+				parentId = "xpBarAnchor",
 				default = defaults.anchorMatchRelativeWidth == true,
 				get = function() return ExperienceBar:GetAnchorMatchWidth() end,
 				set = function(_, value) applySetting("anchorMatchWidth", value) end,
 				isEnabled = function() return not ExperienceBar:AnchorUsesUIParent() end,
 			},
 			{
+				name = L["Visibility"] or "Visibility",
+				kind = SettingType.Collapsible,
+				id = "xpBarVisibility",
+				defaultCollapsed = true,
+			},
+			{
 				name = L["xpBarHideInPetBattle"] or "Hide in pet battles",
 				kind = SettingType.Checkbox,
 				field = "hideInPetBattle",
+				parentId = "xpBarVisibility",
 				default = defaults.hideInPetBattle == true,
 				get = function() return ExperienceBar:GetHideInPetBattle() end,
 				set = function(_, value) applySetting("hideInPetBattle", value) end,
@@ -1892,14 +1954,22 @@ function ExperienceBar:RegisterEditMode(frame)
 				name = L["xpBarHideBlizzardTracking"] or "Hide Blizzard tracking bars while leveling",
 				kind = SettingType.Checkbox,
 				field = "hideBlizzardTracking",
+				parentId = "xpBarVisibility",
 				default = defaults.hideBlizzardTracking == true,
 				get = function() return ExperienceBar:GetHideBlizzardTracking() end,
 				set = function(_, value) applySetting("hideBlizzardTracking", value) end,
 			},
 			{
+				name = L["Frame"] or "Frame",
+				kind = SettingType.Collapsible,
+				id = "xpBarFrame",
+				defaultCollapsed = true,
+			},
+			{
 				name = L["xpBarWidth"] or "Bar width",
 				kind = SettingType.Slider,
 				field = "width",
+				parentId = "xpBarFrame",
 				default = defaults.width,
 				minValue = BAR_SIZE_MIN,
 				maxValue = BAR_WIDTH_MAX,
@@ -1914,6 +1984,7 @@ function ExperienceBar:RegisterEditMode(frame)
 				name = L["xpBarHeight"] or "Bar height",
 				kind = SettingType.Slider,
 				field = "height",
+				parentId = "xpBarFrame",
 				default = defaults.height,
 				minValue = BAR_SIZE_MIN,
 				maxValue = BAR_SIZE_MAX,
@@ -1924,150 +1995,10 @@ function ExperienceBar:RegisterEditMode(frame)
 				formatter = function(value) return tostring(math.floor((tonumber(value) or 0) + 0.5)) end,
 			},
 			{
-				name = L["xpBarTexture"] or "Bar texture",
-				kind = SettingType.Dropdown,
-				field = "texture",
-				height = 180,
-				get = function() return ExperienceBar:GetTextureKey() end,
-				set = function(_, value) applySetting("texture", value) end,
-				generator = function(_, root)
-					for _, option in ipairs(textureOptions()) do
-						root:CreateRadio(option.label, function() return ExperienceBar:GetTextureKey() == option.value end, function() applySetting("texture", option.value) end)
-					end
-				end,
-			},
-			{
-				name = L["xpBarColor"] or "Bar color",
-				kind = SettingType.Color,
-				field = "color",
-				default = defaults.color,
-				hasOpacity = true,
-				get = function()
-					local r, g, b, a = ExperienceBar:GetColor()
-					return { r = r, g = g, b = b, a = a }
-				end,
-				set = function(_, value) applySetting("color", value) end,
-			},
-			{
-				name = L["xpBarRestedColor"] or "Rested color",
-				kind = SettingType.Color,
-				field = "restedColor",
-				default = defaults.restedColor,
-				hasOpacity = true,
-				get = function()
-					local r, g, b, a = ExperienceBar:GetRestedColor()
-					return { r = r, g = g, b = b, a = a }
-				end,
-				set = function(_, value) applySetting("restedColor", value) end,
-			},
-			{
-				name = L["xpBarRestedOverlayEnabled"] or "Show rested overlay segment",
-				kind = SettingType.Checkbox,
-				field = "restedOverlayEnabled",
-				default = defaults.restedOverlayEnabled ~= false,
-				get = function() return ExperienceBar:GetRestedOverlayEnabled() end,
-				set = function(_, value) applySetting("restedOverlayEnabled", value) end,
-			},
-			{
-				name = L["xpBarBackgroundEnabled"] or "Use background",
-				kind = SettingType.Checkbox,
-				field = "bgEnabled",
-				default = defaults.bgEnabled == true,
-				get = function() return ExperienceBar:GetBackgroundEnabled() end,
-				set = function(_, value) applySetting("bgEnabled", value) end,
-			},
-			{
-				name = L["xpBarBackgroundTexture"] or "Background texture",
-				kind = SettingType.Dropdown,
-				field = "bgTexture",
-				height = 180,
-				get = function() return ExperienceBar:GetBackgroundTextureKey() end,
-				set = function(_, value) applySetting("bgTexture", value) end,
-				generator = function(_, root)
-					for _, option in ipairs(textureOptions()) do
-						root:CreateRadio(option.label, function() return ExperienceBar:GetBackgroundTextureKey() == option.value end, function() applySetting("bgTexture", option.value) end)
-					end
-				end,
-				isEnabled = function() return ExperienceBar:GetBackgroundEnabled() end,
-			},
-			{
-				name = L["xpBarBackgroundColor"] or "Background color",
-				kind = SettingType.Color,
-				field = "bgColor",
-				default = defaults.bgColor,
-				hasOpacity = true,
-				get = function()
-					local r, g, b, a = ExperienceBar:GetBackgroundColor()
-					return { r = r, g = g, b = b, a = a }
-				end,
-				set = function(_, value) applySetting("bgColor", value) end,
-				isEnabled = function() return ExperienceBar:GetBackgroundEnabled() end,
-			},
-			{
-				name = L["xpBarBorderEnabled"] or "Use border",
-				kind = SettingType.Checkbox,
-				field = "borderEnabled",
-				default = defaults.borderEnabled == true,
-				get = function() return ExperienceBar:GetBorderEnabled() end,
-				set = function(_, value) applySetting("borderEnabled", value) end,
-			},
-			{
-				name = L["xpBarBorderTexture"] or "Border texture",
-				kind = SettingType.Dropdown,
-				field = "borderTexture",
-				height = 180,
-				get = function() return ExperienceBar:GetBorderTextureKey() end,
-				set = function(_, value) applySetting("borderTexture", value) end,
-				generator = function(_, root)
-					for _, option in ipairs(borderOptions()) do
-						root:CreateRadio(option.label, function() return ExperienceBar:GetBorderTextureKey() == option.value end, function() applySetting("borderTexture", option.value) end)
-					end
-				end,
-				isEnabled = function() return ExperienceBar:GetBorderEnabled() end,
-			},
-			{
-				name = L["xpBarBorderSize"] or "Border size",
-				kind = SettingType.Slider,
-				field = "borderSize",
-				default = defaults.borderSize,
-				minValue = 1,
-				maxValue = 20,
-				valueStep = 1,
-				get = function() return ExperienceBar:GetBorderSize() end,
-				set = function(_, value) applySetting("borderSize", value) end,
-				formatter = function(value) return tostring(math.floor((tonumber(value) or 0) + 0.5)) end,
-				isEnabled = function() return ExperienceBar:GetBorderEnabled() end,
-			},
-			{
-				name = L["xpBarBorderOffset"] or "Border offset",
-				kind = SettingType.Slider,
-				field = "borderOffset",
-				default = defaults.borderOffset,
-				minValue = -20,
-				maxValue = 20,
-				valueStep = 1,
-				get = function() return ExperienceBar:GetBorderOffset() end,
-				set = function(_, value) applySetting("borderOffset", value) end,
-				formatter = function(value) return tostring(math.floor((tonumber(value) or 0) + 0.5)) end,
-				isEnabled = function() return ExperienceBar:GetBorderEnabled() end,
-			},
-			{
-				name = L["xpBarBorderColor"] or "Border color",
-				kind = SettingType.Color,
-				field = "borderColor",
-				default = defaults.borderColor,
-				hasOpacity = true,
-				get = function()
-					local r, g, b, a = ExperienceBar:GetBorderColor()
-					return { r = r, g = g, b = b, a = a }
-				end,
-				set = function(_, value) applySetting("borderColor", value) end,
-				isEnabled = function() return ExperienceBar:GetBorderEnabled() end,
-			},
-			{
 				name = L["xpBarFillDirection"] or "Fill direction",
 				kind = SettingType.Dropdown,
 				field = "fillDirection",
+				parentId = "xpBarFrame",
 				height = 140,
 				get = function() return ExperienceBar:GetFillDirection() end,
 				set = function(_, value) applySetting("fillDirection", value) end,
@@ -2084,9 +2015,187 @@ function ExperienceBar:RegisterEditMode(frame)
 				end,
 			},
 			{
+				name = L["Bar"] or "Bar",
+				kind = SettingType.Collapsible,
+				id = "xpBarBar",
+				defaultCollapsed = true,
+			},
+			{
+				name = L["xpBarTexture"] or "Bar texture",
+				kind = SettingType.Dropdown,
+				field = "texture",
+				parentId = "xpBarBar",
+				height = 180,
+				get = function() return ExperienceBar:GetTextureKey() end,
+				set = function(_, value) applySetting("texture", value) end,
+				generator = function(_, root)
+					for _, option in ipairs(textureOptions()) do
+						root:CreateRadio(option.label, function() return ExperienceBar:GetTextureKey() == option.value end, function() applySetting("texture", option.value) end)
+					end
+				end,
+			},
+			{
+				name = L["xpBarColor"] or "Bar color",
+				kind = SettingType.Color,
+				field = "color",
+				parentId = "xpBarBar",
+				default = defaults.color,
+				hasOpacity = true,
+				get = function()
+					local r, g, b, a = ExperienceBar:GetColor()
+					return { r = r, g = g, b = b, a = a }
+				end,
+				set = function(_, value) applySetting("color", value) end,
+			},
+			{
+				name = L["xpBarRestedColor"] or "Rested color",
+				kind = SettingType.Color,
+				field = "restedColor",
+				parentId = "xpBarBar",
+				default = defaults.restedColor,
+				hasOpacity = true,
+				get = function()
+					local r, g, b, a = ExperienceBar:GetRestedColor()
+					return { r = r, g = g, b = b, a = a }
+				end,
+				set = function(_, value) applySetting("restedColor", value) end,
+			},
+			{
+				name = L["xpBarRestedOverlayEnabled"] or "Show rested overlay segment",
+				kind = SettingType.Checkbox,
+				field = "restedOverlayEnabled",
+				parentId = "xpBarBar",
+				default = defaults.restedOverlayEnabled ~= false,
+				get = function() return ExperienceBar:GetRestedOverlayEnabled() end,
+				set = function(_, value) applySetting("restedOverlayEnabled", value) end,
+			},
+			{
+				name = L["Background"] or "Background",
+				kind = SettingType.Collapsible,
+				id = "xpBarBackground",
+				defaultCollapsed = true,
+			},
+			{
+				name = L["xpBarBackgroundEnabled"] or "Use background",
+				kind = SettingType.Checkbox,
+				field = "bgEnabled",
+				parentId = "xpBarBackground",
+				default = defaults.bgEnabled == true,
+				get = function() return ExperienceBar:GetBackgroundEnabled() end,
+				set = function(_, value) applySetting("bgEnabled", value) end,
+			},
+			{
+				name = L["xpBarBackgroundTexture"] or "Background texture",
+				kind = SettingType.Dropdown,
+				field = "bgTexture",
+				parentId = "xpBarBackground",
+				height = 180,
+				get = function() return ExperienceBar:GetBackgroundTextureKey() end,
+				set = function(_, value) applySetting("bgTexture", value) end,
+				generator = function(_, root)
+					for _, option in ipairs(textureOptions()) do
+						root:CreateRadio(option.label, function() return ExperienceBar:GetBackgroundTextureKey() == option.value end, function() applySetting("bgTexture", option.value) end)
+					end
+				end,
+				isEnabled = function() return ExperienceBar:GetBackgroundEnabled() end,
+			},
+			{
+				name = L["xpBarBackgroundColor"] or "Background color",
+				kind = SettingType.Color,
+				field = "bgColor",
+				parentId = "xpBarBackground",
+				default = defaults.bgColor,
+				hasOpacity = true,
+				get = function()
+					local r, g, b, a = ExperienceBar:GetBackgroundColor()
+					return { r = r, g = g, b = b, a = a }
+				end,
+				set = function(_, value) applySetting("bgColor", value) end,
+				isEnabled = function() return ExperienceBar:GetBackgroundEnabled() end,
+			},
+			{
+				name = L["Border"] or "Border",
+				kind = SettingType.Collapsible,
+				id = "xpBarBorder",
+				defaultCollapsed = true,
+			},
+			{
+				name = L["xpBarBorderEnabled"] or "Use border",
+				kind = SettingType.Checkbox,
+				field = "borderEnabled",
+				parentId = "xpBarBorder",
+				default = defaults.borderEnabled == true,
+				get = function() return ExperienceBar:GetBorderEnabled() end,
+				set = function(_, value) applySetting("borderEnabled", value) end,
+			},
+			{
+				name = L["xpBarBorderTexture"] or "Border texture",
+				kind = SettingType.Dropdown,
+				field = "borderTexture",
+				parentId = "xpBarBorder",
+				height = 180,
+				get = function() return ExperienceBar:GetBorderTextureKey() end,
+				set = function(_, value) applySetting("borderTexture", value) end,
+				generator = function(_, root)
+					for _, option in ipairs(borderOptions()) do
+						root:CreateRadio(option.label, function() return ExperienceBar:GetBorderTextureKey() == option.value end, function() applySetting("borderTexture", option.value) end)
+					end
+				end,
+				isEnabled = function() return ExperienceBar:GetBorderEnabled() end,
+			},
+			{
+				name = L["xpBarBorderSize"] or "Border size",
+				kind = SettingType.Slider,
+				field = "borderSize",
+				parentId = "xpBarBorder",
+				default = defaults.borderSize,
+				minValue = 1,
+				maxValue = 20,
+				valueStep = 1,
+				get = function() return ExperienceBar:GetBorderSize() end,
+				set = function(_, value) applySetting("borderSize", value) end,
+				formatter = function(value) return tostring(math.floor((tonumber(value) or 0) + 0.5)) end,
+				isEnabled = function() return ExperienceBar:GetBorderEnabled() end,
+			},
+			{
+				name = L["xpBarBorderOffset"] or "Border offset",
+				kind = SettingType.Slider,
+				field = "borderOffset",
+				parentId = "xpBarBorder",
+				default = defaults.borderOffset,
+				minValue = -20,
+				maxValue = 20,
+				valueStep = 1,
+				get = function() return ExperienceBar:GetBorderOffset() end,
+				set = function(_, value) applySetting("borderOffset", value) end,
+				formatter = function(value) return tostring(math.floor((tonumber(value) or 0) + 0.5)) end,
+				isEnabled = function() return ExperienceBar:GetBorderEnabled() end,
+			},
+			{
+				name = L["xpBarBorderColor"] or "Border color",
+				kind = SettingType.Color,
+				field = "borderColor",
+				parentId = "xpBarBorder",
+				default = defaults.borderColor,
+				hasOpacity = true,
+				get = function()
+					local r, g, b, a = ExperienceBar:GetBorderColor()
+					return { r = r, g = g, b = b, a = a }
+				end,
+				set = function(_, value) applySetting("borderColor", value) end,
+				isEnabled = function() return ExperienceBar:GetBorderEnabled() end,
+			},
+			{
+				name = L["Text"] or "Text",
+				kind = SettingType.Collapsible,
+				id = "xpBarText",
+				defaultCollapsed = true,
+			},
+			{
 				name = L["xpBarTextEnabled"] or "Show text",
 				kind = SettingType.Checkbox,
 				field = "textEnabled",
+				parentId = "xpBarText",
 				default = defaults.textEnabled == true,
 				get = function() return ExperienceBar:GetTextEnabled() end,
 				set = function(_, value) applySetting("textEnabled", value) end,
@@ -2095,6 +2204,7 @@ function ExperienceBar:RegisterEditMode(frame)
 				name = L["xpBarTextAbbreviateNumbers"] or "Use short numbers",
 				kind = SettingType.Checkbox,
 				field = "abbreviateNumbers",
+				parentId = "xpBarText",
 				default = defaults.abbreviateNumbers == true,
 				get = function() return ExperienceBar:GetAbbreviateNumbers() end,
 				set = function(_, value) applySetting("abbreviateNumbers", value) end,
@@ -2104,6 +2214,7 @@ function ExperienceBar:RegisterEditMode(frame)
 				name = L["xpBarTextLeft"] or "Left text",
 				kind = SettingType.Dropdown,
 				field = "textLeftMode",
+				parentId = "xpBarText",
 				height = 200,
 				get = function() return ExperienceBar:GetTextLeftMode() end,
 				set = function(_, value) applySetting("textLeftMode", value) end,
@@ -2114,6 +2225,7 @@ function ExperienceBar:RegisterEditMode(frame)
 				name = L["xpBarTextCenter"] or "Center text",
 				kind = SettingType.Dropdown,
 				field = "textCenterMode",
+				parentId = "xpBarText",
 				height = 200,
 				get = function() return ExperienceBar:GetTextCenterMode() end,
 				set = function(_, value) applySetting("textCenterMode", value) end,
@@ -2124,6 +2236,7 @@ function ExperienceBar:RegisterEditMode(frame)
 				name = L["xpBarTextRight"] or "Right text",
 				kind = SettingType.Dropdown,
 				field = "textRightMode",
+				parentId = "xpBarText",
 				height = 200,
 				get = function() return ExperienceBar:GetTextRightMode() end,
 				set = function(_, value) applySetting("textRightMode", value) end,
@@ -2134,6 +2247,7 @@ function ExperienceBar:RegisterEditMode(frame)
 				name = L["xpBarTextSize"] or "Text size",
 				kind = SettingType.Slider,
 				field = "textSize",
+				parentId = "xpBarText",
 				default = defaults.textSize,
 				minValue = TEXT_SIZE_MIN,
 				maxValue = TEXT_SIZE_MAX,
@@ -2148,6 +2262,7 @@ function ExperienceBar:RegisterEditMode(frame)
 				name = L["xpBarTextFont"] or "Text font",
 				kind = SettingType.Dropdown,
 				field = "textFont",
+				parentId = "xpBarText",
 				height = 180,
 				get = function() return ExperienceBar:GetTextFont() end,
 				set = function(_, value) applySetting("textFont", value) end,
@@ -2162,6 +2277,7 @@ function ExperienceBar:RegisterEditMode(frame)
 				name = L["xpBarTextOutline"] or "Text outline",
 				kind = SettingType.Dropdown,
 				field = "textOutline",
+				parentId = "xpBarText",
 				height = 120,
 				get = function() return ExperienceBar:GetTextOutline() end,
 				set = function(_, value) applySetting("textOutline", value) end,
@@ -2182,6 +2298,7 @@ function ExperienceBar:RegisterEditMode(frame)
 				name = L["xpBarTextColor"] or "Text color",
 				kind = SettingType.Color,
 				field = "textColor",
+				parentId = "xpBarText",
 				default = defaults.textColor,
 				hasOpacity = true,
 				get = function()
@@ -2271,11 +2388,16 @@ function ExperienceBar:RegisterEditMode(frame)
 		settings = settings,
 		relativeTo = function() return ExperienceBar:ResolveAnchorFrame() end,
 		allowDrag = function() return ExperienceBar:AnchorUsesUIParent() end,
+		settingsMaxHeight = DEFAULT_SETTINGS_MAX_HEIGHT,
 		showOutsideEditMode = false,
+		collapseExclusive = true,
 		showReset = false,
 		showSettingsReset = false,
 		enableOverlayToggle = true,
 	})
+	applyFrameSettingsMaxHeight(editFrame)
+	ensureSettingsMaxHeightWatcher()
+	applyRegisteredSettingsMaxHeight()
 
 	editModeRegistered = true
 end
