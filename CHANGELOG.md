@@ -1,5 +1,13 @@
 # Changelog
 
+## [8.7.1] - 2026-03-02
+
+### 🐛 Fixed
+
+- Resource Bars: Bugfix migration of settings
+
+---
+
 ## [8.7.0] - 2026-03-02
 
 ### ✨ Added
