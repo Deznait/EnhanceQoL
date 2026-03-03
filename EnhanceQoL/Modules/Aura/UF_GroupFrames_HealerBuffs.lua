@@ -206,6 +206,9 @@ local FAMILY_DATA = {
 	-- Restoration Shaman
 	{ id = "shaman_earth_shield", classToken = "SHAMAN", spec = "Restoration", spellIds = { 974, 383648 }, fallbackName = "Earth Shield" },
 	{ id = "shaman_riptide", classToken = "SHAMAN", spec = "Restoration", spellIds = { 61295 }, fallbackName = "Riptide" },
+	{ id = "shaman_ancestral_vigor", classToken = "SHAMAN", spec = "Restoration", spellIds = { 207400 }, fallbackName = "Ancestral Vigor" },
+	{ id = "shaman_earthliving_weapon", classToken = "SHAMAN", spec = "Restoration", spellIds = { 382024 }, fallbackName = "Earthliving Weapon" },
+	{ id = "shaman_hydrobubble", classToken = "SHAMAN", spec = "Restoration", spellIds = { 444490 }, fallbackName = "Hydrobubble" },
 	-- Holy Paladin
 	{ id = "paladin_beacon_of_light", classToken = "PALADIN", spec = "Holy", spellIds = { 53563 }, fallbackName = "Beacon of Light" },
 	{ id = "paladin_eternal_flame", classToken = "PALADIN", spec = "Holy", spellIds = { 156322 }, fallbackName = "Eternal Flame" },
@@ -1040,9 +1043,7 @@ local function getFamilyForAura(compiled, aura)
 	local sourceUnit = aura.sourceUnit
 	if issecretvalue and issecretvalue(sourceUnit) then return nil end
 	local fromPlayer = sourceUnit == "player" or sourceUnit == "pet" or sourceUnit == "vehicle"
-	if not fromPlayer and UnitIsUnit and sourceUnit then
-		fromPlayer = UnitIsUnit(sourceUnit, "player") or UnitIsUnit(sourceUnit, "pet") or UnitIsUnit(sourceUnit, "vehicle")
-	end
+	if not fromPlayer and UnitIsUnit and sourceUnit then fromPlayer = UnitIsUnit(sourceUnit, "player") or UnitIsUnit(sourceUnit, "pet") or UnitIsUnit(sourceUnit, "vehicle") end
 	if not fromPlayer then return nil end
 	return familyId
 end

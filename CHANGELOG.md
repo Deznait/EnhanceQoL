@@ -1,5 +1,13 @@
 # Changelog
 
+## [8.8.0] - 2026-03-03
+
+### ✨ Added
+
+- Group Frames (Healer Buff Placement): Added new Restoration Shaman spell families `Ancestral Vigor` (`207400`), `Earthliving Weapon` (`382024`), and `Hydrobubble` (`444490`).
+
+---
+
 ## [8.7.1] - 2026-03-02
 
 ### 🐛 Fixed
