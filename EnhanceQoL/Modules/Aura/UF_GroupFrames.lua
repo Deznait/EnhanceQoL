@@ -4057,8 +4057,9 @@ local function isAuraFilteredIn(unit, auraInstanceID, filter)
 	return false
 end
 
-local function getAuraKindFlags(unit, aura, helpfulFilter, harmfulFilter, externalFilter, dispelFilter, wantBuff, wantDebuff, wantExternals, wantsDispel, wantsHealerBuffPlacement)
+local function getAuraKindFlags(unit, aura, helpfulFilter, harmfulFilter, externalFilter, dispelFilter, wantBuff, wantDebuff, wantExternals, wantsDispel, wantsHealerBuffPlacement, contextKind)
 	if not (unit and aura and aura.auraInstanceID) then return nil end
+	if UF.GlobalAuraIgnore and UF.GlobalAuraIgnore.ShouldIgnoreAura and UF.GlobalAuraIgnore.ShouldIgnoreAura(contextKind, aura) then return nil end
 	local auraId = aura.auraInstanceID
 	local flags
 	local harmfulMatch, helpfulMatch
@@ -4460,7 +4461,22 @@ local function updateAuraType(self, unit, st, ac, kindKey, cache, changed, heale
 	hideAuraButtons(buttons, shown + 1)
 end
 
-local function fullScanGroupAuras(unit, st, cache, helpfulFilter, harmfulFilter, externalFilter, dispelFilter, wantBuff, wantDebuff, wantExternals, wantsDispel, wantsHealerBuffPlacement, queryMax)
+local function fullScanGroupAuras(
+	unit,
+	st,
+	cache,
+	helpfulFilter,
+	harmfulFilter,
+	externalFilter,
+	dispelFilter,
+	wantBuff,
+	wantDebuff,
+	wantExternals,
+	wantsDispel,
+	wantsHealerBuffPlacement,
+	queryMax,
+	contextKind
+)
 	if not (unit and st and cache and C_UnitAuras) then return end
 	resetAuraCache(cache)
 	clearAuraKinds(st)
@@ -4473,7 +4489,7 @@ local function fullScanGroupAuras(unit, st, cache, helpfulFilter, harmfulFilter,
 		local auraId = aura and aura.auraInstanceID
 		if not auraId or seen[auraId] then return end
 		seen[auraId] = true
-		local flags = getAuraKindFlags(unit, aura, helpfulFilter, harmfulFilter, externalFilter, dispelFilter, wantBuff, wantDebuff, wantExternals, wantsDispel, wantsHealerBuffPlacement)
+		local flags = getAuraKindFlags(unit, aura, helpfulFilter, harmfulFilter, externalFilter, dispelFilter, wantBuff, wantDebuff, wantExternals, wantsDispel, wantsHealerBuffPlacement, contextKind)
 		cacheAuraWithFlags(cache, flagsById, aura, flags, st)
 	end
 
@@ -4500,7 +4516,7 @@ local function fullScanGroupAuras(unit, st, cache, helpfulFilter, harmfulFilter,
 	end
 end
 
-local function updateGroupAuraCache(unit, st, updateInfo, ac, helpfulFilter, harmfulFilter, externalFilter, dispelFilter, wantsHealerBuffPlacement)
+local function updateGroupAuraCache(unit, st, updateInfo, ac, helpfulFilter, harmfulFilter, externalFilter, dispelFilter, wantsHealerBuffPlacement, contextKind)
 	if not (unit and st and updateInfo) then return end
 
 	local wantBuff = ((ac and (ac.buff and ac.buff.enabled ~= false)) or wantsHealerBuffPlacement) and true or false
@@ -4530,7 +4546,8 @@ local function updateGroupAuraCache(unit, st, updateInfo, ac, helpfulFilter, har
 	if updateInfo.addedAuras then
 		for i = 1, #updateInfo.addedAuras do
 			local aura = updateInfo.addedAuras[i]
-			local flags = getAuraKindFlags(unit, aura, helpfulFilter, harmfulFilter, externalFilter, dispelFilter, wantBuff, wantDebuff, wantExternals, wantsDispel, wantsHealerBuffPlacement)
+			local flags =
+				getAuraKindFlags(unit, aura, helpfulFilter, harmfulFilter, externalFilter, dispelFilter, wantBuff, wantDebuff, wantExternals, wantsDispel, wantsHealerBuffPlacement, contextKind)
 			cacheAuraWithFlags(cache, flagsById, aura, flags, st)
 		end
 	end
@@ -4541,7 +4558,8 @@ local function updateGroupAuraCache(unit, st, updateInfo, ac, helpfulFilter, har
 			local wasKnown = auraId and ((flagsById and flagsById[auraId]) or (cache.auras and cache.auras[auraId]))
 			local aura = auraId and C_UnitAuras.GetAuraDataByAuraInstanceID(unit, auraId)
 			if aura then
-				local flags = getAuraKindFlags(unit, aura, helpfulFilter, harmfulFilter, externalFilter, dispelFilter, wantBuff, wantDebuff, wantExternals, wantsDispel, wantsHealerBuffPlacement)
+				local flags =
+					getAuraKindFlags(unit, aura, helpfulFilter, harmfulFilter, externalFilter, dispelFilter, wantBuff, wantDebuff, wantExternals, wantsDispel, wantsHealerBuffPlacement, contextKind)
 				if flags or wasKnown then cacheAuraWithFlags(cache, flagsById, aura, flags, st) end
 			elseif wasKnown then
 				markDispelAuraDirty(st, auraId)
@@ -4643,6 +4661,7 @@ function GF:UpdateAuras(self, updateInfo)
 	local harmfulFilter = AURA_FILTERS.harmful
 	local dispelFilter = AURA_FILTERS.dispellable
 	local externalFilter = AURA_FILTERS.bigDefensive
+	local auraContextKind = self and (self._eqolGroupKind or "party") or "party"
 	local auraQueryMax = st._auraQueryMax
 	if not auraQueryMax then
 		auraQueryMax = {}
@@ -4681,7 +4700,22 @@ function GF:UpdateAuras(self, updateInfo)
 	local allCache = getAuraCache(st, "all")
 	st._auraKindById = st._auraKindById or {}
 	if not updateInfo or updateInfo.isFullUpdate then
-		fullScanGroupAuras(unit, st, allCache, helpfulFilter, harmfulFilter, externalFilter, dispelFilter, wantBuff, wantDebuff, wantExternals, wantsDispelTint, wantsHealerBuffPlacement, auraQueryMax)
+		fullScanGroupAuras(
+			unit,
+			st,
+			allCache,
+			helpfulFilter,
+			harmfulFilter,
+			externalFilter,
+			dispelFilter,
+			wantBuff,
+			wantDebuff,
+			wantExternals,
+			wantsDispelTint,
+			wantsHealerBuffPlacement,
+			auraQueryMax,
+			auraContextKind
+		)
 		if wantsAuras then
 			if wantBuff then updateAuraType(self, unit, st, ac, "buff", allCache, nil, healerBuffCompiled) end
 			if wantDebuff then updateAuraType(self, unit, st, ac, "debuff", allCache, nil, healerBuffCompiled) end
@@ -4732,7 +4766,7 @@ function GF:UpdateAuras(self, updateInfo)
 		end
 	end
 
-	updateGroupAuraCache(unit, st, updateInfo, ac, helpfulFilter, harmfulFilter, externalFilter, dispelFilter, wantsHealerBuffPlacement)
+	updateGroupAuraCache(unit, st, updateInfo, ac, helpfulFilter, harmfulFilter, externalFilter, dispelFilter, wantsHealerBuffPlacement, auraContextKind)
 	local changed = st._auraChanged
 	if updateInfo then
 		if not changed then
@@ -7069,6 +7103,15 @@ function GF:ToggleHealerBuffPlacementEditor(kind)
 	kind = tostring(kind or "raid"):lower()
 	if kind ~= "party" and kind ~= "raid" then kind = "raid" end
 	editor:Toggle(kind)
+	if addon.EditModeLib and addon.EditModeLib.internal and addon.EditModeLib.internal.RequestRefreshSettings then addon.EditModeLib.internal:RequestRefreshSettings() end
+end
+
+function GF:ToggleGlobalAuraIgnoreEditor(kind)
+	local editor = UF and UF.GlobalAuraIgnore
+	if not (editor and editor.ToggleEditor) then return end
+	kind = tostring(kind or "raid"):lower()
+	if kind ~= "party" and kind ~= "raid" then kind = "raid" end
+	editor:ToggleEditor(kind)
 	if addon.EditModeLib and addon.EditModeLib.internal and addon.EditModeLib.internal.RequestRefreshSettings then addon.EditModeLib.internal:RequestRefreshSettings() end
 end
 
@@ -19921,6 +19964,10 @@ function GF:EnsureEditMode()
 						text = L["UFGroupHealerBuffEditModeButton"] or "Edit healer buff placement",
 						click = function() GF:ToggleHealerBuffPlacementEditor(kind) end,
 					})
+					table.insert(buttons, 3, {
+						text = L["UFGroupGlobalAuraIgnoreEditModeButton"] or "Edit global aura ignore",
+						click = function() GF:ToggleGlobalAuraIgnoreEditor(kind) end,
+					})
 				end
 				if kind == "raid" then table.insert(buttons, 2, {
 					text = "Cycle sample size (10/20/30/40)",
@@ -19969,6 +20016,8 @@ end
 function GF:OnExitEditMode(kind)
 	local editor = UF and UF.GroupFramesHealerBuffEditor
 	if editor and editor.IsShown and editor:IsShown() then editor:Hide() end
+	local globalIgnoreEditor = UF and UF.GlobalAuraIgnore
+	if globalIgnoreEditor and globalIgnoreEditor.HideEditor then globalIgnoreEditor:HideEditor() end
 	if not isFeatureEnabled() then return end
 	local cfg = getCfg(kind)
 	if not (cfg and cfg.enabled == true) then return end

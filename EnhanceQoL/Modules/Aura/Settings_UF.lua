@@ -562,6 +562,20 @@ local frameIds = {
 	boss = "EQOL_UF_Boss",
 }
 
+local function getGlobalAuraIgnoreEditorContext(unit)
+	if unit == "player" or unit == "target" or unit == "focus" then return unit end
+	return nil
+end
+
+local function toggleGlobalAuraIgnoreEditor(unit)
+	local context = getGlobalAuraIgnoreEditorContext(unit)
+	if not context then return end
+	local editor = UF and UF.GlobalAuraIgnore
+	if not (editor and editor.ToggleEditor) then return end
+	editor:ToggleEditor(context)
+	if addon.EditModeLib and addon.EditModeLib.internal and addon.EditModeLib.internal.RequestRefreshSettings then addon.EditModeLib.internal:RequestRefreshSettings() end
+end
+
 local function refreshEditModeFrame(unit)
 	if not (EditMode and EditMode.RefreshFrame) then return end
 	local frameId = frameIds[unit]
@@ -7073,6 +7087,15 @@ local function registerUnitFrame(unit, info)
 		collapseExclusive = true,
 		showReset = false,
 	})
+	local editorContext = getGlobalAuraIgnoreEditorContext(unit)
+	if editorContext and EditMode and EditMode.RegisterButtons then
+		EditMode:RegisterButtons(info.frameId, {
+			{
+				text = L["UFGlobalAuraIgnoreEditModeButton"] or L["UFGroupGlobalAuraIgnoreEditModeButton"] or "Edit aura ignore",
+				click = function() toggleGlobalAuraIgnoreEditor(editorContext) end,
+			},
+		})
+	end
 	registeredUnitFrames[unit] = frame
 	applyFrameSettingsMaxHeight(frame)
 	hideFrameReset(frame)

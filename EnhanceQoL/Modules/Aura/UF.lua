@@ -3650,7 +3650,11 @@ function AuraUtil.scanTargetAuraSlots(unit, filter, queryLimit, hidePermanent)
 	end
 	for i = 2, #slots do
 		local aura = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
-		if aura and (not hidePermanent or not AuraUtil.isPermanentAura(aura, unit)) then
+		if
+			aura
+			and (not hidePermanent or not AuraUtil.isPermanentAura(aura, unit))
+			and not (UF.GlobalAuraIgnore and UF.GlobalAuraIgnore.ShouldIgnoreAura and UF.GlobalAuraIgnore.ShouldIgnoreAura(unit, aura))
+		then
 			AuraUtil.cacheTargetAura(aura, unit)
 			AuraUtil.addTargetAuraToOrder(aura.auraInstanceID, unit)
 		end
@@ -8499,7 +8503,13 @@ onEvent = function(self, event, unit, ...)
 		local firstChanged
 		if eventInfo.addedAuras then
 			for _, aura in ipairs(eventInfo.addedAuras) do
-				if aura and hidePermanent and AuraUtil.isPermanentAura(aura, unit) then
+				if
+					aura
+					and (
+						(hidePermanent and AuraUtil.isPermanentAura(aura, unit))
+						or (UF.GlobalAuraIgnore and UF.GlobalAuraIgnore.ShouldIgnoreAura and UF.GlobalAuraIgnore.ShouldIgnoreAura(unit, aura))
+					)
+				then
 					if auras[aura.auraInstanceID] then
 						auras[aura.auraInstanceID] = nil
 						local idx = AuraUtil.removeTargetAuraFromOrder(aura.auraInstanceID, unit)
@@ -8524,12 +8534,28 @@ onEvent = function(self, event, unit, ...)
 		end
 		if eventInfo.updatedAuraInstanceIDs and C_UnitAuras and C_UnitAuras.GetAuraDataByAuraInstanceID then
 			for _, inst in ipairs(eventInfo.updatedAuraInstanceIDs) do
-				if auras[inst] then
-					local data = C_UnitAuras.GetAuraDataByAuraInstanceID(unit, inst)
-					if data then AuraUtil.cacheTargetAura(data, unit) end
-				end
 				local idx = indexById[inst]
-				if idx and idx <= ac.max then
+				local data = C_UnitAuras.GetAuraDataByAuraInstanceID(unit, inst)
+				local keepAura = false
+				if
+					data
+					and not (hidePermanent and AuraUtil.isPermanentAura(data, unit))
+					and not (UF.GlobalAuraIgnore and UF.GlobalAuraIgnore.ShouldIgnoreAura and UF.GlobalAuraIgnore.ShouldIgnoreAura(unit, data))
+				then
+					if showDebuffs and not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, data.auraInstanceID, harmfulFilter) then
+						keepAura = true
+					elseif showBuffs and not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, data.auraInstanceID, helpfulFilter) then
+						keepAura = true
+					end
+				end
+				if keepAura then
+					AuraUtil.cacheTargetAura(data, unit)
+					if not idx then idx = AuraUtil.addTargetAuraToOrder(data.auraInstanceID, unit) end
+				else
+					auras[inst] = nil
+					if idx then idx = AuraUtil.removeTargetAuraFromOrder(inst, unit) end
+				end
+				if idx and idx <= (ac.max + 1) then
 					if not firstChanged or idx < firstChanged then firstChanged = idx end
 				end
 			end

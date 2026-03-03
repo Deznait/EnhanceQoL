@@ -5,6 +5,9 @@
 ### ✨ Added
 
 - Group Frames (Healer Buff Placement): Added new Shaman buffs (`Ancestral Vigor`, `Earthliving Weapon`, `Hydrobubble`) and additional shared class-buff families in the rule editor.
+- Unit Frames (Aura Ignore): Added a new global aura-ignore editor to quickly hide selected buffs/debuffs in `Player`, `Target`, `Focus`, `Party`, and `Raid` frames.
+- Unit Frames (Aura Ignore): Added simple per-frame ignore categories for `Sated/Exhaustion Debuffs` and `Deserter Debuffs` (enabled by default).
+- Unit Frames (Aura Ignore): Added a spell-family ignore list (same families as the Healer Buff editor) with cleaner name-only labels.
 - Mythic+: Added a new Bloodlust lockout tracker for `Sated/Exhaustion` debuffs.
 - Mythic+ (Edit Mode): Bloodlust tracker is now fully movable and customizable (icon, text, border, sounds).
 - Shared Media: Added new sound `Wrestling Bell`.

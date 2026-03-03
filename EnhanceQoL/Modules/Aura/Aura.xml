@@ -11,6 +11,7 @@
 	<Script file="UF_GroupFrames_HealerBuffs.lua" />
 	<Script file="UF_GroupFrames.lua" />
 	<Script file="UF_GroupFrames_HealerBuffs_Editor.lua" />
+	<Script file="UF_GlobalAuraIgnore.lua" />
 	<Script file="ShamanMaelstromWeaponBar.lua" />
 	<Script file="Settings_Castbar.lua" />
 	<Script file="Settings_UF.lua" />
