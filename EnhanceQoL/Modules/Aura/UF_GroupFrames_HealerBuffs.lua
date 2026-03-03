@@ -169,6 +169,33 @@ HB.GROWTH_OPTIONS = GFH and GFH.auraGrowthOptions
 	}
 
 local FAMILY_DATA = {
+	-- Shared class buffs
+	{ id = "druid_mark_of_the_wild", classToken = "DRUID", spellIds = { 1126 }, fallbackName = "Mark of the Wild" },
+	{ id = "mage_arcane_intellect", classToken = "MAGE", spellIds = { 1459 }, fallbackName = "Arcane Intellect" },
+	{ id = "priest_power_word_fortitude", classToken = "PRIEST", spellIds = { 21562 }, fallbackName = "Power Word: Fortitude" },
+	{ id = "warrior_battle_shout", classToken = "WARRIOR", spellIds = { 6673 }, fallbackName = "Battle Shout" },
+	{
+		id = "evoker_blessing_of_the_bronze",
+		classToken = "EVOKER",
+		spellIds = {
+			381732,
+			381741,
+			381746,
+			381748,
+			381749,
+			381750,
+			381751,
+			381752,
+			381753,
+			381754,
+			381756,
+			381757,
+			381758,
+		},
+		fallbackName = "Blessing of the Bronze",
+	},
+	{ id = "shaman_skyfury", classToken = "SHAMAN", spellIds = { 462854 }, fallbackName = "Skyfury" },
+
 	-- Preservation Evoker
 	{ id = "evoker_pres_dream_breath", classToken = "EVOKER", spec = "Preservation", spellIds = { 355941 }, fallbackName = "Dream Breath" },
 	{ id = "evoker_pres_dream_flight", classToken = "EVOKER", spec = "Preservation", spellIds = { 363502 }, fallbackName = "Dream Flight" },
@@ -233,6 +260,79 @@ end
 HB.FAMILY_BY_ID = FAMILY_BY_ID
 HB.FAMILY_ORDER = FAMILY_ORDER
 HB.SPELL_TO_FAMILY = SPELL_TO_FAMILY
+
+local PROVIDER_SPEC_IDS = {
+	DRUID = { Restoration = 105 },
+	EVOKER = { Preservation = 1468, Augmentation = 1473 },
+	MONK = { Mistweaver = 270 },
+	PALADIN = { Holy = 65 },
+	PRIEST = { Discipline = 256, Holy = 257 },
+	SHAMAN = { Restoration = 264 },
+}
+
+local function getPlayerClassToken()
+	local classToken = addon.variables and addon.variables.unitClass
+	if type(classToken) == "string" and classToken ~= "" then return classToken end
+	if UnitClass then
+		local _, token = UnitClass("player")
+		if type(token) == "string" and token ~= "" then return token end
+	end
+	return nil
+end
+
+local function getPlayerSpecId()
+	local sid = addon.variables and addon.variables.unitSpecId
+	sid = tonumber(sid)
+	if sid and sid > 0 then return sid end
+
+	local specIndex = nil
+	if C_SpecializationInfo and C_SpecializationInfo.GetSpecialization then
+		specIndex = C_SpecializationInfo.GetSpecialization()
+	elseif GetSpecialization then
+		specIndex = GetSpecialization()
+	end
+	if not specIndex then return nil end
+
+	if C_SpecializationInfo and C_SpecializationInfo.GetSpecializationInfo then
+		local info = C_SpecializationInfo.GetSpecializationInfo(specIndex)
+		if type(info) == "table" then
+			sid = tonumber(info.specID or info.id)
+		else
+			sid = tonumber(info)
+		end
+		if sid and sid > 0 then return sid end
+	end
+
+	if GetSpecializationInfo then
+		sid = tonumber(GetSpecializationInfo(specIndex))
+		if sid and sid > 0 then return sid end
+	end
+
+	return nil
+end
+
+local function canPlayerProvideFamily(familyId)
+	local family = familyId and FAMILY_BY_ID[tostring(familyId)] or nil
+	if not family then return false end
+
+	local familyClass = family.classToken and tostring(family.classToken) or nil
+	if familyClass then
+		local playerClass = getPlayerClassToken()
+		if not playerClass or tostring(playerClass) ~= familyClass then return false end
+	end
+
+	local familySpec = family.spec and tostring(family.spec) or nil
+	if familySpec and familySpec ~= "" then
+		local classSpecMap = familyClass and PROVIDER_SPEC_IDS[familyClass] or nil
+		local requiredSpecId = classSpecMap and classSpecMap[familySpec] or nil
+		if requiredSpecId then
+			local playerSpecId = getPlayerSpecId()
+			if playerSpecId ~= requiredSpecId then return false end
+		end
+	end
+
+	return true
+end
 
 local function wipeTable(tbl)
 	if not tbl then return end
@@ -1184,6 +1284,7 @@ end
 
 local function evaluateRuleActive(rule, familyCounts)
 	if not rule or rule.enabled == false then return false end
+	if rule["not"] and not canPlayerProvideFamily(rule.spellFamilyId) then return false end
 	local active = (familyCounts[rule.spellFamilyId] or 0) > 0
 	if rule["not"] then active = not active end
 	return active

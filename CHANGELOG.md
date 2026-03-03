@@ -5,10 +5,12 @@
 ### ✨ Added
 
 - Group Frames (Healer Buff Placement): Added new Restoration Shaman spell families `Ancestral Vigor` (`207400`), `Earthliving Weapon` (`382024`), and `Hydrobubble` (`444490`).
+- Group Frames (Healer Buff Placement): Added shared class-buff spell families in the rule editor: `Mark of the Wild` (`1126`), `Arcane Intellect` (`1459`), `Power Word: Fortitude` (`21562`), `Battle Shout` (`6673`), `Blessing of the Bronze` (`381732` + variants), and `Skyfury` (`462854`).
 
 ### 🐛 Fixed
 
 - Standalone Castbar: Fixed unnecessary runtime work while disabled by making frame creation, Edit Mode registration, and cast-event registration lazy/active-only.
+- Group Frames (Healer Buff Placement): Fixed `NOT (active when missing)` so it only activates for spell families the current player class/spec can provide.
 
 ---
 
