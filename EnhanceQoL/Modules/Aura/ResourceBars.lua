@@ -66,6 +66,38 @@ local ResourcebarVars = {
 	THRESHOLD_DEFAULT = { 1, 1, 1, 0.5 },
 	DEFAULT_THRESHOLDS = { 25, 50, 75, 90 },
 	DEFAULT_THRESHOLD_COUNT = 3,
+	ABSOLUTE_THRESHOLD_COLOR_MAX_POINTS = 10,
+	ABSOLUTE_THRESHOLD_COLOR_DEFAULT_COUNT = 2,
+	ABSOLUTE_THRESHOLD_COLOR_VALUE_CAP = 10,
+	ABSOLUTE_THRESHOLD_COLOR_VALUE_CAP_VOID_METAMORPHOSIS = 50,
+	ABSOLUTE_THRESHOLD_COLOR_VALUE_CAP_CONTINUOUS = 200,
+	ABSOLUTE_THRESHOLD_COLOR_VALUE_CAP_PERCENT = 100,
+	ABSOLUTE_THRESHOLD_COLOR_DEFAULTS = {
+		{ value = 2, color = { 1.00, 0.78, 0.25, 1.0 } },
+		{ value = 4, color = { 0.95, 0.55, 0.20, 1.0 } },
+		{ value = 6, color = { 0.95, 0.90, 0.20, 1.0 } },
+		{ value = 8, color = { 0.45, 0.90, 0.25, 1.0 } },
+		{ value = 10, color = { 0.20, 0.90, 0.40, 1.0 } },
+	},
+	ABSOLUTE_THRESHOLD_COLOR_DEFAULTS_VOID_METAMORPHOSIS = {
+		{ value = 10, color = { 1.00, 0.78, 0.25, 1.0 } },
+		{ value = 20, color = { 0.95, 0.55, 0.20, 1.0 } },
+		{ value = 30, color = { 0.95, 0.90, 0.20, 1.0 } },
+		{ value = 40, color = { 0.45, 0.90, 0.25, 1.0 } },
+		{ value = 50, color = { 0.20, 0.90, 0.40, 1.0 } },
+	},
+	ABSOLUTE_THRESHOLD_COLOR_DEFAULTS_CONTINUOUS = {
+		{ value = 50, color = { 1.00, 0.78, 0.25, 1.0 } },
+		{ value = 100, color = { 0.95, 0.55, 0.20, 1.0 } },
+		{ value = 150, color = { 0.95, 0.90, 0.20, 1.0 } },
+		{ value = 200, color = { 0.20, 0.90, 0.40, 1.0 } },
+	},
+	ABSOLUTE_THRESHOLD_COLOR_DEFAULTS_PERCENT = {
+		{ value = 25, color = { 1.00, 0.78, 0.25, 1.0 } },
+		{ value = 50, color = { 0.95, 0.55, 0.20, 1.0 } },
+		{ value = 75, color = { 0.95, 0.90, 0.20, 1.0 } },
+		{ value = 100, color = { 0.20, 0.90, 0.40, 1.0 } },
+	},
 	WHITE = { 1, 1, 1, 1 },
 	DEFAULT_MAX_COLOR = { 0, 1, 0, 1 },
 	DEFAULT_RB_TEX = "Interface\\Buttons\\WHITE8x8", -- historical default (Solid)
@@ -246,6 +278,9 @@ local COSMETIC_BAR_KEYS = {
 	"thresholdColor",
 	"thresholdThickness",
 	"thresholdCount",
+	"useAbsoluteThresholdColors",
+	"absoluteThresholdColorPointCount",
+	"absoluteThresholdColorPoints",
 	"showCooldownText",
 	"cooldownTextFontSize",
 	"backdrop",
@@ -288,11 +323,12 @@ local function getHealthPercent(unit, curHealth, maxHealth)
 	return (curHealth or 0) / max(maxHealth or 1, 1) * 100
 end
 
-local function getPowerPercent(unit, powerEnum, curPower, maxPower)
+local function getPowerPercent(unit, powerEnum, curPower, maxPower, curve)
 	if addon.functions and addon.functions.GetPowerPercent then
-		return addon.functions.GetPowerPercent(unit, powerEnum, curPower, maxPower, true)
+		return addon.functions.GetPowerPercent(unit, powerEnum, curPower, maxPower, true, curve)
 		-- Unmodified flag defaults to true for personal resource bars
 	end
+	if curve and UnitPowerPercent then return UnitPowerPercent(unit, powerEnum, true, curve) end
 	curPower = curPower or UnitPower(unit, powerEnum)
 	maxPower = maxPower or UnitPowerMax(unit, powerEnum)
 	if maxPower and maxPower > 0 then return (curPower or 0) / maxPower * 100 end
@@ -1572,6 +1608,7 @@ local function shouldNormalizeAtlasColor(cfg, pType, bar)
 		if cfg.useClassColor == true then return false end
 		if cfg.useGradient == true then return false end
 		if cfg.useMaxColor == true and bar and bar._usingMaxColor then return false end
+		if cfg.useAbsoluteThresholdColors == true and bar and bar._usingAbsoluteThresholdColor then return false end
 	end
 	local auraDef = RB.AURA_POWER_CONFIG and RB.AURA_POWER_CONFIG[pType]
 	if auraDef and auraDef.defaultColor then return false end
@@ -2040,6 +2077,170 @@ local function applyTextPosition(bar, cfg, baseX, baseY)
 	bar.text:SetPoint("CENTER", bar, "CENTER", ox, oy)
 end
 
+function ResourceBars.GetThresholdColorModeAndCap(pType)
+	if pType == "VOID_METAMORPHOSIS" then return "ABSOLUTE", tonumber(RB.ABSOLUTE_THRESHOLD_COLOR_VALUE_CAP_VOID_METAMORPHOSIS) or 50, 1 end
+	if pType == "MANA" or pType == "ENERGY" or pType == "RAGE" or pType == "FURY" or pType == "FOCUS" or pType == "INSANITY" or pType == "LUNAR_POWER" then
+		return "PERCENT", tonumber(RB.ABSOLUTE_THRESHOLD_COLOR_VALUE_CAP_PERCENT) or 100, 0
+	end
+	if ResourceBars.separatorEligible and ResourceBars.separatorEligible[pType] then return "ABSOLUTE", tonumber(RB.ABSOLUTE_THRESHOLD_COLOR_VALUE_CAP) or 10, 1 end
+	return "ABSOLUTE", tonumber(RB.ABSOLUTE_THRESHOLD_COLOR_VALUE_CAP_CONTINUOUS) or 200, 1
+end
+
+function ResourceBars.ClampAbsoluteThresholdColorValue(value, pType)
+	local mode, cap, minValue = ResourceBars.GetThresholdColorModeAndCap(pType)
+	local v = tonumber(value)
+	if v == nil then return nil end
+	if mode == "PERCENT" then
+		v = floor((v * 10) + 0.5) / 10
+	else
+		v = floor(v + 0.5)
+	end
+	if v < (minValue or 1) then v = minValue or 1 end
+	if v > cap then v = cap end
+	return v
+end
+
+function ResourceBars.GetDefaultAbsoluteThresholdColorPoint(index, pType)
+	local mode, cap = ResourceBars.GetThresholdColorModeAndCap(pType)
+	local defaults
+	if mode == "PERCENT" then
+		defaults = RB.ABSOLUTE_THRESHOLD_COLOR_DEFAULTS_PERCENT
+	elseif pType == "VOID_METAMORPHOSIS" then
+		defaults = RB.ABSOLUTE_THRESHOLD_COLOR_DEFAULTS_VOID_METAMORPHOSIS
+	elseif cap and cap <= (tonumber(RB.ABSOLUTE_THRESHOLD_COLOR_VALUE_CAP) or 10) then
+		defaults = RB.ABSOLUTE_THRESHOLD_COLOR_DEFAULTS
+	else
+		defaults = RB.ABSOLUTE_THRESHOLD_COLOR_DEFAULTS_CONTINUOUS
+	end
+	local fallback = type(defaults) == "table" and defaults[index]
+	if fallback == nil and type(defaults) == "table" then fallback = defaults[#defaults] end
+	local fallbackValue = fallback and (fallback.value or fallback[1]) or index
+	local value = ResourceBars.ClampAbsoluteThresholdColorValue(fallbackValue, pType)
+	if value == nil then
+		local _, _, minValue = ResourceBars.GetThresholdColorModeAndCap(pType)
+		value = minValue or 1
+	end
+	local color = fallback and (fallback.color or fallback[2]) or RB.WHITE
+	local r, g, b, a
+	if type(color) == "table" then
+		if color.r then
+			r, g, b, a = color.r or 1, color.g or 1, color.b or 1, color.a or 1
+		else
+			r, g, b, a = color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 1
+		end
+	else
+		r, g, b, a = 1, 1, 1, 1
+	end
+	return value, { r, g, b, a }
+end
+
+function ResourceBars.NormalizeAbsoluteThresholdColorPoints(cfg, pType)
+	if type(cfg) ~= "table" or cfg.useAbsoluteThresholdColors ~= true then return nil end
+	local maxPoints = tonumber(RB.ABSOLUTE_THRESHOLD_COLOR_MAX_POINTS) or 10
+	local count = tonumber(cfg.absoluteThresholdColorPointCount) or tonumber(RB.ABSOLUTE_THRESHOLD_COLOR_DEFAULT_COUNT) or 2
+	count = floor(count + 0.5)
+	if count < 1 then count = 1 end
+	if count > maxPoints then count = maxPoints end
+
+	local points = {}
+	local source = cfg.absoluteThresholdColorPoints
+	for i = 1, count do
+		local defaultValue, defaultColor = ResourceBars.GetDefaultAbsoluteThresholdColorPoint(i, pType)
+		local entry = type(source) == "table" and source[i] or nil
+		local value = ResourceBars.ClampAbsoluteThresholdColorValue(entry and (entry.value or entry[1]), pType) or defaultValue
+		local color = entry and (entry.color or entry[2]) or defaultColor
+		local r, g, b, a
+		if type(color) == "table" then
+			if color.r then
+				r, g, b, a = color.r or defaultColor[1], color.g or defaultColor[2], color.b or defaultColor[3], color.a or defaultColor[4]
+			else
+				r = color[1] or defaultColor[1]
+				g = color[2] or defaultColor[2]
+				b = color[3] or defaultColor[3]
+				a = color[4] or defaultColor[4]
+			end
+		else
+			r, g, b, a = defaultColor[1], defaultColor[2], defaultColor[3], defaultColor[4]
+		end
+		points[#points + 1] = { value = value, color = { r, g, b, a } }
+	end
+
+	if #points == 0 then return nil end
+	tsort(points, function(a, b) return (a.value or 0) < (b.value or 0) end)
+	return points
+end
+
+function ResourceBars.ResolveAbsoluteThresholdColor(cfg, currentValue, pType, maxValue)
+	if type(cfg) ~= "table" or cfg.useAbsoluteThresholdColors ~= true then return nil end
+	if issecretvalue and (issecretvalue(currentValue) or issecretvalue(maxValue)) then return nil end
+	local cur = tonumber(currentValue)
+	if cur == nil then return nil end
+	local mode = ResourceBars.GetThresholdColorModeAndCap(pType)
+	if mode == "PERCENT" then
+		local mx = tonumber(maxValue)
+		if mx ~= nil and mx > 0 then cur = (cur / mx) * 100 end
+		cur = floor((cur * 10) + 0.5) / 10
+	end
+	local points = ResourceBars.NormalizeAbsoluteThresholdColorPoints(cfg, pType)
+	if not points then return nil end
+	local selectedColor
+	for i = 1, #points do
+		local point = points[i]
+		if cur >= (point.value or 0) then
+			selectedColor = point.color
+		else
+			break
+		end
+	end
+	if not selectedColor then return nil end
+	return selectedColor[1] or 1, selectedColor[2] or 1, selectedColor[3] or 1, selectedColor[4] or 1
+end
+
+function ResourceBars.ResolveAbsoluteThresholdColorForSecretPower(cfg, pType, powerEnum, curPower, maxPower, baseColor)
+	if type(cfg) ~= "table" or cfg.useAbsoluteThresholdColors ~= true then return nil end
+	if not powerEnum then return nil end
+	local points = ResourceBars.NormalizeAbsoluteThresholdColorPoints(cfg, pType)
+	if not points or #points == 0 then return nil end
+
+	if not (C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor and Enum and Enum.LuaCurveType and Enum.LuaCurveType.Step) then return nil end
+	local curve = C_CurveUtil.CreateColorCurve()
+	if not curve then return nil end
+	curve:SetType(Enum.LuaCurveType.Step)
+
+	local br, bg, bb, ba = 1, 1, 1, 1
+	if type(baseColor) == "table" then
+		br = baseColor[1] or 1
+		bg = baseColor[2] or 1
+		bb = baseColor[3] or 1
+		ba = baseColor[4] or 1
+	end
+	local highest = points[#points] and points[#points].color
+	local hr = highest and highest[1] or br
+	local hg = highest and highest[2] or bg
+	local hb = highest and highest[3] or bb
+	local ha = highest and highest[4] or ba
+
+	curve:AddPoint(1.0, CreateColor(hr, hg, hb, ha))
+	for i = #points, 1, -1 do
+		local point = points[i]
+		local value = tonumber(point and point.value) or 0
+		local progress = value / 100
+		if progress < 0 then progress = 0 end
+		if progress > 1 then progress = 1 end
+		local color = point and point.color
+		local r = color and color[1] or 1
+		local g = color and color[2] or 1
+		local b = color and color[3] or 1
+		local a = color and color[4] or 1
+		curve:AddPoint(progress, CreateColor(r, g, b, a))
+	end
+	curve:AddPoint(0.0, CreateColor(br, bg, bb, ba))
+
+	local curveColor = getPowerPercent("player", powerEnum, curPower, maxPower, curve)
+	if curveColor and curveColor.GetRGBA then return curveColor:GetRGBA() end
+	return nil
+end
+
 local function applyBarFillColor(bar, cfg, pType)
 	if not bar then return end
 	cfg = cfg or {}
@@ -2128,6 +2329,7 @@ local function applyBarFillColor(bar, cfg, pType)
 	bar._lastColor = bar._lastColor or {}
 	bar._lastColor[1], bar._lastColor[2], bar._lastColor[3], bar._lastColor[4] = targetR, targetG, targetB, targetA or 1
 	bar._usingMaxColor = usingMaxColor
+	bar._usingAbsoluteThresholdColor = false
 	if pType and pType ~= "RUNES" then SetColorCurvePointsPower(pType, cfg.maxColor, bar._baseColor) end
 	configureSpecialTexture(bar, pType, cfg)
 	if ResourceBars.RefreshStatusBarGradient then ResourceBars.RefreshStatusBarGradient(bar, cfg) end
@@ -3134,6 +3336,15 @@ function updatePowerBar(type, runeSlot)
 		for i = count + 1, #charging do
 			charging[i] = nil
 		end
+		local readyCount = 6 - count
+		local usingThresholdColor = false
+		do
+			local tr, tg, tb, ta = ResourceBars.ResolveAbsoluteThresholdColor(cfg, readyCount, "RUNES", 6)
+			if tr ~= nil then
+				readyR, readyG, readyB, readyA = tr, tg, tb, ta
+				usingThresholdColor = true
+			end
+		end
 		-- Runes use max color only when all six runes are ready (resource at maximum).
 		local allRunesReady = count == 0
 		if cfg.useMaxColor == true and allRunesReady then
@@ -3148,6 +3359,7 @@ function updatePowerBar(type, runeSlot)
 		bar._runeReadyR, bar._runeReadyG, bar._runeReadyB, bar._runeReadyA = readyR, readyG, readyB, readyA
 		bar._runeCooldownR, bar._runeCooldownG, bar._runeCooldownB, bar._runeCooldownA = cooldownR, cooldownG, cooldownB, cooldownA
 		bar._usingMaxColor = cfg.useMaxColor == true and allRunesReady
+		bar._usingAbsoluteThresholdColor = usingThresholdColor and not bar._usingMaxColor
 		if count > 1 then
 			local snapshot = bar._chargingSnapshot
 			if not snapshot then
@@ -3483,6 +3695,7 @@ function updatePowerBar(type, runeSlot)
 			end
 		end
 		bar._usingMaxColor = flag == "max"
+		bar._usingAbsoluteThresholdColor = false
 		configureSpecialTexture(bar, type, cfg)
 		if ResourceBars.RefreshStatusBarGradient then ResourceBars.RefreshStatusBarGradient(bar, cfg) end
 		return
@@ -3569,11 +3782,15 @@ function updatePowerBar(type, runeSlot)
 
 		local targetR, targetG, targetB, targetA = bar._baseColor[1] or 1, bar._baseColor[2] or 1, bar._baseColor[3] or 1, bar._baseColor[4] or 1
 		local flag
+		local thresholdR, thresholdG, thresholdB, thresholdA = ResourceBars.ResolveAbsoluteThresholdColor(cfg, stacks, type, logicalMax)
 		local useMaxDefault = (RB.AURA_POWER_CONFIG[type] and RB.AURA_POWER_CONFIG[type].useMaxColorDefault) or false
 		if (cfg.useMaxColor ~= false and (cfg.useMaxColor or useMaxDefault)) and logicalMax > 0 and stacks >= logicalMax then
 			local maxCol = cfg.maxColor or RB.DEFAULT_MAX_COLOR
 			targetR, targetG, targetB, targetA = maxCol[1] or targetR, maxCol[2] or targetG, maxCol[3] or targetB, maxCol[4] or targetA
 			flag = "max"
+		elseif thresholdR ~= nil then
+			targetR, targetG, targetB, targetA = thresholdR, thresholdG, thresholdB, thresholdA
+			flag = "threshold"
 		elseif
 			type == "MAELSTROM_WEAPON"
 			and cfg.useMaelstromFiveColor ~= false
@@ -3594,6 +3811,7 @@ function updatePowerBar(type, runeSlot)
 			end
 		end
 		bar._usingMaxColor = flag == "max"
+		bar._usingAbsoluteThresholdColor = flag == "threshold"
 		bar._usingMaelstromFiveColor = flag == "mid"
 		local usingDiscreteSegments = refreshDiscreteSegmentsForBar(type, bar, cfg, shownStacks, visualMax, stacks)
 		configureSpecialTexture(bar, type, cfg)
@@ -3608,6 +3826,7 @@ function updatePowerBar(type, runeSlot)
 	if not pType then return end
 	local cfg = getBarSettings(type) or {}
 	local cfgDef = (RB.POWER_CONFIG and RB.POWER_CONFIG[type]) or {}
+	local thresholdModeForBar = ResourceBars.GetThresholdColorModeAndCap(type)
 	local isSoulShards = type == "SOUL_SHARDS"
 	local useRaw = isSoulShards and addon.variables and addon.variables.unitClass == "WARLOCK" and addon.variables.unitSpec == 3
 	local maxPower = bar._lastMax
@@ -3728,15 +3947,24 @@ function updatePowerBar(type, runeSlot)
 	local maxPowerSecret = addon.variables.isMidnight and issecretvalue and issecretvalue(maxPower)
 	local hasSecretPower = curPowerSecret or maxPowerSecret
 	local reachedThree = useHolyThreeColor and not curPowerSecret and curPower >= holyThreeThreshold
+	local thresholdSampleValue = isSoulShards and displayCur or curPower
+	local secretThresholdR, secretThresholdG, secretThresholdB, secretThresholdA
+	if hasSecretPower and thresholdModeForBar == "PERCENT" then
+		secretThresholdR, secretThresholdG, secretThresholdB, secretThresholdA = ResourceBars.ResolveAbsoluteThresholdColorForSecretPower(cfg, type, pType, curPower, maxPower, bar._baseColor)
+	end
 	if not hasSecretPower then
 		local reachedCap = curPower >= max(maxPower, 1)
 		local useMaxColor = cfg.useMaxColor == true
+		local thresholdR, thresholdG, thresholdB, thresholdA = ResourceBars.ResolveAbsoluteThresholdColor(cfg, thresholdSampleValue, type, maxPower)
 		local targetR, targetG, targetB, targetA = bar._baseColor[1], bar._baseColor[2], bar._baseColor[3], bar._baseColor[4]
 		local flag
 		if useMaxColor and reachedCap then
 			local maxCol = cfg.maxColor or RB.DEFAULT_MAX_COLOR
 			targetR, targetG, targetB, targetA = maxCol[1] or targetR, maxCol[2] or targetG, maxCol[3] or targetB, maxCol[4] or (bar._baseColor[4] or 1)
 			flag = "max"
+		elseif thresholdR ~= nil then
+			targetR, targetG, targetB, targetA = thresholdR, thresholdG, thresholdB, thresholdA
+			flag = "threshold"
 		elseif reachedThree then
 			targetR, targetG, targetB, targetA = getHolyThreeColor(cfg)
 			flag = "holy3"
@@ -3752,6 +3980,7 @@ function updatePowerBar(type, runeSlot)
 			end
 		end
 		bar._usingMaxColor = flag == "max"
+		bar._usingAbsoluteThresholdColor = flag == "threshold"
 		bar._usingHolyThreeColor = flag == "holy3"
 	else
 		local lc = bar._lastColor or {}
@@ -3776,23 +4005,32 @@ function updatePowerBar(type, runeSlot)
 				end
 			end
 			if not flag then
-				if reachedThree then
+				if secretThresholdR ~= nil then
+					targetR, targetG, targetB, targetA = secretThresholdR, secretThresholdG, secretThresholdB, secretThresholdA
+					flag = "threshold"
+				elseif reachedThree then
 					targetR, targetG, targetB, targetA = getHolyThreeColor(cfg)
 					flag = "holy3"
 				end
-				if lc[1] ~= targetR or lc[2] ~= targetG or lc[3] ~= targetB or lc[4] ~= targetA then
-					lc[1], lc[2], lc[3], lc[4] = targetR, targetG, targetB, targetA
-					bar._lastColor = lc
-					if cfg.useBarColor and not cfg.useMaxColor and not reachedThree then bar:GetStatusBarTexture():SetVertexColor(1, 1, 1, 1) end
-					if ResourceBars.SetStatusBarColorWithGradient then
-						ResourceBars.SetStatusBarColorWithGradient(bar, cfg, targetR, targetG, targetB, targetA)
-					else
-						bar:SetStatusBarColor(targetR, targetG, targetB, targetA)
-					end
+				lc[1], lc[2], lc[3], lc[4] = targetR, targetG, targetB, targetA
+				bar._lastColor = lc
+				if cfg.useBarColor and not cfg.useMaxColor and not reachedThree then
+					local tex = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+					if tex and tex.SetVertexColor then tex:SetVertexColor(1, 1, 1, 1) end
+				end
+				if ResourceBars.SetStatusBarColorWithGradient then
+					ResourceBars.SetStatusBarColorWithGradient(bar, cfg, targetR, targetG, targetB, targetA)
+				else
+					bar:SetStatusBarColor(targetR, targetG, targetB, targetA)
 				end
 			end
 			bar._usingMaxColor = flag == "maxCurve"
+			bar._usingAbsoluteThresholdColor = flag == "threshold"
 			bar._usingHolyThreeColor = flag == "holy3"
+		else
+			bar._usingMaxColor = false
+			bar._usingAbsoluteThresholdColor = false
+			bar._usingHolyThreeColor = false
 		end
 	end
 
@@ -6293,6 +6531,16 @@ ResourceBars.THRESHOLD_THICKNESS = RB.THRESHOLD_THICKNESS
 ResourceBars.THRESHOLD_DEFAULT = RB.THRESHOLD_DEFAULT
 ResourceBars.DEFAULT_THRESHOLDS = RB.DEFAULT_THRESHOLDS
 ResourceBars.DEFAULT_THRESHOLD_COUNT = RB.DEFAULT_THRESHOLD_COUNT
+ResourceBars.ABSOLUTE_THRESHOLD_COLOR_MAX_POINTS = RB.ABSOLUTE_THRESHOLD_COLOR_MAX_POINTS
+ResourceBars.ABSOLUTE_THRESHOLD_COLOR_DEFAULT_COUNT = RB.ABSOLUTE_THRESHOLD_COLOR_DEFAULT_COUNT
+ResourceBars.ABSOLUTE_THRESHOLD_COLOR_VALUE_CAP = RB.ABSOLUTE_THRESHOLD_COLOR_VALUE_CAP
+ResourceBars.ABSOLUTE_THRESHOLD_COLOR_VALUE_CAP_VOID_METAMORPHOSIS = RB.ABSOLUTE_THRESHOLD_COLOR_VALUE_CAP_VOID_METAMORPHOSIS
+ResourceBars.ABSOLUTE_THRESHOLD_COLOR_VALUE_CAP_CONTINUOUS = RB.ABSOLUTE_THRESHOLD_COLOR_VALUE_CAP_CONTINUOUS
+ResourceBars.ABSOLUTE_THRESHOLD_COLOR_VALUE_CAP_PERCENT = RB.ABSOLUTE_THRESHOLD_COLOR_VALUE_CAP_PERCENT
+ResourceBars.ABSOLUTE_THRESHOLD_COLOR_DEFAULTS = RB.ABSOLUTE_THRESHOLD_COLOR_DEFAULTS
+ResourceBars.ABSOLUTE_THRESHOLD_COLOR_DEFAULTS_VOID_METAMORPHOSIS = RB.ABSOLUTE_THRESHOLD_COLOR_DEFAULTS_VOID_METAMORPHOSIS
+ResourceBars.ABSOLUTE_THRESHOLD_COLOR_DEFAULTS_CONTINUOUS = RB.ABSOLUTE_THRESHOLD_COLOR_DEFAULTS_CONTINUOUS
+ResourceBars.ABSOLUTE_THRESHOLD_COLOR_DEFAULTS_PERCENT = RB.ABSOLUTE_THRESHOLD_COLOR_DEFAULTS_PERCENT
 ResourceBars.STAGGER_EXTRA_THRESHOLD_HIGH = RB.STAGGER_EXTRA_THRESHOLD_HIGH
 ResourceBars.STAGGER_EXTRA_THRESHOLD_EXTREME = RB.STAGGER_EXTRA_THRESHOLD_EXTREME
 ResourceBars.STAGGER_EXTRA_COLORS = RB.STAGGER_EXTRA_COLORS

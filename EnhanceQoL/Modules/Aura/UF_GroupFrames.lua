@@ -194,7 +194,7 @@ local function ensureBorderFrame(frame, borderCfg)
 	end
 	border:SetFrameStrata(targetStrata)
 	local baseLevel = frame:GetFrameLevel() or 0
-	local levelOffset = clampNumber(tonumber(borderCfg and borderCfg.frameLevelOffset), -20, 50, 3)
+	local levelOffset = clampNumber(tonumber(borderCfg and borderCfg.frameLevelOffset), -20, 1000, 3)
 	levelOffset = floor(levelOffset + (levelOffset >= 0 and 0.5 or -0.5))
 	local borderLevel = baseLevel + levelOffset
 	if borderLevel < 0 then borderLevel = 0 end
@@ -678,6 +678,127 @@ local function resolveSortMethod(cfg)
 		if raw == nil or raw == "" or tostring(raw):upper() == "CUSTOM" then v = "NAMELIST" end
 	end
 	return v
+end
+
+function GF.NormalizeUnitGrowthMode(value, fallback)
+	local fb = tostring(fallback or "DOWN"):upper()
+	local v = tostring(value or ""):upper()
+	if v == "CENTER" or v == "CENTERH" or v == "CENTER_HORIZONTAL" or v == "CENTER-HORIZONTAL" or v == "CENTERHORIZONTAL" then return "CENTER_HORIZONTAL" end
+	if v == "CENTERV" or v == "CENTER_VERTICAL" or v == "CENTER-VERTICAL" or v == "CENTERVERTICAL" then return "CENTER_VERTICAL" end
+	if GFH and GFH.NormalizeGrowthDirection then
+		local normalized = GFH.NormalizeGrowthDirection(v, nil)
+		if normalized then return normalized end
+	else
+		if v == "UP" or v == "DOWN" or v == "LEFT" or v == "RIGHT" then return v end
+	end
+	if fb == "CENTER_HORIZONTAL" or fb == "CENTER_VERTICAL" then return fb end
+	if GFH and GFH.NormalizeGrowthDirection then return GFH.NormalizeGrowthDirection(fb, "DOWN") end
+	if fb == "UP" or fb == "DOWN" or fb == "LEFT" or fb == "RIGHT" then return fb end
+	return "DOWN"
+end
+
+function GF.ResolveUnitGrowthDirection(value, fallback)
+	local mode = GF.NormalizeUnitGrowthMode(value, fallback)
+	if mode == "CENTER_HORIZONTAL" then return mode, "RIGHT" end
+	if mode == "CENTER_VERTICAL" then return mode, "DOWN" end
+	return mode, mode
+end
+
+function GF.GetPartyCenterGrowthRelativePoint(growth)
+	local _, baseGrowth = GF.ResolveUnitGrowthDirection(growth, "DOWN")
+	if baseGrowth == "RIGHT" or baseGrowth == "LEFT" then return "TOP" end
+	return "LEFT"
+end
+
+function GF.IsPartyCenterGrowthMode(cfg)
+	if not cfg then return false end
+	local mode = GF.NormalizeUnitGrowthMode(cfg.growth, "DOWN")
+	return mode == "CENTER_HORIZONTAL" or mode == "CENTER_VERTICAL"
+end
+
+function GF.BuildPartyCenterGrowthNameList(cfg)
+	local names, seen = {}, {}
+	local function addName(unit)
+		if not (unit and UnitExists and UnitExists(unit)) then return end
+		local name = GFH and GFH.GetUnitFullName and GFH.GetUnitFullName(unit)
+		if not name and UnitName then
+			local rawName, realm = UnitName(unit)
+			if rawName and rawName ~= "" then
+				if realm and realm ~= "" then
+					name = rawName .. "-" .. realm
+				else
+					name = rawName
+				end
+			end
+		end
+		if not name or seen[name] then return end
+		seen[name] = true
+		names[#names + 1] = name
+	end
+
+	local showSolo = cfg and cfg.showSolo == true
+	if IsInRaid and IsInRaid() then showSolo = false end
+	if IsInGroup and IsInGroup() then
+		addName("player")
+		for i = 1, 4 do
+			addName("party" .. i)
+		end
+	elseif showSolo then
+		addName("player")
+	end
+
+	local count = #names
+	if count == 0 then return nil, 0, 0 end
+	local leftCount = floor((count - 1) / 2)
+	if count == 1 then return names[1], leftCount, count end
+
+	local left, right = {}, {}
+	for i = 2, count do
+		if i % 2 == 0 then
+			left[#left + 1] = names[i]
+		else
+			right[#right + 1] = names[i]
+		end
+	end
+
+	local ordered = {}
+	for i = #left, 1, -1 do
+		ordered[#ordered + 1] = left[i]
+	end
+	ordered[#ordered + 1] = names[1]
+	for i = 1, #right do
+		ordered[#ordered + 1] = right[i]
+	end
+
+	return table.concat(ordered, ","), leftCount, count
+end
+
+function GF.ComputePartyCenterGrowthAnchorOffset(cfg, growth, scale, countOverride)
+	if not cfg then return 0, 0, 0 end
+	local _, baseGrowth = GF.ResolveUnitGrowthDirection(growth or cfg.growth, "DOWN")
+	local count = tonumber(countOverride)
+	if not count then
+		local _, _, dynamicCount = GF.BuildPartyCenterGrowthNameList(cfg)
+		count = dynamicCount or 0
+	end
+	count = max(0, floor(count + 0.5))
+	local leftCount = (count > 0) and floor((count - 1) / 2) or 0
+	scale = scale or (GFH and GFH.GetEffectiveScale and GFH.GetEffectiveScale(UIParent)) or 1
+
+	local spacing = roundToPixel(clampNumber(tonumber(cfg.spacing) or 0, 0, 40, 0), scale)
+	local w = roundToEvenPixel(clampNumber(tonumber(cfg.width) or 100, 40, 600, 100), scale)
+	local h = roundToEvenPixel(clampNumber(tonumber(cfg.height) or 24, 10, 200, 24), scale)
+
+	if baseGrowth == "RIGHT" or baseGrowth == "LEFT" then
+		local step = roundToPixel(w + spacing, scale)
+		local sign = (baseGrowth == "LEFT") and 1 or -1
+		local half = roundToPixel(w * 0.5, scale)
+		return roundToPixel(sign * leftCount * step + sign * half, scale), 0, count
+	end
+	local step = roundToPixel(h + spacing, scale)
+	local sign = (baseGrowth == "UP") and -1 or 1
+	local half = roundToPixel(h * 0.5, scale)
+	return 0, roundToPixel(sign * leftCount * step + sign * half, scale), count
 end
 
 local function isGroupByGroup(cfg, def) return resolveGroupByValue(cfg, def) == "GROUP" end
@@ -2543,6 +2664,7 @@ local function ensureDB()
 			-- Legacy party defaults grouped by role; clear persisted values so INDEX uses party unit index order.
 			t.groupBy = nil
 			t.groupingOrder = nil
+			if GF.IsPartyCenterGrowthMode(t) then t.showPlayer = true end
 		end
 	end
 	GF._ensureSharedHealerBuffPlacement(db)
@@ -6850,7 +6972,8 @@ function GF:UpdateAnchorSize(kind)
 	local spacing = roundToPixel(clampNumber(tonumber(cfg.spacing) or 0, 0, 40, 0), scale)
 	local columnSpacing = spacing
 	if isRaidLikeKind(kind) then columnSpacing = roundToPixel(clampNumber(tonumber(cfg.columnSpacing) or spacing, 0, 40, spacing), scale) end
-	local growth = (cfg.growth or "DOWN"):upper()
+	local growthMode, growth = GF.ResolveUnitGrowthDirection(cfg.growth, "DOWN")
+	if kind ~= "party" and (growthMode == "CENTER_HORIZONTAL" or growthMode == "CENTER_VERTICAL") then growth = growthMode == "CENTER_HORIZONTAL" and "RIGHT" or "DOWN" end
 
 	local unitsPer = 5
 	local columns = 1
@@ -6995,6 +7118,27 @@ function GF:UpdatePreviewLayout(kind)
 	local raidStyle = isRaidLikeKind(kind)
 	local sampleLimit = (kind == "raid" and ((GF._previewSampleSize and GF._previewSampleSize[kind]) or 10)) or nil
 	local samples = (GFH.BuildPreviewSampleList and GFH.BuildPreviewSampleList(kind, cfg, PREVIEW_SAMPLES[kind], sampleLimit, 2, 3)) or (PREVIEW_SAMPLES[kind] or {})
+	local growthMode, growth = GF.ResolveUnitGrowthDirection(cfg.growth, "DOWN")
+	local centerGrowthActive = (kind == "party") and (growthMode == "CENTER_HORIZONTAL" or growthMode == "CENTER_VERTICAL")
+	if centerGrowthActive and #samples > 1 then
+		local left, right = {}, {}
+		for i = 2, #samples do
+			if i % 2 == 0 then
+				left[#left + 1] = samples[i]
+			else
+				right[#right + 1] = samples[i]
+			end
+		end
+		local ordered = {}
+		for i = #left, 1, -1 do
+			ordered[#ordered + 1] = left[i]
+		end
+		ordered[#ordered + 1] = samples[1]
+		for i = 1, #right do
+			ordered[#ordered + 1] = right[i]
+		end
+		samples = ordered
+	end
 	GF._previewSampleCount = GF._previewSampleCount or {}
 	GF._previewSampleCount[kind] = #samples
 
@@ -7007,7 +7151,6 @@ function GF:UpdatePreviewLayout(kind)
 	h = roundToEvenPixel(h, scale)
 
 	local spacing = clampNumber(tonumber(cfg.spacing) or 0, 0, 40, 0)
-	local growth = (GFH.NormalizeGrowthDirection and GFH.NormalizeGrowthDirection(cfg.growth, "DOWN")) or "DOWN"
 	spacing = roundToPixel(spacing, scale)
 
 	local startPoint = getGrowthStartPoint(growth)
@@ -7140,6 +7283,23 @@ function GF:UpdatePreviewLayout(kind)
 	visualH = roundToEvenPixel(max(1, visualH), scale)
 	visualSpacing = roundToPixel(visualSpacing, scale)
 	visualColumnSpacing = roundToPixel(visualColumnSpacing, scale)
+	local previewAnchorPoint = startPoint
+	if centerGrowthActive then previewAnchorPoint = GF.GetPartyCenterGrowthRelativePoint(growth) end
+	local previewCenterOffsetX, previewCenterOffsetY = 0, 0
+	if centerGrowthActive and maxShown and maxShown > 0 then
+		local leftCount = floor((maxShown - 1) / 2)
+		if isHorizontal then
+			local sign = (growth == "LEFT") and 1 or -1
+			local step = roundToPixel(visualW + visualSpacing, scale)
+			local half = roundToPixel(visualW * 0.5, scale)
+			previewCenterOffsetX = roundToPixel(sign * leftCount * step + sign * half, scale)
+		else
+			local sign = (growth == "UP") and -1 or 1
+			local step = roundToPixel(visualH + visualSpacing, scale)
+			local half = roundToPixel(visualH * 0.5, scale)
+			previewCenterOffsetY = roundToPixel(sign * leftCount * step + sign * half, scale)
+		end
+	end
 	for i, btn in ipairs(frames) do
 		if btn then
 			local groupedEntry = groupedPreviewEntries and groupedPreviewEntries[i]
@@ -7203,9 +7363,9 @@ function GF:UpdatePreviewLayout(kind)
 					end
 				else
 					if isHorizontal then
-						btn:SetPoint(startPoint, anchor, startPoint, roundToPixel((i - 1) * (visualW + visualSpacing) * xSign, scale), 0)
+						btn:SetPoint(startPoint, anchor, previewAnchorPoint, previewCenterOffsetX + roundToPixel((i - 1) * (visualW + visualSpacing) * xSign, scale), previewCenterOffsetY)
 					else
-						btn:SetPoint(startPoint, anchor, startPoint, 0, roundToPixel((i - 1) * (visualH + visualSpacing) * ySign, scale))
+						btn:SetPoint(startPoint, anchor, previewAnchorPoint, previewCenterOffsetX, previewCenterOffsetY + roundToPixel((i - 1) * (visualH + visualSpacing) * ySign, scale))
 					end
 				end
 				GF:CacheUnitStatic(btn)
@@ -7890,7 +8050,8 @@ function GF:RefreshCustomSortNameList(kind)
 		return
 	end
 	local sortMethod = resolveSortMethod(cfg)
-	if sortMethod ~= "NAMELIST" then
+	local centerGrowthActive = (kind == "party") and GF.IsPartyCenterGrowthMode(cfg)
+	if sortMethod ~= "NAMELIST" and not centerGrowthActive then
 		GF:SetHeaderAttributeIfChanged(header, "nameList", nil)
 		if kind == "raid" and GF._raidGroupHeaders then
 			for _, gh in ipairs(GF._raidGroupHeaders) do
@@ -7900,9 +8061,27 @@ function GF:RefreshCustomSortNameList(kind)
 		return
 	end
 	if kind == "party" then
-		local nameList = GFH.BuildCustomSortNameList(cfg, "party")
+		local nameList
+		if centerGrowthActive then
+			nameList = GF.BuildPartyCenterGrowthNameList(cfg)
+		else
+			nameList = GFH.BuildCustomSortNameList(cfg, "party")
+		end
 		if nameList == "" then nameList = nil end
 		GF:SetHeaderAttributeIfChanged(header, "nameList", nameList)
+		if centerGrowthActive and GF.anchors and GF.anchors.party then
+			local _, growthDir = GF.ResolveUnitGrowthDirection(cfg and cfg.growth, "DOWN")
+			local p = getGrowthStartPoint(growthDir)
+			local rp = GF.GetPartyCenterGrowthRelativePoint(growthDir)
+			local x, y = GF.ComputePartyCenterGrowthAnchorOffset(cfg, growthDir)
+			header:ClearAllPoints()
+			header:SetPoint(p, GF.anchors.party, rp, x, y)
+			if header.IsShown and header:IsShown() then
+				nudgeHeaderLayout(header)
+			else
+				header._eqolPendingLayout = true
+			end
+		end
 		return
 	end
 	local customSort = GFH and GFH.EnsureCustomSortConfig and GFH.EnsureCustomSortConfig(cfg)
@@ -8058,8 +8237,10 @@ function GF:ApplyHeaderAttributes(kind)
 	end
 
 	local spacing = clampNumber(tonumber(cfg.spacing) or 0, 0, 40, 0)
-	local growth = (GFH.NormalizeGrowthDirection and GFH.NormalizeGrowthDirection(cfg.growth, "DOWN")) or "DOWN"
-	if cfg.growth ~= growth then cfg.growth = growth end
+	local growthMode, growth = GF.ResolveUnitGrowthDirection(cfg.growth, "DOWN")
+	if kind ~= "party" and (growthMode == "CENTER_HORIZONTAL" or growthMode == "CENTER_VERTICAL") then growthMode = growth end
+	if cfg.growth ~= growthMode then cfg.growth = growthMode end
+	local centerGrowthActive = (kind == "party") and (growthMode == "CENTER_HORIZONTAL" or growthMode == "CENTER_VERTICAL")
 	local scale = GFH.GetEffectiveScale(UIParent)
 	spacing = roundToPixel(spacing, scale)
 	local raidUnitsPerColumn
@@ -8080,19 +8261,24 @@ function GF:ApplyHeaderAttributes(kind)
 		cfg.groupingOrder = nil
 		setAttr("showParty", true)
 		setAttr("showRaid", false)
-		setAttr("showPlayer", cfg.showPlayer and true or false)
+		setAttr("showPlayer", centerGrowthActive or (cfg.showPlayer and true or false))
 		setAttr("showSolo", cfg.showSolo and true or false)
 		setAttr("groupBy", nil)
 		setAttr("groupingOrder", nil)
 		setAttr("groupFilter", nil)
 		setAttr("roleFilter", nil)
 		setAttr("strictFiltering", false)
-		sortMethod = resolveSortMethod(cfg)
-		local sortDir = (GFH and GFH.NormalizeSortDir and GFH.NormalizeSortDir(cfg.sortDir)) or "ASC"
+		sortMethod = centerGrowthActive and "NAMELIST" or resolveSortMethod(cfg)
+		local sortDir = centerGrowthActive and "ASC" or ((GFH and GFH.NormalizeSortDir and GFH.NormalizeSortDir(cfg.sortDir)) or "ASC")
 		setAttr("sortMethod", sortMethod)
 		setAttr("sortDir", sortDir)
 		if sortMethod == "NAMELIST" then
-			local nameList = GFH.BuildCustomSortNameList(cfg, "party")
+			local nameList
+			if centerGrowthActive then
+				nameList = GF.BuildPartyCenterGrowthNameList(cfg)
+			else
+				nameList = GFH.BuildCustomSortNameList(cfg, "party")
+			end
 			if nameList == "" then nameList = nil end
 			setAttr("nameList", nameList)
 		else
@@ -8284,7 +8470,13 @@ function GF:ApplyHeaderAttributes(kind)
 		GF:UpdateAnchorSize(kind)
 		header:ClearAllPoints()
 		local p = getGrowthStartPoint(growth)
-		header:SetPoint(p, anchor, p, 0, 0)
+		local rp = p
+		if centerGrowthActive then rp = GF.GetPartyCenterGrowthRelativePoint(growth) end
+		local anchorOffsetX, anchorOffsetY = 0, 0
+		if centerGrowthActive then
+			anchorOffsetX, anchorOffsetY = GF.ComputePartyCenterGrowthAnchorOffset(cfg, growth, scale)
+		end
+		header:SetPoint(p, anchor, rp, anchorOffsetX, anchorOffsetY)
 	else
 		setPointFromCfg(header, cfg)
 	end
@@ -10526,7 +10718,7 @@ local function buildEditModeSettings(kind, editModeId)
 			allowInput = true,
 			field = "powerHeight",
 			minValue = 0,
-			maxValue = 50,
+			maxValue = 1000,
 			valueStep = 1,
 			default = (DEFAULTS[kind] and DEFAULTS[kind].powerHeight) or 6,
 			parentId = "frame",
@@ -10690,24 +10882,34 @@ local function buildEditModeSettings(kind, editModeId)
 			parentId = "layout",
 			get = function()
 				local cfg = getCfg(kind)
-				return (cfg and cfg.growth) or (DEFAULTS[kind] and DEFAULTS[kind].growth) or "DOWN"
+				local raw = (cfg and cfg.growth) or (DEFAULTS[kind] and DEFAULTS[kind].growth) or "DOWN"
+				local mode, base = GF.ResolveUnitGrowthDirection(raw, "DOWN")
+				if kind ~= "party" and (mode == "CENTER_HORIZONTAL" or mode == "CENTER_VERTICAL") then return base end
+				return mode
 			end,
 			set = function(_, value)
 				local cfg = getCfg(kind)
 				if not cfg or not value then return end
-				cfg.growth = tostring(value):upper()
-				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "growth", cfg.growth, nil, true) end
+				local mode, baseGrowth = GF.ResolveUnitGrowthDirection(value, cfg.growth or "DOWN")
+				if kind ~= "party" and (mode == "CENTER_HORIZONTAL" or mode == "CENTER_VERTICAL") then mode = baseGrowth end
+				cfg.growth = mode
+				if kind == "party" and (mode == "CENTER_HORIZONTAL" or mode == "CENTER_VERTICAL") then cfg.showPlayer = true end
+				if EditMode and EditMode.SetValue then
+					EditMode:SetValue(editModeId, "growth", cfg.growth, nil, true)
+					if kind == "party" and (mode == "CENTER_HORIZONTAL" or mode == "CENTER_VERTICAL") then EditMode:SetValue(editModeId, "showPlayer", true, nil, true) end
+				end
 				if raidKind then
 					local defaultGroupGrowth = DEFAULTS and DEFAULTS.raid and DEFAULTS.raid.groupGrowth
 					if GFH.ResolveGroupGrowthDirection then
-						cfg.groupGrowth = GFH.ResolveGroupGrowthDirection(cfg.groupGrowth, cfg.growth, defaultGroupGrowth)
+						cfg.groupGrowth = GFH.ResolveGroupGrowthDirection(cfg.groupGrowth, baseGrowth, defaultGroupGrowth)
 					else
 						cfg.groupGrowth = (GFH.NormalizeGrowthDirection and GFH.NormalizeGrowthDirection(cfg.groupGrowth, nil))
-							or ((cfg.growth == "RIGHT" or cfg.growth == "LEFT") and "DOWN" or "RIGHT")
+							or ((baseGrowth == "RIGHT" or baseGrowth == "LEFT") and "DOWN" or "RIGHT")
 					end
 					if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupGrowth", cfg.groupGrowth, nil, true) end
 				end
 				GF:ApplyHeaderAttributes(kind)
+				if kind == "party" then GF:RefreshCustomSortNameList(kind) end
 			end,
 			generator = function(_, root)
 				local options = {
@@ -10716,26 +10918,39 @@ local function buildEditModeSettings(kind, editModeId)
 					{ value = "UP", label = "Up" },
 					{ value = "LEFT", label = "Left" },
 				}
+				if kind == "party" then
+					options[#options + 1] = { value = "CENTER_VERTICAL", label = "Center vertical" }
+					options[#options + 1] = { value = "CENTER_HORIZONTAL", label = "Center horizontal" }
+				end
 				for _, option in ipairs(options) do
 					root:CreateRadio(option.label, function()
 						local cfg = getCfg(kind)
-						return (cfg and cfg.growth) == option.value
+						local mode, base = GF.ResolveUnitGrowthDirection(cfg and cfg.growth, "DOWN")
+						if kind ~= "party" and (mode == "CENTER_HORIZONTAL" or mode == "CENTER_VERTICAL") then mode = base end
+						return mode == option.value
 					end, function()
 						local cfg = getCfg(kind)
 						if not cfg then return end
-						cfg.growth = option.value
-						if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "growth", option.value, nil, true) end
+						local mode, baseGrowth = GF.ResolveUnitGrowthDirection(option.value, cfg.growth or "DOWN")
+						if kind ~= "party" and (mode == "CENTER_HORIZONTAL" or mode == "CENTER_VERTICAL") then mode = baseGrowth end
+						cfg.growth = mode
+						if kind == "party" and (mode == "CENTER_HORIZONTAL" or mode == "CENTER_VERTICAL") then cfg.showPlayer = true end
+						if EditMode and EditMode.SetValue then
+							EditMode:SetValue(editModeId, "growth", cfg.growth, nil, true)
+							if kind == "party" and (mode == "CENTER_HORIZONTAL" or mode == "CENTER_VERTICAL") then EditMode:SetValue(editModeId, "showPlayer", true, nil, true) end
+						end
 						if raidKind then
 							local defaultGroupGrowth = DEFAULTS and DEFAULTS.raid and DEFAULTS.raid.groupGrowth
 							if GFH.ResolveGroupGrowthDirection then
-								cfg.groupGrowth = GFH.ResolveGroupGrowthDirection(cfg.groupGrowth, cfg.growth, defaultGroupGrowth)
+								cfg.groupGrowth = GFH.ResolveGroupGrowthDirection(cfg.groupGrowth, baseGrowth, defaultGroupGrowth)
 							else
 								cfg.groupGrowth = (GFH.NormalizeGrowthDirection and GFH.NormalizeGrowthDirection(cfg.groupGrowth, nil))
-									or ((cfg.growth == "RIGHT" or cfg.growth == "LEFT") and "DOWN" or "RIGHT")
+									or ((baseGrowth == "RIGHT" or baseGrowth == "LEFT") and "DOWN" or "RIGHT")
 							end
 							if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "groupGrowth", cfg.groupGrowth, nil, true) end
 						end
 						GF:ApplyHeaderAttributes(kind)
+						if kind == "party" then GF:RefreshCustomSortNameList(kind) end
 					end)
 				end
 			end,
@@ -10749,7 +10964,7 @@ local function buildEditModeSettings(kind, editModeId)
 			get = function()
 				if not raidKind then return "DOWN" end
 				local cfg = getCfg(kind)
-				local growth = (GFH.NormalizeGrowthDirection and GFH.NormalizeGrowthDirection(cfg and cfg.growth, "DOWN")) or "DOWN"
+				local _, growth = GF.ResolveUnitGrowthDirection(cfg and cfg.growth, "DOWN")
 				local defaultGroupGrowth = DEFAULTS and DEFAULTS.raid and DEFAULTS.raid.groupGrowth
 				if GFH.ResolveGroupGrowthDirection then return GFH.ResolveGroupGrowthDirection(cfg and cfg.groupGrowth, growth, defaultGroupGrowth) end
 				return (GFH.NormalizeGrowthDirection and GFH.NormalizeGrowthDirection(cfg and cfg.groupGrowth, nil)) or ((growth == "RIGHT" or growth == "LEFT") and "DOWN" or "RIGHT")
@@ -10758,7 +10973,7 @@ local function buildEditModeSettings(kind, editModeId)
 				if not raidKind then return end
 				local cfg = getCfg(kind)
 				if not cfg or not value then return end
-				local growth = (GFH.NormalizeGrowthDirection and GFH.NormalizeGrowthDirection(cfg.growth, "DOWN")) or "DOWN"
+				local _, growth = GF.ResolveUnitGrowthDirection(cfg.growth, "DOWN")
 				local defaultGroupGrowth = DEFAULTS and DEFAULTS.raid and DEFAULTS.raid.groupGrowth
 				if GFH.ResolveGroupGrowthDirection then
 					cfg.groupGrowth = GFH.ResolveGroupGrowthDirection(value, growth, defaultGroupGrowth)
@@ -10776,7 +10991,7 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 			generator = function(_, root)
 				local cfg = getCfg(kind)
-				local growth = (GFH.NormalizeGrowthDirection and GFH.NormalizeGrowthDirection(cfg and cfg.growth, "DOWN")) or "DOWN"
+				local _, growth = GF.ResolveUnitGrowthDirection(cfg and cfg.growth, "DOWN")
 				local optionA, optionB
 				if GFH.GetAllowedGroupGrowthDirections then
 					optionA, optionB = GFH.GetAllowedGroupGrowthDirections(growth)
@@ -10802,7 +11017,7 @@ local function buildEditModeSettings(kind, editModeId)
 				for _, option in ipairs(options) do
 					root:CreateRadio(option.label, function()
 						local cfg = getCfg(kind)
-						local growth = (GFH.NormalizeGrowthDirection and GFH.NormalizeGrowthDirection(cfg and cfg.growth, "DOWN")) or "DOWN"
+						local _, growth = GF.ResolveUnitGrowthDirection(cfg and cfg.growth, "DOWN")
 						local defaultGroupGrowth = DEFAULTS and DEFAULTS.raid and DEFAULTS.raid.groupGrowth
 						local current
 						if GFH.ResolveGroupGrowthDirection then
@@ -10815,7 +11030,7 @@ local function buildEditModeSettings(kind, editModeId)
 						local cfg = getCfg(kind)
 						if not cfg then return end
 						local defaultGroupGrowth = DEFAULTS and DEFAULTS.raid and DEFAULTS.raid.groupGrowth
-						local growth = (GFH.NormalizeGrowthDirection and GFH.NormalizeGrowthDirection(cfg.growth, "DOWN")) or "DOWN"
+						local _, growth = GF.ResolveUnitGrowthDirection(cfg.growth, "DOWN")
 						if GFH.ResolveGroupGrowthDirection then
 							cfg.groupGrowth = GFH.ResolveGroupGrowthDirection(option.value, growth, defaultGroupGrowth)
 						else
@@ -11092,21 +11307,21 @@ local function buildEditModeSettings(kind, editModeId)
 			field = "borderFrameLevelOffset",
 			parentId = "border",
 			minValue = -20,
-			maxValue = 50,
+			maxValue = 1000,
 			valueStep = 1,
 			get = function()
 				local cfg = getCfg(kind)
 				local bc = cfg and cfg.border or {}
 				local value = bc.frameLevelOffset
 				if value == nil then value = (DEFAULTS[kind] and DEFAULTS[kind].border and DEFAULTS[kind].border.frameLevelOffset) end
-				value = clampNumber(value, -20, 50, 3)
+				value = clampNumber(value, -20, 1000, 3)
 				return floor(value + (value >= 0 and 0.5 or -0.5))
 			end,
 			set = function(_, value)
 				local cfg = getCfg(kind)
 				if not cfg then return end
 				cfg.border = cfg.border or {}
-				local levelOffset = clampNumber(value, -20, 50, cfg.border.frameLevelOffset or 3)
+				local levelOffset = clampNumber(value, -20, 1000, cfg.border.frameLevelOffset or 3)
 				levelOffset = floor(levelOffset + (levelOffset >= 0 and 0.5 or -0.5))
 				cfg.border.frameLevelOffset = levelOffset
 				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "borderFrameLevelOffset", cfg.border.frameLevelOffset, nil, true) end
@@ -18556,9 +18771,14 @@ local function buildEditModeSettings(kind, editModeId)
 			set = function(_, value)
 				local cfg = getCfg(kind)
 				if not cfg then return end
+				if GF.IsPartyCenterGrowthMode(cfg) and value ~= true then value = true end
 				cfg.showPlayer = value and true or false
 				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "showPlayer", cfg.showPlayer, nil, true) end
 				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function()
+				local cfg = getCfg(kind)
+				return not GF.IsPartyCenterGrowthMode(cfg)
 			end,
 		}
 		settings[#settings + 1] = {
@@ -18642,6 +18862,10 @@ local function buildEditModeSettings(kind, editModeId)
 					end)
 				end
 			end,
+			isEnabled = function()
+				local cfg = getCfg(kind)
+				return not GF.IsPartyCenterGrowthMode(cfg)
+			end,
 		}
 		settings[#settings + 1] = {
 			name = "Sort direction",
@@ -18672,6 +18896,10 @@ local function buildEditModeSettings(kind, editModeId)
 						if addon.EditModeLib and addon.EditModeLib.internal and addon.EditModeLib.internal.RequestRefreshSettings then addon.EditModeLib.internal:RequestRefreshSettings() end
 					end)
 				end
+			end,
+			isEnabled = function()
+				local cfg = getCfg(kind)
+				return not GF.IsPartyCenterGrowthMode(cfg)
 			end,
 		}
 	elseif raidLikeKind then
@@ -19307,11 +19535,13 @@ local function applyEditModeData(kind, data)
 	end
 	if data.spacing ~= nil then cfg.spacing = clampNumber(data.spacing, 0, 40, cfg.spacing or 0) end
 	if data.growth then
-		cfg.growth = (GFH.NormalizeGrowthDirection and GFH.NormalizeGrowthDirection(data.growth, (GFH.NormalizeGrowthDirection and GFH.NormalizeGrowthDirection(cfg.growth, "DOWN")) or "DOWN"))
-			or "DOWN"
+		local mode, baseGrowth = GF.ResolveUnitGrowthDirection(data.growth, cfg.growth or "DOWN")
+		if kind ~= "party" and (mode == "CENTER_HORIZONTAL" or mode == "CENTER_VERTICAL") then mode = baseGrowth end
+		cfg.growth = mode or "DOWN"
+		if kind == "party" and (cfg.growth == "CENTER_HORIZONTAL" or cfg.growth == "CENTER_VERTICAL") then cfg.showPlayer = true end
 	end
 	if kind == "raid" and data.groupGrowth then
-		local growth = (GFH.NormalizeGrowthDirection and GFH.NormalizeGrowthDirection(cfg.growth, "DOWN")) or "DOWN"
+		local _, growth = GF.ResolveUnitGrowthDirection(cfg.growth, "DOWN")
 		local defaultGroupGrowth = DEFAULTS and DEFAULTS.raid and DEFAULTS.raid.groupGrowth
 		if GFH.ResolveGroupGrowthDirection then
 			cfg.groupGrowth = GFH.ResolveGroupGrowthDirection(data.groupGrowth, growth, defaultGroupGrowth)
@@ -19361,7 +19591,7 @@ local function applyEditModeData(kind, data)
 		cfg.border.strata = (strata ~= "") and strata or nil
 	end
 	if data.borderFrameLevelOffset ~= nil then
-		local offset = clampNumber(data.borderFrameLevelOffset, -20, 50, (cfg.border and cfg.border.frameLevelOffset) or 3)
+		local offset = clampNumber(data.borderFrameLevelOffset, -20, 1000, (cfg.border and cfg.border.frameLevelOffset) or 3)
 		offset = floor(offset + (offset >= 0 and 0.5 or -0.5))
 		cfg.border.frameLevelOffset = offset
 	end
@@ -20116,6 +20346,7 @@ local function applyEditModeData(kind, data)
 	if kind == "party" then
 		if data.showPlayer ~= nil then cfg.showPlayer = data.showPlayer and true or false end
 		if data.showSolo ~= nil then cfg.showSolo = data.showSolo and true or false end
+		if GF.IsPartyCenterGrowthMode(cfg) then cfg.showPlayer = true end
 		local custom = GFH.EnsureCustomSortConfig(cfg)
 		local incomingSortMethod
 		if data.sortMethod ~= nil then
@@ -20319,7 +20550,7 @@ function GF:EnsureEditMode()
 				borderFrameLevelOffset = (function()
 					local value = (cfg.border and cfg.border.frameLevelOffset)
 					if value == nil then value = (DEFAULTS[kind] and DEFAULTS[kind].border and DEFAULTS[kind].border.frameLevelOffset) end
-					value = clampNumber(value, -20, 50, 3)
+					value = clampNumber(value, -20, 1000, 3)
 					return floor(value + (value >= 0 and 0.5 or -0.5))
 				end)(),
 				hoverHighlightEnabled = (cfg.highlightHover and cfg.highlightHover.enabled) == true,
@@ -21001,7 +21232,7 @@ do
 			end
 			if sortMethod == "NAMELIST" then GF:RefreshCustomSortNameList("raid") end
 			local partyCfg = getCfg("party")
-			if partyCfg and resolveSortMethod(partyCfg) == "NAMELIST" then GF:RefreshCustomSortNameList("party") end
+			if partyCfg and (resolveSortMethod(partyCfg) == "NAMELIST" or GF.IsPartyCenterGrowthMode(partyCfg)) then GF:RefreshCustomSortNameList("party") end
 			GF:RefreshGroupIcons()
 			if needsFullRefresh or updatedCount > 0 then
 				GF:RefreshStatusIcons()
