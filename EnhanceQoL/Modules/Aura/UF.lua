@@ -980,6 +980,7 @@ local defaults = {
 			showSampleAbsorb = false,
 			absorbTexture = "SOLID",
 			absorbReverseFill = false,
+			absorbDontOverflowHealthBar = false,
 			useAbsorbGlow = true,
 			healAbsorbColor = { 1.0, 0.3, 0.3, 0.7 },
 			healAbsorbUseCustomColor = false,
@@ -1696,6 +1697,7 @@ local function copySettings(fromUnit, toUnit, opts)
 			{ "health", "absorbUseCustomColor" },
 			{ "health", "useAbsorbGlow" },
 			{ "health", "absorbReverseFill" },
+			{ "health", "absorbDontOverflowHealthBar" },
 			{ "health", "absorbOverlayHeight" },
 			{ "health", "absorbTexture" },
 		},
@@ -5416,15 +5418,42 @@ local function updateHealth(cfg, unit)
 		st.absorb:SetValue(abs or 0, interpolation)
 		local reverseAbsorb = hc.absorbReverseFill
 		if reverseAbsorb == nil then reverseAbsorb = defH.absorbReverseFill == true end
+		local absorbDontOverflow = hc.absorbDontOverflowHealthBar
+		if absorbDontOverflow == nil then absorbDontOverflow = defH.absorbDontOverflowHealthBar == true end
+		local absorb2Value = abs or 0
+		local absorbValueForGlow = abs
+		if reverseAbsorb and absorbDontOverflow then
+			local canClampAbsorb = true
+			if issecretvalue then canClampAbsorb = not (issecretvalue(absorb2Value) or issecretvalue(maxForValue) or issecretvalue(cur)) end
+			if canClampAbsorb then
+				local currentHealth = tonumber(cur) or 0
+				local maxHealth = tonumber(maxForValue) or 0
+				local missingHealth = maxHealth - currentHealth
+				if missingHealth < 0 then missingHealth = 0 end
+				local numericAbsorb = tonumber(absorb2Value) or 0
+				if numericAbsorb > missingHealth then numericAbsorb = missingHealth end
+				if numericAbsorb < 0 then numericAbsorb = 0 end
+				absorb2Value = numericAbsorb
+				absorbValueForGlow = numericAbsorb
+			end
+		end
 		if reverseAbsorb and st.absorb2 then
 			local _, maxHealth = st.health:GetMinMaxValues()
 			if maxHealth == nil then maxHealth = maxForValue end
 			st.absorb2:SetMinMaxValues(0, maxHealth or 1)
-			st.absorb2:SetValue(abs or 0, interpolation)
+			st.absorb2:SetValue(absorb2Value or 0, interpolation)
 		end
 		if reverseAbsorb and st.absorb2 then
 			st.absorb2:Show()
-			if st.absorb then st.absorb:Show() end
+			if st.absorb then
+				if absorbDontOverflow then
+					st.absorb:SetAlpha(0)
+					st.absorb:Hide()
+				else
+					st.absorb:SetAlpha(1)
+					st.absorb:Show()
+				end
+			end
 		elseif st.absorb then
 			st.absorb:SetAlpha(1)
 			st.absorb:Show()
@@ -5437,7 +5466,9 @@ local function updateHealth(cfg, unit)
 		st.absorb:SetStatusBarColor(ar or 0.85, ag or 0.95, ab or 1, aa or 0.7)
 		if reverseAbsorb and st.absorb2 then st.absorb2:SetStatusBarColor(ar or 0.85, ag or 0.95, ab or 1, aa or 0.7) end
 		if st.overAbsorbGlow then
-			local showGlow = hc.useAbsorbGlow ~= false and ((C_StringUtil and not C_StringUtil.TruncateWhenZero(abs)) or (not issecretvalue and abs > 0))
+			local glowAbsorb = absorbValueForGlow
+			if glowAbsorb == nil then glowAbsorb = abs end
+			local showGlow = hc.useAbsorbGlow ~= false and ((C_StringUtil and not C_StringUtil.TruncateWhenZero(glowAbsorb)) or (not issecretvalue and glowAbsorb > 0))
 			-- (not (C_StringUtil and C_StringUtil.TruncateWhenZero(abs)) or (not addon.variables.isMidnight and abs))
 			if showGlow then
 				st.overAbsorbGlow:Show()
@@ -6871,6 +6902,8 @@ local function applyBars(cfg, unit)
 		UFHelper.configureSpecialTexture(st.absorb, "HEALTH", absorbTextureKey, hc)
 		local reverseAbsorb = hc.absorbReverseFill
 		if reverseAbsorb == nil then reverseAbsorb = defH.absorbReverseFill == true end
+		local absorbDontOverflow = hc.absorbDontOverflowHealthBar
+		if absorbDontOverflow == nil then absorbDontOverflow = defH.absorbDontOverflowHealthBar == true end
 		UFHelper.applyStatusBarReverseFill(st.absorb, reverseAbsorb)
 		if reverseAbsorb then
 			st.absorb2 = st.absorb2 or CreateFrame("StatusBar", info.healthName .. "Absorb2", st.health, "BackdropTemplate")
@@ -6892,7 +6925,7 @@ local function applyBars(cfg, unit)
 					if UFHelper.setupAbsorbClampReverseAware then UFHelper.setupAbsorbClampReverseAware(st.health, st.absorb2) end
 				else
 					if UFHelper.setupAbsorbClamp then UFHelper.setupAbsorbClamp(st.health, st.absorb2) end
-					if UFHelper.setupAbsorbOverShift then UFHelper.setupAbsorbOverShift(st.health, st.absorb, absorbHeight, healthHeight) end
+					if not absorbDontOverflow and UFHelper.setupAbsorbOverShift then UFHelper.setupAbsorbOverShift(st.health, st.absorb, absorbHeight, healthHeight) end
 				end
 				UFHelper.applyAbsorbClampLayout(st.absorb2, st.health, absorbHeight, healthHeight, reverseHealth)
 				syncTextFrameLevels(st)
@@ -6908,7 +6941,7 @@ local function applyBars(cfg, unit)
 		st.absorb:SetValue(0, interpolation)
 		if st.overAbsorbGlow then
 			st.overAbsorbGlow:ClearAllPoints()
-			local glowAnchor = st.absorb or st.health
+			local glowAnchor = (reverseAbsorb and absorbDontOverflow and st.absorb2) or st.absorb or st.health
 			st.overAbsorbGlow:SetPoint("TOPLEFT", glowAnchor, "TOPRIGHT", -7, 0)
 			st.overAbsorbGlow:SetPoint("BOTTOMLEFT", glowAnchor, "BOTTOMRIGHT", -7, 0)
 		end

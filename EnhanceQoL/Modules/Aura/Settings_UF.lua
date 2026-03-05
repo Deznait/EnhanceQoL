@@ -1360,9 +1360,7 @@ local function appendSecondaryPowerSettings(list, unit, def, textureOpts, addDiv
 	local function isSecondaryPowerDetachedEnabled() return isSecondaryPowerEnabled() and isSecondaryPowerDetached() end
 	local function isSecondaryStaggerAllowed() return isSecondaryAllowedTypeSelected("STAGGER") end
 	local function isSecondaryStaggerSettingsShown() return isSecondaryPowerEnabled() and isSecondaryStaggerAllowed() end
-	local function isSecondaryStaggerExtendedEnabled()
-		return getValue(unit, { "secondaryPower", "staggerHighColors" }, secondaryDef.staggerHighColors == true) == true
-	end
+	local function isSecondaryStaggerExtendedEnabled() return getValue(unit, { "secondaryPower", "staggerHighColors" }, secondaryDef.staggerHighColors == true) == true end
 	local function isDetachedSecondaryWidthMatched() return getValue(unit, { "secondaryPower", "detachedMatchHealthWidth" }, secondaryDef.detachedMatchHealthWidth == true) == true end
 	local function isDetachedSecondaryBorderEnabled()
 		local border = getValue(unit, { "border" }, def.border or {})
@@ -1928,7 +1926,6 @@ local function appendSecondaryPowerSettings(list, unit, def, textureOpts, addDiv
 		name = L["UFSecondaryStaggerColors"] or "Stagger colors",
 		kind = settingType.Collapsible,
 		id = "secondaryPowerStaggerColors",
-		parentId = "secondaryPower",
 		defaultCollapsed = true,
 	}
 	staggerColorsSection.isEnabled = isSecondaryStaggerSettingsShown
@@ -1938,18 +1935,11 @@ local function appendSecondaryPowerSettings(list, unit, def, textureOpts, addDiv
 	local staggerHighDefaultColor = secondaryDef.staggerHighColor or (STAGGER_EXTRA_COLORS and STAGGER_EXTRA_COLORS.high) or { 0.62, 0.2, 1, 1 }
 	local staggerExtremeDefaultColor = secondaryDef.staggerExtremeColor or (STAGGER_EXTRA_COLORS and STAGGER_EXTRA_COLORS.extreme) or { 1, 0.2, 0.8, 1 }
 
-	local staggerUseExtended = checkbox(
-		L["UFSecondaryStaggerUseExtended"] or "Use extended stagger colors",
-		isSecondaryStaggerExtendedEnabled,
-		function(val)
-			setValue(unit, { "secondaryPower", "staggerHighColors" }, val and true or false)
-			refresh()
-			refreshSettingsUI()
-		end,
-		secondaryDef.staggerHighColors == true,
-		"secondaryPowerStaggerColors",
-		isSecondaryStaggerSettingsShown
-	)
+	local staggerUseExtended = checkbox(L["UFSecondaryStaggerUseExtended"] or "Use extended stagger colors", isSecondaryStaggerExtendedEnabled, function(val)
+		setValue(unit, { "secondaryPower", "staggerHighColors" }, val and true or false)
+		refresh()
+		refreshSettingsUI()
+	end, secondaryDef.staggerHighColors == true, "secondaryPowerStaggerColors", isSecondaryStaggerSettingsShown)
 	staggerUseExtended.isShown = isSecondaryStaggerSettingsShown
 	list[#list + 1] = staggerUseExtended
 
@@ -2013,12 +2003,8 @@ local function appendSecondaryPowerSettings(list, unit, def, textureOpts, addDiv
 		10,
 		function() return getValue(unit, { "secondaryPower", "staggerExtremeThreshold" }, secondaryDef.staggerExtremeThreshold or STAGGER_EXTRA_THRESHOLD_EXTREME) end,
 		function(val)
-			local high = clampNumber(
-				getValue(unit, { "secondaryPower", "staggerHighThreshold" }, secondaryDef.staggerHighThreshold or STAGGER_EXTRA_THRESHOLD_HIGH),
-				100,
-				1000,
-				STAGGER_EXTRA_THRESHOLD_HIGH
-			)
+			local high =
+				clampNumber(getValue(unit, { "secondaryPower", "staggerHighThreshold" }, secondaryDef.staggerHighThreshold or STAGGER_EXTRA_THRESHOLD_HIGH), 100, 1000, STAGGER_EXTRA_THRESHOLD_HIGH)
 			local extreme = clampNumber(val, high, 1000, STAGGER_EXTRA_THRESHOLD_EXTREME)
 			setValue(unit, { "secondaryPower", "staggerExtremeThreshold" }, extreme)
 			refresh()
@@ -3278,6 +3264,18 @@ local function buildUnitSettings(unit)
 			end,
 			healthDef.absorbReverseFill == true,
 			"absorb"
+		)
+
+		list[#list + 1] = checkbox(
+			L["Don't overflow health bar"] or "Don't overflow health bar",
+			function() return getValue(unit, { "health", "absorbDontOverflowHealthBar" }, healthDef.absorbDontOverflowHealthBar == true) == true end,
+			function(val)
+				setValue(unit, { "health", "absorbDontOverflowHealthBar" }, val and true or false)
+				refresh()
+			end,
+			healthDef.absorbDontOverflowHealthBar == true,
+			"absorb",
+			function() return getValue(unit, { "health", "absorbReverseFill" }, healthDef.absorbReverseFill == true) == true end
 		)
 
 		list[#list + 1] = slider(L["Absorb overlay height"] or "Absorb overlay height", 1, 80, 1, function()
@@ -6984,6 +6982,7 @@ local function buildUnitSettings(unit)
 		"healAbsorb",
 		"power",
 		"secondaryPower",
+		"secondaryPowerStaggerColors",
 		"mainPowerColors",
 		"npcColors",
 		"classResource",

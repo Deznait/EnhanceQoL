@@ -164,7 +164,7 @@ local function resolveBorderTexture(key)
 	return key
 end
 
-local function ensureBorderFrame(frame)
+local function ensureBorderFrame(frame, borderCfg)
 	if not frame then return nil end
 	local border = frame._ufBorder
 	if not border then
@@ -172,9 +172,33 @@ local function ensureBorderFrame(frame)
 		border:EnableMouse(false)
 		frame._ufBorder = border
 	end
-	border:SetFrameStrata(frame:GetFrameStrata())
+	local targetStrata = frame:GetFrameStrata()
+	local strata = borderCfg and borderCfg.strata
+	if strata ~= nil then
+		strata = tostring(strata):upper()
+		if strata == "DEFAULT" then strata = "" end
+		if
+			strata ~= ""
+			and strata ~= "BACKGROUND"
+			and strata ~= "LOW"
+			and strata ~= "MEDIUM"
+			and strata ~= "HIGH"
+			and strata ~= "DIALOG"
+			and strata ~= "FULLSCREEN"
+			and strata ~= "FULLSCREEN_DIALOG"
+			and strata ~= "TOOLTIP"
+		then
+			strata = ""
+		end
+		if strata ~= "" then targetStrata = strata end
+	end
+	border:SetFrameStrata(targetStrata)
 	local baseLevel = frame:GetFrameLevel() or 0
-	border:SetFrameLevel(baseLevel + 3)
+	local levelOffset = clampNumber(tonumber(borderCfg and borderCfg.frameLevelOffset), -20, 50, 3)
+	levelOffset = floor(levelOffset + (levelOffset >= 0 and 0.5 or -0.5))
+	local borderLevel = baseLevel + levelOffset
+	if borderLevel < 0 then borderLevel = 0 end
+	border:SetFrameLevel(borderLevel)
 	border:ClearAllPoints()
 	border:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
 	border:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
@@ -185,7 +209,7 @@ local function setBackdrop(frame, borderCfg)
 	if not frame then return end
 	if borderCfg and borderCfg.enabled then
 		if frame.SetBackdrop then frame:SetBackdrop(nil) end
-		local borderFrame = ensureBorderFrame(frame)
+		local borderFrame = ensureBorderFrame(frame, borderCfg)
 		if not borderFrame then return end
 		local color = borderCfg.color or { 0, 0, 0, 0.8 }
 		local edgeSize = tonumber(borderCfg.edgeSize) or 1
@@ -424,6 +448,88 @@ local function getEffectiveBarTexture(cfg, barCfg)
 	local tex = cfg and cfg.barTexture
 	if tex == nil or tex == "" then tex = barCfg and barCfg.texture end
 	return tex
+end
+
+function GF.ResolveGroupPortraitConfig(cfg, kind)
+	if kind == "raid" then return false, "LEFT", false, false end
+	local def = (kind and DEFAULTS[kind]) or DEFAULTS.party or {}
+	local pdef = def and def.portrait or {}
+	local pcfg = (cfg and cfg.portrait) or {}
+	local enabled = pcfg.enabled
+	if enabled == nil then enabled = pdef.enabled end
+	local side = tostring(pcfg.side or pdef.side or "LEFT"):upper()
+	if side ~= "RIGHT" then side = "LEFT" end
+	local squareBackground = pcfg.squareBackground
+	if squareBackground == nil then squareBackground = pdef.squareBackground end
+	local borderWithFrame = pcfg.borderWithFrame
+	if borderWithFrame == nil then borderWithFrame = pdef.borderWithFrame end
+	return enabled == true, side, squareBackground == true, borderWithFrame == true
+end
+
+function GF.ResolveGroupPortraitSeparatorConfig(cfg, kind, portraitEnabled)
+	if not portraitEnabled then return false, 0, "SOLID", nil end
+	local def = (kind and DEFAULTS[kind]) or DEFAULTS.party or {}
+	local pdef = def and def.portrait or {}
+	local sdef = pdef.separator or {}
+	local pcfg = (cfg and cfg.portrait) or {}
+	local scfg = pcfg.separator or {}
+
+	local separatorEnabled = scfg.enabled
+	if separatorEnabled == nil then separatorEnabled = sdef.enabled end
+	if separatorEnabled == nil then separatorEnabled = true end
+
+	local separatorSize = tonumber(scfg.size)
+	if not separatorSize then separatorSize = tonumber(sdef.size) end
+	if not separatorSize then
+		local borderCfg = (cfg and cfg.border) or {}
+		local borderDef = (def and def.border) or {}
+		separatorSize = tonumber(borderCfg.edgeSize or borderDef.edgeSize) or 1
+	end
+	if separatorSize < 1 then separatorSize = 1 end
+
+	local separatorTexture = scfg.texture or sdef.texture or "SOLID"
+	local separatorColor
+	local useCustomColor = scfg.useCustomColor
+	if useCustomColor == nil then useCustomColor = sdef.useCustomColor end
+	if useCustomColor == true then separatorColor = scfg.color or sdef.color end
+	if type(separatorColor) ~= "table" then
+		local borderCfg = (cfg and cfg.border) or {}
+		local borderDef = (def and def.border) or {}
+		separatorColor = borderCfg.color or borderDef.color or { 0, 0, 0, 0.8 }
+	end
+
+	return separatorEnabled == true, separatorSize, separatorTexture, separatorColor
+end
+
+function GF.ApplyGroupPortraitSeparator(cfg, kind, st, portraitEnabled)
+	if not st or not st.portraitSeparator or not st.portraitHolder then return end
+	if not portraitEnabled then
+		st.portraitSeparator:Hide()
+		return
+	end
+
+	local separatorEnabled, separatorSize, separatorTexture, separatorColor = GF.ResolveGroupPortraitSeparatorConfig(cfg, kind, portraitEnabled)
+	if not separatorEnabled or separatorSize <= 0 then
+		st.portraitSeparator:Hide()
+		return
+	end
+
+	local color = separatorColor or { 0, 0, 0, 0.8 }
+	st.portraitSeparator:SetTexture(UFHelper.resolveSeparatorTexture(separatorTexture))
+	st.portraitSeparator:SetVertexColor(color[1] or 0, color[2] or 0, color[3] or 0, color[4] or 1)
+	st.portraitSeparator:ClearAllPoints()
+	local side = st._portraitSide or "LEFT"
+	if side == "RIGHT" then
+		st.portraitSeparator:SetPoint("TOP", st.portraitHolder, "TOP", 0, 0)
+		st.portraitSeparator:SetPoint("BOTTOM", st.portraitHolder, "BOTTOM", 0, 0)
+		st.portraitSeparator:SetPoint("RIGHT", st.portraitHolder, "LEFT", 0, 0)
+	else
+		st.portraitSeparator:SetPoint("TOP", st.portraitHolder, "TOP", 0, 0)
+		st.portraitSeparator:SetPoint("BOTTOM", st.portraitHolder, "BOTTOM", 0, 0)
+		st.portraitSeparator:SetPoint("LEFT", st.portraitHolder, "RIGHT", 0, 0)
+	end
+	st.portraitSeparator:SetWidth(separatorSize)
+	st.portraitSeparator:Show()
 end
 
 local function stabilizeStatusBarTexture(bar)
@@ -1151,6 +1257,8 @@ local DEFAULTS = {
 			color = { 0, 0, 0, 0.8 },
 			edgeSize = 1,
 			inset = 0,
+			strata = "",
+			frameLevelOffset = 3,
 		},
 		highlight = {
 			enabled = false,
@@ -1174,6 +1282,16 @@ local DEFAULTS = {
 			offset = 0,
 			layer = "ABOVE_BORDER",
 			color = { 1, 1, 0, 1 },
+		},
+		portrait = {
+			enabled = false,
+			side = "LEFT",
+			squareBackground = false,
+			borderWithFrame = false,
+			separator = {
+				enabled = true,
+				texture = "SOLID",
+			},
 		},
 		health = {
 			texture = "DEFAULT",
@@ -1550,6 +1668,8 @@ local DEFAULTS = {
 			color = { 0, 0, 0, 0.8 },
 			edgeSize = 1,
 			inset = 0,
+			strata = "",
+			frameLevelOffset = 3,
 		},
 		highlight = {
 			enabled = false,
@@ -1573,6 +1693,16 @@ local DEFAULTS = {
 			offset = 0,
 			layer = "ABOVE_BORDER",
 			color = { 1, 1, 0, 1 },
+		},
+		portrait = {
+			enabled = false,
+			side = "LEFT",
+			squareBackground = false,
+			borderWithFrame = false,
+			separator = {
+				enabled = true,
+				texture = "SOLID",
+			},
 		},
 		health = {
 			texture = "DEFAULT",
@@ -2689,6 +2819,7 @@ local function updateButtonConfig(self, cfg)
 	st._wantsStatusText = scfg and scfg.unitStatus and scfg.unitStatus.enabled ~= false
 	st._wantsRangeFade = scfg and scfg.rangeFade and scfg.rangeFade.enabled ~= false
 	st._wantsDispelTint = resolveDispelIndicatorEnabled(cfg, self._eqolGroupKind or "party")
+	st._wantsPortrait = select(1, GF.ResolveGroupPortraitConfig(cfg, self._eqolGroupKind or "party"))
 
 	local tooltipCfg = cfg.tooltip or {}
 	local tooltipDef = (DEFAULTS[self._eqolGroupKind or "party"] and DEFAULTS[self._eqolGroupKind or "party"].tooltip) or (DEFAULTS.party and DEFAULTS.party.tooltip) or {}
@@ -2820,6 +2951,30 @@ function GF:BuildButton(self)
 	st.barGroup:SetAllPoints(self)
 
 	setBackdrop(st.barGroup, cfg.border)
+	if not st.portraitHolder then
+		st.portraitHolder = CreateFrame("Frame", nil, st.barGroup, "BackdropTemplate")
+		st.portraitHolder:EnableMouse(false)
+		st.portraitHolder:Hide()
+	end
+	if not st.portrait then
+		st.portrait = st.portraitHolder:CreateTexture(nil, "ARTWORK")
+		st.portrait:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+		st.portrait:Hide()
+	end
+	if not st.portraitBg then
+		st.portraitBg = st.portraitHolder:CreateTexture(nil, "BACKGROUND")
+		st.portraitBg:SetColorTexture(0, 0, 0, 1)
+		st.portraitBg:Hide()
+	end
+	if not st.portraitSeparator then
+		st.portraitSeparator = st.barGroup:CreateTexture(nil, "ARTWORK")
+		st.portraitSeparator:SetColorTexture(0, 0, 0, 1)
+		st.portraitSeparator:Hide()
+	end
+	if st.portrait and st.portrait:GetParent() ~= st.portraitHolder then st.portrait:SetParent(st.portraitHolder) end
+	if st.portraitBg and st.portraitBg:GetParent() ~= st.portraitHolder then st.portraitBg:SetParent(st.portraitHolder) end
+	if st.portraitHolder and st.portraitHolder:GetParent() ~= st.barGroup then st.portraitHolder:SetParent(st.barGroup) end
+	if st.portraitSeparator and st.portraitSeparator:GetParent() ~= st.barGroup then st.portraitSeparator:SetParent(st.barGroup) end
 	if not st.dispelTint then
 		st.dispelTint = CreateFrame("Frame", nil, st.barGroup, "CompactUnitFrameDispelOverlayTemplate")
 		st.dispelTint:SetAllPoints(st.barGroup)
@@ -3048,6 +3203,52 @@ function GF:LayoutButton(self)
 	powerH = roundToEvenPixel(max(0, powerH), scale)
 	if powerH > availH then powerH = availH end
 
+	local portraitEnabled, portraitSide, portraitSquareBackground, portraitBorderWithFrame = GF.ResolveGroupPortraitConfig(cfg, kind)
+	-- Group portraits should read as an external element, not as the dominant frame body.
+	local portraitOutside = true
+	local portraitBaseSize = max(1, availH)
+	local portraitSize = portraitEnabled and roundToEvenPixel(portraitBaseSize, scale) or 0
+	local borderCfg = cfg.border or {}
+	local borderDef = def.border or {}
+	local frameBorderEnabled = borderCfg.enabled
+	if frameBorderEnabled == nil then frameBorderEnabled = borderDef.enabled end
+	frameBorderEnabled = frameBorderEnabled == true
+	local separatorEnabled, separatorSize = GF.ResolveGroupPortraitSeparatorConfig(cfg, kind, portraitEnabled)
+	local separatorSpace = (separatorEnabled and separatorSize > 0) and separatorSize or 0
+	if portraitEnabled then
+		if portraitSize < 1 then
+			portraitEnabled = false
+			portraitSize = 0
+			separatorSpace = 0
+		end
+	end
+	local portraitSpace = portraitEnabled and (portraitSize + separatorSpace) or 0
+	local portraitBorderCfg = nil
+	if portraitEnabled and portraitBorderWithFrame and frameBorderEnabled then
+		local borderOffset = borderCfg.offset
+		if borderOffset == nil then borderOffset = borderDef.offset end
+		local borderInset = borderCfg.inset
+		if borderInset == nil then borderInset = borderDef.inset end
+		local borderEdgeSize = borderCfg.edgeSize
+		if borderEdgeSize == nil then borderEdgeSize = borderDef.edgeSize end
+		portraitBorderCfg = {
+			enabled = true,
+			texture = borderCfg.texture or borderDef.texture,
+			color = borderCfg.color or borderDef.color,
+			edgeSize = borderEdgeSize,
+			inset = borderInset,
+			offset = borderOffset,
+			strata = borderCfg.strata or borderDef.strata,
+			frameLevelOffset = borderCfg.frameLevelOffset or borderDef.frameLevelOffset,
+		}
+	end
+	local contentOffsetLeft = 0
+	local contentOffsetRight = 0
+	if not portraitOutside then
+		contentOffsetLeft = (portraitEnabled and portraitSide == "LEFT") and portraitSpace or 0
+		contentOffsetRight = (portraitEnabled and portraitSide == "RIGHT") and portraitSpace or 0
+	end
+
 	local healthBottomOffset = roundToPixel(powerH, scale)
 
 	st.barGroup:SetAllPoints(self)
@@ -3059,15 +3260,65 @@ function GF:LayoutButton(self)
 	applyHighlightStyle(st, st._highlightTargetCfg, "target")
 
 	st.power:ClearAllPoints()
-	st.power:SetPoint("BOTTOMLEFT", st.barGroup, "BOTTOMLEFT", 0, 0)
-	st.power:SetPoint("BOTTOMRIGHT", st.barGroup, "BOTTOMRIGHT", 0, 0)
+	st.power:SetPoint("BOTTOMLEFT", st.barGroup, "BOTTOMLEFT", contentOffsetLeft, 0)
+	st.power:SetPoint("BOTTOMRIGHT", st.barGroup, "BOTTOMRIGHT", -contentOffsetRight, 0)
 	st.power:SetHeight(powerH)
 
 	st.health:ClearAllPoints()
-	st.health:SetPoint("TOPLEFT", st.barGroup, "TOPLEFT", 0, 0)
-	st.health:SetPoint("BOTTOMRIGHT", st.barGroup, "BOTTOMRIGHT", 0, healthBottomOffset)
+	st.health:SetPoint("TOPLEFT", st.barGroup, "TOPLEFT", contentOffsetLeft, 0)
+	st.health:SetPoint("BOTTOMRIGHT", st.barGroup, "BOTTOMRIGHT", -contentOffsetRight, healthBottomOffset)
 	applyBarBackdrop(st.health, hc, { clampToFill = healthBackdropClampToFill == true, textureKey = healthTexKey })
 	applyBarBackdrop(st.power, pcfg, { textureKey = powerTexKey })
+
+	st._portraitEnabled = portraitEnabled
+	st._portraitSide = portraitSide
+	st._portraitSize = portraitSize
+	st._portraitSquareBackground = portraitSquareBackground
+	st._portraitSpace = portraitSpace
+	if st.portraitHolder then
+		if portraitEnabled then
+			local holderParent = st.barGroup or self
+			local holderOffset = (portraitSize / 2) + (portraitOutside and separatorSpace or 0)
+			local holderX = holderOffset
+			if portraitSide == "RIGHT" then
+				holderX = portraitOutside and holderOffset or -holderOffset
+			else
+				holderX = portraitOutside and -holderOffset or holderOffset
+			end
+			st.portraitHolder:SetSize(portraitSize, portraitSize)
+			st.portraitHolder:ClearAllPoints()
+			if portraitSide == "RIGHT" then
+				st.portraitHolder:SetPoint("CENTER", holderParent, "RIGHT", holderX, 0)
+			else
+				st.portraitHolder:SetPoint("CENTER", holderParent, "LEFT", holderX, 0)
+			end
+			if holderParent and st.portraitHolder.SetFrameStrata and holderParent.GetFrameStrata then
+				st.portraitHolder:SetFrameStrata(holderParent:GetFrameStrata())
+				st.portraitHolder:SetFrameLevel((holderParent:GetFrameLevel() or 0) + 1)
+			end
+			if st.portrait then
+				st.portrait:SetSize(portraitSize, portraitSize)
+				st.portrait:ClearAllPoints()
+				st.portrait:SetPoint("CENTER", st.portraitHolder, "CENTER", 0, 0)
+			end
+			if st.portraitBg then
+				if portraitSquareBackground == true then
+					st.portraitBg:ClearAllPoints()
+					st.portraitBg:SetAllPoints(st.portrait)
+					st.portraitBg:Show()
+				else
+					st.portraitBg:Hide()
+				end
+			end
+			st.portraitHolder:Show()
+		else
+			if st.portrait then st.portrait:Hide() end
+			if st.portraitBg then st.portraitBg:Hide() end
+			st.portraitHolder:Hide()
+		end
+		setBackdrop(st.portraitHolder, portraitBorderCfg)
+	end
+	GF.ApplyGroupPortraitSeparator(cfg, kind, st, portraitEnabled)
 
 	self.powerBarUsedHeight = powerH > 0 and powerH or 0
 	if st.dispelTint then
@@ -3443,6 +3694,7 @@ function GF:LayoutButton(self)
 	st._lastPowerPx = nil
 	st._lastPowerBarW = nil
 
+	GF:UpdatePortrait(self)
 	if UF.GroupFramesHealerBuffs and UF.GroupFramesHealerBuffs.LayoutButton then UF.GroupFramesHealerBuffs.LayoutButton(self) end
 	GF:UpdateHighlightState(self)
 	GF:UpdatePrivateAuras(self)
@@ -3625,6 +3877,11 @@ end
 
 local function resolveRoleAtlas(roleKey, style)
 	if roleKey == "NONE" then return nil end
+	if style == "FRAME" then
+		if roleKey == "TANK" then return "UI-Frame-TankIcon", "UI-LFG-RoleIcon-Tank" end
+		if roleKey == "HEALER" then return "UI-Frame-HealerIcon", "UI-LFG-RoleIcon-Healer" end
+		if roleKey == "DAMAGER" then return "UI-Frame-DpsIcon", "UI-LFG-RoleIcon-DPS" end
+	end
 	if style == "CIRCLE" then
 		if GetMicroIconForRole then return GetMicroIconForRole(roleKey) end
 		if roleKey == "TANK" then return "UI-LFG-RoleIcon-Tank-Micro-GroupFinder" end
@@ -3664,25 +3921,30 @@ function GF:UpdateRoleIcon(self)
 	if type(selection) == "table" then
 		if not GFH.SelectionHasAny(selection) then
 			st._lastRoleAtlas = nil
+			st._lastRoleFallbackAtlas = nil
 			st.roleIcon:Hide()
 			return
 		end
 		if roleKey == "NONE" or not GFH.SelectionContains(selection, roleKey) then
 			st._lastRoleAtlas = nil
+			st._lastRoleFallbackAtlas = nil
 			st.roleIcon:Hide()
 			return
 		end
 	end
 	local style = rc.style or "TINY"
-	local atlas = resolveRoleAtlas(roleKey, style)
+	local atlas, fallbackAtlas = resolveRoleAtlas(roleKey, style)
 	if atlas then
-		if st._lastRoleAtlas ~= atlas then
+		if st._lastRoleAtlas ~= atlas or st._lastRoleFallbackAtlas ~= fallbackAtlas then
 			st._lastRoleAtlas = atlas
-			st.roleIcon:SetAtlas(atlas, false)
+			st._lastRoleFallbackAtlas = fallbackAtlas
+			local ok = st.roleIcon:SetAtlas(atlas, false)
+			if ok ~= true and fallbackAtlas then st.roleIcon:SetAtlas(fallbackAtlas, false) end
 		end
 		st.roleIcon:Show()
 	else
 		st._lastRoleAtlas = nil
+		st._lastRoleFallbackAtlas = nil
 		st.roleIcon:Hide()
 	end
 end
@@ -6107,12 +6369,56 @@ function GF:UpdatePower(self)
 	GF:UpdatePowerValue(self)
 end
 
+function GF:UpdatePortrait(self, unit, st)
+	if not self then return end
+	unit = unit or getUnit(self)
+	st = st or getState(self)
+	if not (st and st.portrait) then return end
+
+	local kind = self._eqolGroupKind or "party"
+	local cfg = self._eqolCfg or getCfg(kind)
+	local portraitEnabled, _, portraitSquareBackground = GF.ResolveGroupPortraitConfig(cfg, kind)
+	if st._portraitEnabled ~= nil then portraitEnabled = st._portraitEnabled == true end
+	if st._portraitSquareBackground ~= nil then portraitSquareBackground = st._portraitSquareBackground == true end
+
+	if not portraitEnabled or not unit then
+		st.portrait:SetTexture(nil)
+		st.portrait:Hide()
+		if st.portraitBg then st.portraitBg:Hide() end
+		if st.portraitHolder then st.portraitHolder:Hide() end
+		GF.ApplyGroupPortraitSeparator(cfg, kind, st, false)
+		return
+	end
+
+	if UnitExists and not UnitExists(unit) then
+		st.portrait:SetTexture(nil)
+		st.portrait:Hide()
+		if st.portraitBg then st.portraitBg:Hide() end
+		if st.portraitHolder then st.portraitHolder:Hide() end
+		GF.ApplyGroupPortraitSeparator(cfg, kind, st, false)
+		return
+	end
+
+	SetPortraitTexture(st.portrait, unit)
+	st.portrait:Show()
+	if st.portraitHolder then st.portraitHolder:Show() end
+	if st.portraitBg then
+		if portraitSquareBackground then
+			st.portraitBg:Show()
+		else
+			st.portraitBg:Hide()
+		end
+	end
+	GF.ApplyGroupPortraitSeparator(cfg, kind, st, true)
+end
+
 function GF:UpdateAll(self)
 	GF:UpdateName(self)
 	GF:UpdateStatusText(self)
 	GF:UpdateLevel(self)
 	GF:UpdateHealth(self)
 	GF:UpdatePower(self)
+	GF:UpdatePortrait(self)
 	GF:UpdateRoleIcon(self)
 	GF:UpdateRaidIcon(self)
 	GF:UpdateGroupIcons(self)
@@ -6217,6 +6523,13 @@ function GF:UnitButton_ClearUnit(self)
 		st._summonActiveReal = false
 		st._phaseReason = nil
 		clearDispelAuraState(st)
+		if st.portrait then
+			st.portrait:SetTexture(nil)
+			st.portrait:Hide()
+		end
+		if st.portraitBg then st.portraitBg:Hide() end
+		if st.portraitHolder then st.portraitHolder:Hide() end
+		if st.portraitSeparator then st.portraitSeparator:Hide() end
 	end
 	if UF.GroupFramesHealerBuffs and UF.GroupFramesHealerBuffs.ClearButton then UF.GroupFramesHealerBuffs.ClearButton(self) end
 	if st then st._healerBuffPlacementActive = nil end
@@ -6260,6 +6573,13 @@ function GF:UnitButton_RegisterUnitEvents(self, unit)
 	end
 
 	reg("UNIT_NAME_UPDATE")
+	if self._eqolUFState and self._eqolUFState._wantsPortrait then
+		reg("UNIT_PORTRAIT_UPDATE")
+		reg("UNIT_MODEL_CHANGED")
+		reg("UNIT_ENTERED_VEHICLE")
+		reg("UNIT_EXITED_VEHICLE")
+		reg("UNIT_EXITING_VEHICLE")
+	end
 	if self._eqolUFState and self._eqolUFState._wantsStatusText then reg("UNIT_FLAGS") end
 	local wantsLevel = self._eqolUFState and self._eqolUFState._wantsLevel
 	if not wantsLevel and UFHelper and UFHelper.textModeUsesLevel then
@@ -6329,6 +6649,7 @@ local function dispatchUnitConnection(btn, unit)
 	GF:UpdateHealthStyle(btn, unit, st)
 	GF:UpdateHealthValue(btn, unit, st)
 	GF:UpdatePowerValue(btn, unit, st)
+	GF:UpdatePortrait(btn, unit, st)
 	GF:UpdateName(btn, unit, st)
 	GF:UpdateStatusText(btn, unit, st)
 	GF:UpdateLevel(btn, unit, st)
@@ -6337,6 +6658,10 @@ end
 local function dispatchUnitFlags(btn) GF:UpdateStatusText(btn) end
 local function dispatchUnitRange(btn, _, inRange) GF:UpdateRange(btn, inRange) end
 local function dispatchUnitAura(btn, _, updateInfo) GF:RequestAuraUpdate(btn, updateInfo) end
+local function dispatchUnitPortrait(btn, unit)
+	local st = getState(btn)
+	GF:UpdatePortrait(btn, unit, st)
+end
 
 local UNIT_DISPATCH = {
 	UNIT_HEALTH = dispatchUnitHealth,
@@ -6349,6 +6674,11 @@ local UNIT_DISPATCH = {
 	UNIT_NAME_UPDATE = dispatchUnitName,
 	UNIT_LEVEL = dispatchUnitLevel,
 	UNIT_CONNECTION = dispatchUnitConnection,
+	UNIT_PORTRAIT_UPDATE = dispatchUnitPortrait,
+	UNIT_MODEL_CHANGED = dispatchUnitPortrait,
+	UNIT_ENTERED_VEHICLE = dispatchUnitPortrait,
+	UNIT_EXITED_VEHICLE = dispatchUnitPortrait,
+	UNIT_EXITING_VEHICLE = dispatchUnitPortrait,
 	UNIT_FLAGS = dispatchUnitFlags,
 	UNIT_IN_RANGE_UPDATE = dispatchUnitRange,
 	UNIT_AURA = dispatchUnitAura,
@@ -7296,6 +7626,7 @@ function GF:RefreshConnectionState(unit)
 		GF:UpdateHealthStyle(child)
 		GF:UpdateHealthValue(child, childUnit, st)
 		GF:UpdatePowerValue(child, childUnit, st)
+		GF:UpdatePortrait(child, childUnit, st)
 		GF:UpdateName(child, childUnit, st)
 		GF:UpdateStatusText(child, childUnit, st)
 		GF:UpdateLevel(child, childUnit, st)
@@ -8399,6 +8730,7 @@ GF._groupCopySectionOrder = {
 	"border",
 	"hoverHighlight",
 	"targetHighlight",
+	"portrait",
 	"text",
 	"health",
 	"absorb",
@@ -8426,6 +8758,7 @@ GF._groupCopySectionLabels = {
 	border = "Border",
 	hoverHighlight = "Hover highlight",
 	targetHighlight = "Target highlight",
+	portrait = "Portrait",
 	text = "Name",
 	health = "Health",
 	absorb = "Absorb",
@@ -8477,6 +8810,9 @@ GF._groupCopySectionRules = {
 	},
 	targetHighlight = {
 		{ "highlightTarget" },
+	},
+	portrait = {
+		{ "portrait" },
 	},
 	text = {
 		{ "text" },
@@ -8583,6 +8919,7 @@ GF._groupCopyUnitSections = {
 	frame = true,
 	border = true,
 	text = true,
+	portrait = true,
 	health = true,
 	absorb = true,
 	healabsorb = true,
@@ -8699,6 +9036,7 @@ function GF._buildGroupCopySectionSetForGroupKind(kind)
 		border = true,
 		hoverHighlight = true,
 		targetHighlight = true,
+		portrait = kind ~= "raid",
 		text = true,
 		health = true,
 		absorb = true,
@@ -9917,6 +10255,26 @@ local function buildEditModeSettings(kind, editModeId)
 		local ac = ensureAuraConfig(cfg)
 		return ac.externals and ac.externals.showDR == true
 	end
+	local portraitSideOptions = {
+		{ value = "LEFT", label = "Left", text = "Left" },
+		{ value = "RIGHT", label = "Right", text = "Right" },
+	}
+	local function isPortraitEnabled()
+		local cfg = getCfg(kind)
+		local pcfg = cfg and cfg.portrait or {}
+		local defPortrait = (DEFAULTS[kind] and DEFAULTS[kind].portrait) or {}
+		local enabled = pcfg.enabled
+		if enabled == nil then enabled = defPortrait.enabled end
+		return enabled == true
+	end
+	local function getPortraitSideValue()
+		local cfg = getCfg(kind)
+		local pcfg = cfg and cfg.portrait or {}
+		local defPortrait = (DEFAULTS[kind] and DEFAULTS[kind].portrait) or {}
+		local side = tostring(pcfg.side or defPortrait.side or "LEFT"):upper()
+		if side ~= "RIGHT" then side = "LEFT" end
+		return side
+	end
 	local settings = {
 		{
 			name = SETTINGS or "Settings",
@@ -10614,6 +10972,153 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 		},
 		{
+			name = "Border strata",
+			kind = SettingType.Dropdown,
+			field = "borderStrata",
+			parentId = "border",
+			get = function()
+				local cfg = getCfg(kind)
+				local bc = cfg and cfg.border or {}
+				local value = bc.strata
+				if value == nil then value = (DEFAULTS[kind] and DEFAULTS[kind].border and DEFAULTS[kind].border.strata) or "" end
+				value = tostring(value or ""):upper()
+				if value == "DEFAULT" then value = "" end
+				if
+					value ~= ""
+					and value ~= "BACKGROUND"
+					and value ~= "LOW"
+					and value ~= "MEDIUM"
+					and value ~= "HIGH"
+					and value ~= "DIALOG"
+					and value ~= "FULLSCREEN"
+					and value ~= "FULLSCREEN_DIALOG"
+					and value ~= "TOOLTIP"
+				then
+					value = ""
+				end
+				return value
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.border = cfg.border or {}
+				local strata = tostring(value or ""):upper()
+				if strata == "DEFAULT" then strata = "" end
+				if
+					strata ~= ""
+					and strata ~= "BACKGROUND"
+					and strata ~= "LOW"
+					and strata ~= "MEDIUM"
+					and strata ~= "HIGH"
+					and strata ~= "DIALOG"
+					and strata ~= "FULLSCREEN"
+					and strata ~= "FULLSCREEN_DIALOG"
+					and strata ~= "TOOLTIP"
+				then
+					strata = ""
+				end
+				cfg.border.strata = (strata ~= "") and strata or nil
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "borderStrata", cfg.border.strata or "", nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			generator = function(_, root)
+				for _, option in ipairs({
+					{ value = "", label = DEFAULT or "Default" },
+					{ value = "BACKGROUND", label = "BACKGROUND" },
+					{ value = "LOW", label = "LOW" },
+					{ value = "MEDIUM", label = "MEDIUM" },
+					{ value = "HIGH", label = "HIGH" },
+					{ value = "DIALOG", label = "DIALOG" },
+					{ value = "FULLSCREEN", label = "FULLSCREEN" },
+					{ value = "FULLSCREEN_DIALOG", label = "FULLSCREEN_DIALOG" },
+					{ value = "TOOLTIP", label = "TOOLTIP" },
+				}) do
+					root:CreateRadio(option.label, function()
+						local cfg = getCfg(kind)
+						local bc = cfg and cfg.border or {}
+						local value = bc.strata
+						if value == nil then value = (DEFAULTS[kind] and DEFAULTS[kind].border and DEFAULTS[kind].border.strata) or "" end
+						value = tostring(value or ""):upper()
+						if value == "DEFAULT" then value = "" end
+						if
+							value ~= ""
+							and value ~= "BACKGROUND"
+							and value ~= "LOW"
+							and value ~= "MEDIUM"
+							and value ~= "HIGH"
+							and value ~= "DIALOG"
+							and value ~= "FULLSCREEN"
+							and value ~= "FULLSCREEN_DIALOG"
+							and value ~= "TOOLTIP"
+						then
+							value = ""
+						end
+						return value == option.value
+					end, function()
+						local cfg = getCfg(kind)
+						if not cfg then return end
+						cfg.border = cfg.border or {}
+						local strata = tostring(option.value or ""):upper()
+						if strata == "DEFAULT" then strata = "" end
+						if
+							strata ~= ""
+							and strata ~= "BACKGROUND"
+							and strata ~= "LOW"
+							and strata ~= "MEDIUM"
+							and strata ~= "HIGH"
+							and strata ~= "DIALOG"
+							and strata ~= "FULLSCREEN"
+							and strata ~= "FULLSCREEN_DIALOG"
+							and strata ~= "TOOLTIP"
+						then
+							strata = ""
+						end
+						cfg.border.strata = (strata ~= "") and strata or nil
+						if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "borderStrata", cfg.border.strata or "", nil, true) end
+						GF:ApplyHeaderAttributes(kind)
+					end)
+				end
+			end,
+			isEnabled = function()
+				local cfg = getCfg(kind)
+				local bc = cfg and cfg.border or {}
+				return bc.enabled ~= false
+			end,
+		},
+		{
+			name = "Border frame level offset",
+			kind = SettingType.Slider,
+			allowInput = true,
+			field = "borderFrameLevelOffset",
+			parentId = "border",
+			minValue = -20,
+			maxValue = 50,
+			valueStep = 1,
+			get = function()
+				local cfg = getCfg(kind)
+				local bc = cfg and cfg.border or {}
+				local value = bc.frameLevelOffset
+				if value == nil then value = (DEFAULTS[kind] and DEFAULTS[kind].border and DEFAULTS[kind].border.frameLevelOffset) end
+				value = clampNumber(value, -20, 50, 3)
+				return floor(value + (value >= 0 and 0.5 or -0.5))
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.border = cfg.border or {}
+				local levelOffset = clampNumber(value, -20, 50, cfg.border.frameLevelOffset or 3)
+				levelOffset = floor(levelOffset + (levelOffset >= 0 and 0.5 or -0.5))
+				cfg.border.frameLevelOffset = levelOffset
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "borderFrameLevelOffset", cfg.border.frameLevelOffset, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function()
+				local cfg = getCfg(kind)
+				local bc = cfg and cfg.border or {}
+				return bc.enabled ~= false
+			end,
+		},
+		{
 			name = "Border size",
 			kind = SettingType.Slider,
 			allowInput = true,
@@ -10946,6 +11451,269 @@ local function buildEditModeSettings(kind, editModeId)
 				GF:ApplyHeaderAttributes(kind)
 			end,
 			isEnabled = function() return isHighlightEnabled("highlightTarget") end,
+		},
+		{
+			name = "Portrait",
+			kind = SettingType.Collapsible,
+			id = "portrait",
+			defaultCollapsed = true,
+			isShown = function() return kind ~= "raid" end,
+		},
+		{
+			name = "Enable portrait",
+			kind = SettingType.Checkbox,
+			field = "portraitEnabled",
+			parentId = "portrait",
+			isShown = function() return kind ~= "raid" end,
+			get = function() return isPortraitEnabled() end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.portrait = cfg.portrait or {}
+				cfg.portrait.enabled = value and true or false
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "portraitEnabled", cfg.portrait.enabled, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+		},
+		{
+			name = "Portrait side",
+			kind = SettingType.Dropdown,
+			field = "portraitSide",
+			parentId = "portrait",
+			values = portraitSideOptions,
+			isShown = function() return kind ~= "raid" end,
+			get = function() return getPortraitSideValue() end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.portrait = cfg.portrait or {}
+				cfg.portrait.side = tostring(value or "LEFT"):upper()
+				if cfg.portrait.side ~= "RIGHT" then cfg.portrait.side = "LEFT" end
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "portraitSide", cfg.portrait.side, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function() return isPortraitEnabled() end,
+		},
+		{
+			name = "Force square background",
+			kind = SettingType.Checkbox,
+			field = "portraitSquareBackground",
+			parentId = "portrait",
+			isShown = function() return kind ~= "raid" end,
+			get = function()
+				local cfg = getCfg(kind)
+				local pcfg = cfg and cfg.portrait or {}
+				local defPortrait = (DEFAULTS[kind] and DEFAULTS[kind].portrait) or {}
+				local value = pcfg.squareBackground
+				if value == nil then value = defPortrait.squareBackground end
+				return value == true
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.portrait = cfg.portrait or {}
+				cfg.portrait.squareBackground = value and true or false
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "portraitSquareBackground", cfg.portrait.squareBackground, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function() return isPortraitEnabled() end,
+		},
+		{
+			name = "Extend border over portrait",
+			kind = SettingType.Checkbox,
+			field = "portraitBorderWithFrame",
+			parentId = "portrait",
+			isShown = function() return kind ~= "raid" end,
+			get = function()
+				local cfg = getCfg(kind)
+				local pcfg = cfg and cfg.portrait or {}
+				local defPortrait = (DEFAULTS[kind] and DEFAULTS[kind].portrait) or {}
+				local value = pcfg.borderWithFrame
+				if value == nil then value = defPortrait.borderWithFrame end
+				return value == true
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.portrait = cfg.portrait or {}
+				cfg.portrait.borderWithFrame = value and true or false
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "portraitBorderWithFrame", cfg.portrait.borderWithFrame, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function()
+				if not isPortraitEnabled() then return false end
+				local cfg = getCfg(kind)
+				local bc = cfg and cfg.border or {}
+				local bdef = (DEFAULTS[kind] and DEFAULTS[kind].border) or {}
+				local enabled = bc.enabled
+				if enabled == nil then enabled = bdef.enabled end
+				return enabled == true
+			end,
+		},
+		{
+			name = "Show separator",
+			kind = SettingType.Checkbox,
+			field = "portraitSeparatorEnabled",
+			parentId = "portrait",
+			isShown = function() return kind ~= "raid" end,
+			get = function()
+				local cfg = getCfg(kind)
+				local pcfg = cfg and cfg.portrait or {}
+				local defPortrait = (DEFAULTS[kind] and DEFAULTS[kind].portrait) or {}
+				local scfg = pcfg.separator or {}
+				local sdef = (defPortrait and defPortrait.separator) or {}
+				local value = scfg.enabled
+				if value == nil then value = sdef.enabled end
+				if value == nil then value = true end
+				return value == true
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.portrait = cfg.portrait or {}
+				cfg.portrait.separator = cfg.portrait.separator or {}
+				cfg.portrait.separator.enabled = value and true or false
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "portraitSeparatorEnabled", cfg.portrait.separator.enabled, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function() return isPortraitEnabled() end,
+		},
+		{
+			name = "Separator size",
+			kind = SettingType.Slider,
+			allowInput = true,
+			field = "portraitSeparatorSize",
+			parentId = "portrait",
+			isShown = function() return kind ~= "raid" end,
+			minValue = 1,
+			maxValue = 32,
+			valueStep = 1,
+			get = function()
+				local cfg = getCfg(kind)
+				local pcfg = cfg and cfg.portrait or {}
+				local scfg = pcfg.separator or {}
+				local defPortrait = (DEFAULTS[kind] and DEFAULTS[kind].portrait) or {}
+				local sdef = (defPortrait and defPortrait.separator) or {}
+				local size = tonumber(scfg.size)
+				if not size then size = tonumber(sdef.size) end
+				if not size then
+					local bc = cfg and cfg.border or {}
+					local bdef = (DEFAULTS[kind] and DEFAULTS[kind].border) or {}
+					size = tonumber(bc.edgeSize or bdef.edgeSize) or 1
+				end
+				if size < 1 then size = 1 end
+				return size
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.portrait = cfg.portrait or {}
+				cfg.portrait.separator = cfg.portrait.separator or {}
+				cfg.portrait.separator.size = clampNumber(value, 1, 32, cfg.portrait.separator.size or 1)
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "portraitSeparatorSize", cfg.portrait.separator.size, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function()
+				if not isPortraitEnabled() then return false end
+				local cfg = getCfg(kind)
+				local pcfg = cfg and cfg.portrait or {}
+				local scfg = pcfg.separator or {}
+				local defPortrait = (DEFAULTS[kind] and DEFAULTS[kind].portrait) or {}
+				local sdef = (defPortrait and defPortrait.separator) or {}
+				local value = scfg.enabled
+				if value == nil then value = sdef.enabled end
+				if value == nil then value = true end
+				return value == true
+			end,
+		},
+		{
+			name = "Custom separator color",
+			kind = SettingType.Checkbox,
+			field = "portraitSeparatorUseCustomColor",
+			parentId = "portrait",
+			isShown = function() return kind ~= "raid" end,
+			get = function()
+				local cfg = getCfg(kind)
+				local pcfg = cfg and cfg.portrait or {}
+				local scfg = pcfg.separator or {}
+				local defPortrait = (DEFAULTS[kind] and DEFAULTS[kind].portrait) or {}
+				local sdef = (defPortrait and defPortrait.separator) or {}
+				local value = scfg.useCustomColor
+				if value == nil then value = sdef.useCustomColor end
+				return value == true
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.portrait = cfg.portrait or {}
+				cfg.portrait.separator = cfg.portrait.separator or {}
+				cfg.portrait.separator.useCustomColor = value and true or false
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "portraitSeparatorUseCustomColor", cfg.portrait.separator.useCustomColor, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function()
+				if not isPortraitEnabled() then return false end
+				local cfg = getCfg(kind)
+				local pcfg = cfg and cfg.portrait or {}
+				local scfg = pcfg.separator or {}
+				local defPortrait = (DEFAULTS[kind] and DEFAULTS[kind].portrait) or {}
+				local sdef = (defPortrait and defPortrait.separator) or {}
+				local value = scfg.enabled
+				if value == nil then value = sdef.enabled end
+				if value == nil then value = true end
+				return value == true
+			end,
+		},
+		{
+			name = "Separator color",
+			kind = SettingType.Color,
+			field = "portraitSeparatorColor",
+			parentId = "portrait",
+			isShown = function() return kind ~= "raid" end,
+			hasOpacity = true,
+			default = (
+				(DEFAULTS[kind] and DEFAULTS[kind].portrait and DEFAULTS[kind].portrait.separator and DEFAULTS[kind].portrait.separator.color)
+				or (DEFAULTS[kind] and DEFAULTS[kind].border and DEFAULTS[kind].border.color)
+				or { 0, 0, 0, 0.8 }
+			),
+			get = function()
+				local cfg = getCfg(kind)
+				local pcfg = cfg and cfg.portrait or {}
+				local scfg = pcfg.separator or {}
+				local defPortrait = (DEFAULTS[kind] and DEFAULTS[kind].portrait) or {}
+				local sdef = (defPortrait and defPortrait.separator) or {}
+				local bc = cfg and cfg.border or {}
+				local bdef = (DEFAULTS[kind] and DEFAULTS[kind].border) or {}
+				local fallback = sdef.color or bc.color or bdef.color or { 0, 0, 0, 0.8 }
+				local r, g, b, a = unpackColor(scfg.color, fallback)
+				return { r = r, g = g, b = b, a = a }
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not (cfg and value) then return end
+				cfg.portrait = cfg.portrait or {}
+				cfg.portrait.separator = cfg.portrait.separator or {}
+				cfg.portrait.separator.color = { value.r or 0, value.g or 0, value.b or 0, value.a or 0.8 }
+				cfg.portrait.separator.useCustomColor = true
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "portraitSeparatorColor", cfg.portrait.separator.color, nil, true) end
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "portraitSeparatorUseCustomColor", true, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function()
+				if not isPortraitEnabled() then return false end
+				local cfg = getCfg(kind)
+				local pcfg = cfg and cfg.portrait or {}
+				local scfg = pcfg.separator or {}
+				local defPortrait = (DEFAULTS[kind] and DEFAULTS[kind].portrait) or {}
+				local sdef = (defPortrait and defPortrait.separator) or {}
+				local separatorEnabled = scfg.enabled
+				if separatorEnabled == nil then separatorEnabled = sdef.enabled end
+				if separatorEnabled == nil then separatorEnabled = true end
+				if not separatorEnabled then return false end
+				local useCustomColor = scfg.useCustomColor
+				if useCustomColor == nil then useCustomColor = sdef.useCustomColor end
+				return useCustomColor == true
+			end,
 		},
 		{
 			name = "Name",
@@ -14618,9 +15386,11 @@ local function buildEditModeSettings(kind, editModeId)
 			generator = function(_, root)
 				local tinyLabel = "|A:roleicon-tiny-tank:16:16|a |A:roleicon-tiny-healer:16:16|a |A:roleicon-tiny-dps:16:16|a"
 				local circleLabel = "|A:UI-LFG-RoleIcon-Tank-Micro-GroupFinder:16:16|a |A:UI-LFG-RoleIcon-Healer-Micro-GroupFinder:16:16|a |A:UI-LFG-RoleIcon-DPS-Micro-GroupFinder:16:16|a"
+				local frameLabel = "|A:UI-Frame-TankIcon:16:16|a |A:UI-Frame-HealerIcon:16:16|a |A:UI-Frame-DpsIcon:16:16|a"
 				local options = {
 					{ value = "TINY", label = tinyLabel },
 					{ value = "CIRCLE", label = circleLabel },
+					{ value = "FRAME", label = frameLabel },
 				}
 				for _, option in ipairs(options) do
 					root:CreateRadio(option.label, function()
@@ -18556,12 +19326,45 @@ local function applyEditModeData(kind, data)
 			cfg.barTexture = data.barTexture
 		end
 	end
-	if data.borderEnabled ~= nil or data.borderColor ~= nil or data.borderTexture ~= nil or data.borderSize ~= nil or data.borderOffset ~= nil then cfg.border = cfg.border or {} end
+	if
+		data.borderEnabled ~= nil
+		or data.borderColor ~= nil
+		or data.borderTexture ~= nil
+		or data.borderSize ~= nil
+		or data.borderOffset ~= nil
+		or data.borderStrata ~= nil
+		or data.borderFrameLevelOffset ~= nil
+	then
+		cfg.border = cfg.border or {}
+	end
 	if data.borderEnabled ~= nil then cfg.border.enabled = data.borderEnabled and true or false end
 	if data.borderColor ~= nil then cfg.border.color = data.borderColor end
 	if data.borderTexture ~= nil then cfg.border.texture = data.borderTexture end
 	if data.borderSize ~= nil then cfg.border.edgeSize = data.borderSize end
 	if data.borderOffset ~= nil then cfg.border.offset = data.borderOffset end
+	if data.borderStrata ~= nil then
+		local strata = tostring(data.borderStrata or ""):upper()
+		if strata == "DEFAULT" then strata = "" end
+		if
+			strata ~= ""
+			and strata ~= "BACKGROUND"
+			and strata ~= "LOW"
+			and strata ~= "MEDIUM"
+			and strata ~= "HIGH"
+			and strata ~= "DIALOG"
+			and strata ~= "FULLSCREEN"
+			and strata ~= "FULLSCREEN_DIALOG"
+			and strata ~= "TOOLTIP"
+		then
+			strata = ""
+		end
+		cfg.border.strata = (strata ~= "") and strata or nil
+	end
+	if data.borderFrameLevelOffset ~= nil then
+		local offset = clampNumber(data.borderFrameLevelOffset, -20, 50, (cfg.border and cfg.border.frameLevelOffset) or 3)
+		offset = floor(offset + (offset >= 0 and 0.5 or -0.5))
+		cfg.border.frameLevelOffset = offset
+	end
 	if data.hoverHighlightEnabled ~= nil or data.hoverHighlightColor ~= nil or data.hoverHighlightTexture ~= nil or data.hoverHighlightSize ~= nil or data.hoverHighlightOffset ~= nil then
 		cfg.highlightHover = cfg.highlightHover or {}
 	end
@@ -19494,6 +20297,31 @@ function GF:EnsureEditMode()
 					or (cfg.border and cfg.border.edgeSize)
 					or (DEFAULTS[kind] and DEFAULTS[kind].border and DEFAULTS[kind].border.edgeSize)
 					or 1,
+				borderStrata = (function()
+					local value = (cfg.border and cfg.border.strata) or (DEFAULTS[kind] and DEFAULTS[kind].border and DEFAULTS[kind].border.strata) or ""
+					value = tostring(value or ""):upper()
+					if value == "DEFAULT" then value = "" end
+					if
+						value ~= ""
+						and value ~= "BACKGROUND"
+						and value ~= "LOW"
+						and value ~= "MEDIUM"
+						and value ~= "HIGH"
+						and value ~= "DIALOG"
+						and value ~= "FULLSCREEN"
+						and value ~= "FULLSCREEN_DIALOG"
+						and value ~= "TOOLTIP"
+					then
+						value = ""
+					end
+					return value
+				end)(),
+				borderFrameLevelOffset = (function()
+					local value = (cfg.border and cfg.border.frameLevelOffset)
+					if value == nil then value = (DEFAULTS[kind] and DEFAULTS[kind].border and DEFAULTS[kind].border.frameLevelOffset) end
+					value = clampNumber(value, -20, 50, 3)
+					return floor(value + (value >= 0 and 0.5 or -0.5))
+				end)(),
 				hoverHighlightEnabled = (cfg.highlightHover and cfg.highlightHover.enabled) == true,
 				hoverHighlightColor = (cfg.highlightHover and cfg.highlightHover.color) or (def.highlightHover and def.highlightHover.color) or { 1, 1, 1, 0.9 },
 				hoverHighlightTexture = (cfg.highlightHover and cfg.highlightHover.texture) or (def.highlightHover and def.highlightHover.texture) or "DEFAULT",
