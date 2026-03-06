@@ -88,10 +88,27 @@ function GF.GetBuffHelpfulFilter(ac)
 	return (AURA_FILTERS and AURA_FILTERS.helpful) or "HELPFUL|INCLUDE_NAME_PLATE_ONLY|RAID_IN_COMBAT|PLAYER"
 end
 
+function GF.CaptureGroupAuraSlotResults(...)
+	GF._groupAuraSlotResultBuffer = GF._groupAuraSlotResultBuffer or {}
+	local buffer = GF._groupAuraSlotResultBuffer
+	local previousCount = GF._groupAuraSlotResultCount or 0
+	local count = select("#", ...)
+	for i = 1, count do
+		buffer[i] = select(i, ...)
+	end
+	if previousCount > count then
+		for i = count + 1, previousCount do
+			buffer[i] = nil
+		end
+	end
+	GF._groupAuraSlotResultCount = count
+	return buffer, count
+end
+
 local function queryAuraSlots(unit, filter, maxCount)
-	if not filter then return nil end
-	if maxCount then return { C_UnitAuras.GetAuraSlots(unit, filter, maxCount) } end
-	return { C_UnitAuras.GetAuraSlots(unit, filter) }
+	if not filter then return nil, 0 end
+	if maxCount then return GF.CaptureGroupAuraSlotResults(C_UnitAuras.GetAuraSlots(unit, filter, maxCount)) end
+	return GF.CaptureGroupAuraSlotResults(C_UnitAuras.GetAuraSlots(unit, filter))
 end
 
 local PREVIEW_SAMPLES = GFH.PREVIEW_SAMPLES or { party = {}, raid = {}, mt = {}, ma = {} }
@@ -4882,22 +4899,22 @@ local function fullScanGroupAuras(
 	end
 
 	if wantBuff and helpfulScanFilter then
-		local helpfulSlots = queryAuraSlots(unit, helpfulScanFilter, queryMax and queryMax.helpful)
-		for i = 2, (helpfulSlots and #helpfulSlots or 0) do
+		local helpfulSlots, helpfulSlotCount = queryAuraSlots(unit, helpfulScanFilter, queryMax and queryMax.helpful)
+		for i = 2, helpfulSlotCount do
 			local aura = C_UnitAuras.GetAuraDataBySlot(unit, helpfulSlots[i])
 			if aura then storeAura(aura) end
 		end
 	end
 	if (wantDebuff or wantsDispel) and harmfulFilter then
-		local harmfulSlots = queryAuraSlots(unit, harmfulFilter, queryMax and queryMax.harmful)
-		for i = 2, (harmfulSlots and #harmfulSlots or 0) do
+		local harmfulSlots, harmfulSlotCount = queryAuraSlots(unit, harmfulFilter, queryMax and queryMax.harmful)
+		for i = 2, harmfulSlotCount do
 			local aura = C_UnitAuras.GetAuraDataBySlot(unit, harmfulSlots[i])
 			if aura then storeAura(aura) end
 		end
 	end
 	if wantExternals and externalFilter then
-		local externalSlots = queryAuraSlots(unit, externalFilter, queryMax and queryMax.external)
-		for i = 2, (externalSlots and #externalSlots or 0) do
+		local externalSlots, externalSlotCount = queryAuraSlots(unit, externalFilter, queryMax and queryMax.external)
+		for i = 2, externalSlotCount do
 			local aura = C_UnitAuras.GetAuraDataBySlot(unit, externalSlots[i])
 			if aura then storeAura(aura) end
 		end
@@ -5605,6 +5622,8 @@ end
 
 local function hideGroupIndicators(container)
 	if not container then return end
+	local overlay = container._eqolGroupIndicatorOverlay
+	if overlay and overlay.Hide then overlay:Hide() end
 	local indicators = container._eqolGroupIndicators
 	if not indicators then return end
 	for _, fs in pairs(indicators) do
@@ -5613,6 +5632,24 @@ local function hideGroupIndicators(container)
 			fs:Hide()
 		end
 	end
+end
+
+function GF.EnsureGroupIndicatorOverlay(container, target)
+	if not (container and target and CreateFrame) then return container end
+
+	local overlay = container._eqolGroupIndicatorOverlay
+	if not overlay then
+		overlay = CreateFrame("Frame", nil, container)
+		overlay:EnableMouse(false)
+		if overlay.SetAllPoints then overlay:SetAllPoints(container) end
+		container._eqolGroupIndicatorOverlay = overlay
+	end
+
+	if overlay.GetParent and overlay:GetParent() ~= container then overlay:SetParent(container) end
+	if overlay.SetAllPoints then overlay:SetAllPoints(container) end
+	setFrameLevelAbove(overlay, target, 10)
+	if overlay.Show then overlay:Show() end
+	return overlay
 end
 
 local function updateGroupIndicatorsForFrames(container, frames, cfg, def, isPreview, fixedSubgroup)
@@ -5626,15 +5663,63 @@ local function updateGroupIndicatorsForFrames(container, frames, cfg, def, isPre
 		return
 	end
 
+	local style = resolveGroupIndicatorStyle(cfg, def, (cfg and cfg.health) or {})
+	local anchorMode = tostring(style.anchor or "TOPLEFT"):upper()
 	local candidates = {}
+	local function pickCandidate(current, frame, key)
+		if not frame then return current end
+		local st = getState(frame)
+		local anchorTarget = (st and st.barGroup) or frame
+		if not anchorTarget then return current end
+
+		local candidate = {
+			frame = frame,
+			key = key,
+			anchorTarget = anchorTarget,
+			left = anchorTarget.GetLeft and anchorTarget:GetLeft() or nil,
+			right = anchorTarget.GetRight and anchorTarget:GetRight() or nil,
+			top = anchorTarget.GetTop and anchorTarget:GetTop() or nil,
+			bottom = anchorTarget.GetBottom and anchorTarget:GetBottom() or nil,
+		}
+		if not current then return candidate end
+		if not (candidate.left and candidate.right and candidate.top and candidate.bottom and current.left and current.right and current.top and current.bottom) then
+			if (key or math.huge) < (current.key or math.huge) then return candidate end
+			return current
+		end
+
+		local epsilon = 0.5
+		if anchorMode == "TOPRIGHT" then
+			if candidate.right > current.right + epsilon then return candidate end
+			if abs(candidate.right - current.right) <= epsilon and candidate.top > current.top + epsilon then return candidate end
+		elseif anchorMode == "BOTTOMLEFT" then
+			if candidate.left < current.left - epsilon then return candidate end
+			if abs(candidate.left - current.left) <= epsilon and candidate.bottom < current.bottom - epsilon then return candidate end
+		elseif anchorMode == "BOTTOMRIGHT" then
+			if candidate.right > current.right + epsilon then return candidate end
+			if abs(candidate.right - current.right) <= epsilon and candidate.bottom < current.bottom - epsilon then return candidate end
+		elseif anchorMode == "TOP" then
+			if candidate.top > current.top + epsilon then return candidate end
+			if abs(candidate.top - current.top) <= epsilon and candidate.left < current.left - epsilon then return candidate end
+		elseif anchorMode == "BOTTOM" then
+			if candidate.bottom < current.bottom - epsilon then return candidate end
+			if abs(candidate.bottom - current.bottom) <= epsilon and candidate.left < current.left - epsilon then return candidate end
+		elseif anchorMode == "RIGHT" then
+			if candidate.right > current.right + epsilon then return candidate end
+			if abs(candidate.right - current.right) <= epsilon and candidate.top > current.top + epsilon then return candidate end
+		elseif anchorMode == "CENTER" then
+			if (key or math.huge) < (current.key or math.huge) then return candidate end
+		else
+			if candidate.left < current.left - epsilon then return candidate end
+			if abs(candidate.left - current.left) <= epsilon and candidate.top > current.top + epsilon then return candidate end
+		end
+
+		return current
+	end
 
 	local fixedGroup = tonumber(fixedSubgroup)
 	if fixedGroup and fixedGroup >= 1 and fixedGroup <= 8 then
 		for visualIndex, frame in ipairs(frames) do
-			if frame and frame.IsShown and frame:IsShown() then
-				candidates[fixedGroup] = { frame = frame, key = visualIndex }
-				break
-			end
+			if frame and frame.IsShown and frame:IsShown() then candidates[fixedGroup] = pickCandidate(candidates[fixedGroup], frame, visualIndex) end
 		end
 	else
 		for visualIndex, frame in ipairs(frames) do
@@ -5650,8 +5735,7 @@ local function updateGroupIndicatorsForFrames(container, frames, cfg, def, isPre
 
 				if subgroup then
 					subgroup = tonumber(subgroup) or subgroup
-					local current = candidates[subgroup]
-					if not current or visualIndex < current.key then candidates[subgroup] = { frame = frame, key = visualIndex } end
+					candidates[subgroup] = pickCandidate(candidates[subgroup], frame, visualIndex)
 				end
 			end
 		end
@@ -5667,24 +5751,39 @@ local function updateGroupIndicatorsForFrames(container, frames, cfg, def, isPre
 		indicators = {}
 		container._eqolGroupIndicators = indicators
 	end
-	local style = resolveGroupIndicatorStyle(cfg, def, (cfg and cfg.health) or {})
 	local format = resolveGroupIndicatorFormat(cfg, def)
 	local scale = GFH.GetEffectiveScale(container)
 	if not scale or scale <= 0 then scale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1 end
 	local used = {}
+	local overlayTarget
+
+	for subgroup, entry in pairs(candidates) do
+		local target = entry and entry.frame
+		local anchorTarget = entry and entry.anchorTarget
+		if anchorTarget then
+			if not overlayTarget then
+				overlayTarget = anchorTarget
+			else
+				local currentLevel = overlayTarget.GetFrameLevel and overlayTarget:GetFrameLevel() or 0
+				local candidateLevel = anchorTarget.GetFrameLevel and anchorTarget:GetFrameLevel() or 0
+				if candidateLevel > currentLevel then overlayTarget = anchorTarget end
+			end
+		end
+	end
+
+	local overlayParent = GF.EnsureGroupIndicatorOverlay(container, overlayTarget)
 
 	for subgroup, entry in pairs(candidates) do
 		local fs = indicators[subgroup]
-		if not fs and container.CreateFontString then
-			fs = container:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+		if not fs and overlayParent and overlayParent.CreateFontString then
+			fs = overlayParent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 			indicators[subgroup] = fs
 		end
 		if fs and entry and entry.frame then
 			local target = entry.frame
-			local st = target and getState(target)
-			local anchorTarget = (st and st.barGroup) or target
+			local anchorTarget = entry.anchorTarget or target
 			if anchorTarget then
-				if fs.GetParent and fs:GetParent() ~= container then fs:SetParent(container) end
+				if fs.GetParent and fs:GetParent() ~= overlayParent then fs:SetParent(overlayParent) end
 				if fs.SetDrawLayer then fs:SetDrawLayer("OVERLAY", 7) end
 				if UFHelper and UFHelper.applyFont then UFHelper.applyFont(fs, style.font, style.fontSize or 12, style.fontOutline) end
 				applyGroupIndicatorAnchor(fs, style.anchor, style.offset, scale, anchorTarget)
