@@ -1,6 +1,7 @@
 local addonName, addon = ...
 
 local L = LibStub("AceLocale-3.0"):GetLocale(addonName)
+local C_GameRules = _G.C_GameRules
 local getCVarOptionState = addon.functions.GetCVarOptionState or function() return false end
 local setCVarOptionState = addon.functions.SetCVarOptionState or function() end
 

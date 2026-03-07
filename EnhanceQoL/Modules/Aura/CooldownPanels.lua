@@ -5392,7 +5392,7 @@ local function refreshPreview(editor, panel)
 		editor.previewHintLabel:SetShown(hasEntries)
 	end
 	if editor.entryHint then editor.entryHint:SetText(L["CooldownPanelEntriesHint"] or "Drag entries to reorder") end
-	local previewEntryIds, count, previewGridColumns, previewGridRows
+	local previewEntryIds, count
 	if not hasEntries then
 		count = 0
 	elseif fixedLayout then
@@ -5437,8 +5437,8 @@ local function refreshPreview(editor, panel)
 		local staticCooldown = entry and entry.staticTextShowOnCooldown == true or false
 		icon:Show()
 		icon.entryId = entryId
-		icon._eqolPreviewCellColumn = previewGridColumns and (((i - 1) % previewGridColumns) + 1) or i
-		icon._eqolPreviewCellRow = previewGridColumns and (math.floor((i - 1) / previewGridColumns) + 1) or 1
+		icon._eqolPreviewCellColumn = i
+		icon._eqolPreviewCellRow = 1
 		icon._eqolTooltipEntry = entry
 		icon._eqolTooltipEnabled = entry ~= nil
 		icon.texture:SetTexture(entry and getEntryIcon(entry) or Helper.PREVIEW_ICON)
@@ -6449,9 +6449,8 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 	local order = panel.order or {}
 	local fixedSlotCount = 0
 	local fixedGridColumns = 0
-	local fixedGridRows = 0
 	if fixedLayout then
-		_, fixedSlotCount, fixedGridColumns, fixedGridRows = Helper.BuildFixedSlotEntryIds(panel, nil, false)
+		_, fixedSlotCount, fixedGridColumns = Helper.BuildFixedSlotEntryIds(panel, nil, false)
 	end
 	runtime.readyAt = runtime.readyAt or {}
 	runtime.glowTimers = runtime.glowTimers or {}

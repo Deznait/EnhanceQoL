@@ -205,7 +205,7 @@ local function resolveSpellFromCooldownID(cooldownID, frame)
 			local linkedSpellIDs = info.linkedSpellIDs
 			local firstLinkedSpellID = linkedSpellIDs and linkedSpellIDs[1]
 			local displaySpellID = firstLinkedSpellID or overrideSpellID or baseSpellID
-			spellID = tonumber(displaySpellID) or tonumber(baseSpellID) or spellID
+			spellID = tonumber(displaySpellID) or tonumber(baseSpellID)
 			if spellID and spellID > 0 then
 				buffName = getSpellName(spellID)
 				iconTextureID = getSpellTexture(spellID)
