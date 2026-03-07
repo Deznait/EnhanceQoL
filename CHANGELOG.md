@@ -23,16 +23,18 @@
 - Group Frames (Party / Growth): Added `Center vertical` and `Center horizontal` growth modes for center-outward party expansion from the anchor midpoint.
 - Mythic+ (Teleports): Added the Engineering wormhole to Quel'Thalas to the teleport list.
 - Mover: Added PvPMatchResults Frame
+- Resource Bars (Runes / Essence): `Separated offset` now renders real standalone segmented bars with individual backgrounds/borders, matching other segmented resources such as Holy Power and Maelstrom Weapon.
 
 ### 🐛 Fixed
 
 - Unit Frames (Absorb Glow): Fixed absorb glow placement and clipping for reverse/overflow layouts. The glow is now anchored to the health-frame edge while being clipped to the health fill region.
 - Cooldown Panels (Ready Glow): Fixed inconsistent/stuck ready-glow behavior for Items and Slot-based Trinkets. Ready glow now initializes correctly on reload, clears reliably when cooldown starts, and stays in sync when toggling `Glow` or changing `Glow duration` in Edit Mode.
 - GCD Bar / SharedMedia: Fixed a login/reload issue where the bar could appear empty because late SharedMedia statusbar/border registrations were not reapplied to the frame.
-
 - Mythic+ (Party Keystone): Fixed an issue where opening the party keystone panel could trigger an error instead of showing the entries correctly.
 - Class Buff Reminder: Fixed reminders showing while your character is dead or a ghost.
 - Food Reminder: Fixed the mage-food leave button appearing in non-follower LFG dungeons. It now only shows inside follower dungeons.
+- Resource Bars: Newly auto-enabled bars for fresh characters/specs no longer spawn on top of each other on first initialization; default anchors now stack vertically from the start.
+- Resource Bars (Essence): Fixed Evoker Essence `Separated offset` behavior so the option no longer only inserts spacing into the legacy essence layout and instead uses the proper segmented renderer.
 
 ---
 

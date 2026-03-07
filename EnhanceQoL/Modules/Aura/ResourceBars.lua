@@ -931,11 +931,13 @@ local function maybeChainSecondaryAnchor(cfg, prevType)
 	if not cfg or cfg.anchor then return end
 	if not prevType then return end
 	cfg.anchor = {
-		point = "TOP",
-		relativePoint = "BOTTOM",
+		point = "TOPLEFT",
+		relativePoint = "BOTTOMLEFT",
 		relativeFrame = "EQOL" .. prevType .. "Bar",
 		x = 0,
-		y = -2,
+		y = RB.DEFAULT_STACK_SPACING,
+		autoSpacing = true,
+		matchRelativeWidth = true,
 	}
 end
 
@@ -1205,25 +1207,34 @@ ensureSpecCfg = function(specIndex)
 					specCfg[pType].enabled = true
 					if pType == mainType and pType ~= "HEALTH" then
 						local a = specCfg[pType].anchor or {}
-						a.point = a.point or "CENTER"
-						a.relativePoint = a.relativePoint or "CENTER"
-						local targetFrame = a.relativeFrame or frameNameFor("HEALTH")
-						if not selection.HEALTH and targetFrame == frameNameFor("HEALTH") then targetFrame = nil end
-						a.relativeFrame = targetFrame
-						a.x = a.x or 0
-						a.y = a.y or -2
-						a.autoSpacing = a.autoSpacing or nil
-						a.matchRelativeWidth = a.matchRelativeWidth or true
+						local explicitRelative = type(a.relativeFrame) == "string" and a.relativeFrame ~= ""
+						local targetFrame = explicitRelative and a.relativeFrame or frameNameFor("HEALTH")
+						if not selection.HEALTH and targetFrame == frameNameFor("HEALTH") and not explicitRelative then targetFrame = nil end
+						if not explicitRelative and targetFrame and targetFrame ~= "" and targetFrame ~= "UIParent" then
+							a.point = "TOPLEFT"
+							a.relativePoint = "BOTTOMLEFT"
+							a.relativeFrame = targetFrame
+							a.x = 0
+							a.y = RB.DEFAULT_STACK_SPACING
+							a.autoSpacing = true
+							a.matchRelativeWidth = a.matchRelativeWidth or true
+						else
+							a.point = a.point or "CENTER"
+							a.relativePoint = a.relativePoint or "CENTER"
+							a.relativeFrame = targetFrame
+							a.x = a.x or 0
+							a.y = a.y or -2
+							a.autoSpacing = a.autoSpacing or nil
+							a.matchRelativeWidth = a.matchRelativeWidth or true
+						end
 						specCfg[pType].anchor = a
 						prevFrame = frameNameFor(pType)
 					elseif pType ~= "HEALTH" then
 						local a = specCfg[pType].anchor or {}
-						a.point = a.point or "CENTER"
-						a.relativePoint = a.relativePoint or "CENTER"
 						local explicitRelative = type(a.relativeFrame) == "string" and a.relativeFrame ~= ""
-						local chained = false
+						local targetFrame = explicitRelative and a.relativeFrame or nil
 						if not explicitRelative then
-							local targetFrame = frameNameFor("HEALTH")
+							targetFrame = frameNameFor("HEALTH")
 							if class == "DRUID" then
 								if pType == "COMBO_POINTS" then
 									targetFrame = frameNameFor("ENERGY")
@@ -1234,13 +1245,23 @@ ensureSpecCfg = function(specIndex)
 							else
 								targetFrame = prevFrame
 							end
-							a.relativeFrame = targetFrame
-							chained = targetFrame and targetFrame ~= ""
 						end
-						a.x = a.x or 0
-						if chained then a.y = a.y or -2 end
-						a.autoSpacing = a.autoSpacing or nil
-						if chained then a.matchRelativeWidth = a.matchRelativeWidth or true end
+						local chained = (not explicitRelative) and targetFrame and targetFrame ~= "" and targetFrame ~= "UIParent"
+						if chained then
+							a.point = "TOPLEFT"
+							a.relativePoint = "BOTTOMLEFT"
+							a.relativeFrame = targetFrame
+							a.x = 0
+							a.y = RB.DEFAULT_STACK_SPACING
+							a.autoSpacing = true
+							a.matchRelativeWidth = a.matchRelativeWidth or true
+						else
+							a.point = a.point or "CENTER"
+							a.relativePoint = a.relativePoint or "CENTER"
+							a.x = a.x or 0
+							if not explicitRelative then a.relativeFrame = targetFrame end
+							a.autoSpacing = a.autoSpacing or nil
+						end
 						specCfg[pType].anchor = a
 						if class ~= "DRUID" then prevFrame = frameNameFor(pType) end
 					else
@@ -2009,7 +2030,9 @@ local function applyBackdrop(frame, cfg)
 	applyStatusBarInsets(frame, state.insets, true)
 
 	local separatedOffset = tonumber(cfg and cfg.separatedOffset) or 0
-	local hideParentBackdropForSeparated = separatedOffset > 0 and frame._rbType and shouldUseDiscreteSeparatorSegments and shouldUseDiscreteSeparatorSegments(frame._rbType, cfg)
+	local hideParentBackdropForSeparated = separatedOffset > 0
+		and frame._rbType
+		and (frame._rbType == "RUNES" or frame._rbType == "ESSENCE" or (shouldUseDiscreteSeparatorSegments and shouldUseDiscreteSeparatorSegments(frame._rbType, cfg)))
 	if hideParentBackdropForSeparated then
 		if bgFrame:IsShown() then bgFrame:Hide() end
 		if borderFrame:IsShown() then borderFrame:Hide() end
@@ -3554,6 +3577,36 @@ function updatePowerBar(type, runeSlot)
 						if ResourceBars.RefreshStatusBarGradient then ResourceBars.RefreshStatusBarGradient(sb, cfg, cooldownR, cooldownG, cooldownB, cooldownA) end
 					end
 				end
+				if sb._rbSegmentBg then
+					local fallbackR, fallbackG, fallbackB, fallbackA
+					if wantReady then
+						fallbackR, fallbackG, fallbackB, fallbackA = readyR * 0.35, readyG * 0.35, readyB * 0.35, (readyA or 1) * 0.9
+					else
+						fallbackR, fallbackG, fallbackB, fallbackA = cooldownR * 0.35, cooldownG * 0.35, cooldownB * 0.35, (cooldownA or 1) * 0.9
+					end
+					local bgTexture, bgR, bgG, bgB, bgA, bgVisible
+					if ResourceBars.ResolveDiscreteSegmentBackground then
+						bgTexture, bgR, bgG, bgB, bgA, bgVisible = ResourceBars.ResolveDiscreteSegmentBackground(cfg, resolveTexture(cfg), fallbackR, fallbackG, fallbackB, fallbackA)
+					else
+						bgTexture, bgR, bgG, bgB, bgA, bgVisible = resolveTexture(cfg), fallbackR, fallbackG, fallbackB, fallbackA, true
+					end
+					if bgVisible then
+						if sb._rbSegmentBgPath ~= bgTexture then
+							sb._rbSegmentBg:SetTexture(bgTexture)
+							sb._rbSegmentBgPath = bgTexture
+						end
+						local bgColorKey = tostring(bgR) .. ":" .. tostring(bgG) .. ":" .. tostring(bgB) .. ":" .. tostring(bgA)
+						if sb._rbSegmentBgColorKey ~= bgColorKey then
+							sb._rbSegmentBg:SetVertexColor(bgR, bgG, bgB, bgA)
+							sb._rbSegmentBgColorKey = bgColorKey
+						end
+						if not sb._rbSegmentBg:IsShown() then sb._rbSegmentBg:Show() end
+					else
+						if sb._rbSegmentBg:IsShown() then sb._rbSegmentBg:Hide() end
+						sb._rbSegmentBgPath = nil
+						sb._rbSegmentBgColorKey = nil
+					end
+				end
 				if sb.fs then
 					if cfg.showCooldownText then
 						local remain = ceil((info.start + info.duration) - now)
@@ -4282,10 +4335,32 @@ updateBarSeparators = function(pType)
 		if bar:IsShown() then layoutRunes(bar) end
 		return
 	end
+	if pType == "ESSENCE" then
+		local cfg = getBarSettings("ESSENCE") or {}
+		local separatedOffset = tonumber(cfg.separatedOffset) or 0
+		if separatedOffset > 0 then
+			if bar.separatorMarks then
+				for _, tx in ipairs(bar.separatorMarks) do
+					tx:Hide()
+				end
+			end
+			if bar:IsShown() then
+				local count = POWER_ENUM and UnitPowerMax("player", POWER_ENUM.ESSENCE) or 0
+				ResourceBars.LayoutEssences(bar, cfg, count, resolveTexture(cfg))
+			end
+			return
+		end
+	end
 	local cfg = getBarSettings(pType)
 	local useDiscrete = shouldUseDiscreteSeparatorSegments(pType, cfg)
 	if not (cfg and (cfg.showSeparator == true or useDiscrete)) then
-		if pType ~= "RUNES" and pType ~= "ESSENCE" then
+		if pType == "ESSENCE" then
+			if ResourceBars.HideDiscreteSegments then ResourceBars.HideDiscreteSegments(bar) end
+			if bar:IsShown() then
+				local count = POWER_ENUM and UnitPowerMax("player", POWER_ENUM.ESSENCE) or 0
+				ResourceBars.LayoutEssences(bar, cfg or {}, count, resolveTexture(cfg or {}))
+			end
+		elseif pType ~= "RUNES" then
 			if ResourceBars.HideDiscreteSegments then ResourceBars.HideDiscreteSegments(bar) end
 			setParentBarTextureVisible(bar, true)
 		end
@@ -4313,7 +4388,13 @@ updateBarSeparators = function(pType)
 			end
 		end
 		return
-	elseif pType ~= "RUNES" and pType ~= "ESSENCE" then
+	elseif pType == "ESSENCE" then
+		if ResourceBars.HideDiscreteSegments then ResourceBars.HideDiscreteSegments(bar) end
+		if bar:IsShown() then
+			local count = POWER_ENUM and UnitPowerMax("player", POWER_ENUM.ESSENCE) or 0
+			ResourceBars.LayoutEssences(bar, cfg or {}, count, resolveTexture(cfg or {}))
+		end
+	elseif pType ~= "RUNES" then
 		if ResourceBars.HideDiscreteSegments then ResourceBars.HideDiscreteSegments(bar) end
 		setParentBarTextureVisible(bar, true)
 	end
@@ -4602,13 +4683,16 @@ function layoutRunes(bar)
 	local h = max(1, inner:GetHeight() or (bar:GetHeight() or 0))
 	local cfg = getBarSettings("RUNES") or {}
 	local showSeparator = cfg.showSeparator == true
+	local configuredSeparator = tonumber(cfg.separatorThickness)
+	if configuredSeparator == nil then configuredSeparator = RB.SEPARATOR_THICKNESS end
+	if configuredSeparator == nil then configuredSeparator = 1 end
 	local gap = 0
-	if showSeparator then
-		local configured = tonumber(cfg.separatorThickness)
-		if configured == nil then configured = RB.SEPARATOR_THICKNESS end
-		if configured == nil then configured = 1 end
-		gap = max(0, floor(configured + 0.5))
+	if ResourceBars.ResolveDiscreteSegmentGap then
+		gap = ResourceBars.ResolveDiscreteSegmentGap(cfg, configuredSeparator)
+	else
+		gap = showSeparator and max(0, floor(configuredSeparator + 0.5)) or 0
 	end
+	gap = max(0, floor((tonumber(gap) or 0) + 0.5))
 	if nil == cfg.showCooldownText then cfg.showCooldownText = true end
 	local show = cfg.showCooldownText ~= false -- default on
 	local size = cfg.cooldownTextFontSize or cfg.fontSize or 16
@@ -4617,6 +4701,19 @@ function layoutRunes(bar)
 	local fr, fg, fb, fa = resolveFontColor(cfg)
 	local vertical = cfg.verticalFill == true
 	local readyR, readyG, readyB, readyA = resolveRuneReadyColor(cfg)
+	local texturePath = resolveTexture(cfg)
+	local separatedOffset = tonumber(cfg.separatedOffset) or 0
+	local useSegmentBorders = separatedOffset > 0 or cfg.useGradient == true
+	local borderEnabled, borderTexture, borderEdgeSize, borderOutset, borderR, borderG, borderB, borderA
+	if ResourceBars.ResolveDiscreteSegmentBorderStyle then
+		borderEnabled, borderTexture, borderEdgeSize, borderOutset, borderR, borderG, borderB, borderA = ResourceBars.ResolveDiscreteSegmentBorderStyle(cfg, useSegmentBorders)
+	end
+	local bgTexture, bgR, bgG, bgB, bgA, bgVisible
+	if ResourceBars.ResolveDiscreteSegmentBackground then
+		bgTexture, bgR, bgG, bgB, bgA, bgVisible = ResourceBars.ResolveDiscreteSegmentBackground(cfg, texturePath, readyR * 0.35, readyG * 0.35, readyB * 0.35, (readyA or 1) * 0.9)
+	else
+		bgTexture, bgR, bgG, bgB, bgA, bgVisible = texturePath, readyR * 0.35, readyG * 0.35, readyB * 0.35, (readyA or 1) * 0.9, true
+	end
 	local span = vertical and h or w
 	local maxGap = (count > 1) and max(0, floor((span - count) / (count - 1))) or 0
 	if gap > maxGap then gap = maxGap end
@@ -4648,6 +4745,7 @@ function layoutRunes(bar)
 		end
 		sb:ClearAllPoints()
 		if sb:GetParent() ~= inner then sb:SetParent(inner) end
+		sb:SetFrameLevel((bar:GetFrameLevel() or 1) + 1)
 		if vertical then
 			sb:SetWidth(w)
 			sb:SetHeight(segPrimary)
@@ -4671,6 +4769,29 @@ function layoutRunes(bar)
 			else
 				sb:SetWidth(segPrimary)
 			end
+		end
+		if not sb._rbSegmentBg then
+			sb._rbSegmentBg = sb:CreateTexture(nil, "BACKGROUND")
+			sb._rbSegmentBg:SetAllPoints(sb)
+		end
+		if bgVisible then
+			if sb._rbSegmentBgPath ~= bgTexture then
+				sb._rbSegmentBg:SetTexture(bgTexture)
+				sb._rbSegmentBgPath = bgTexture
+			end
+			local bgColorKey = tostring(bgR) .. ":" .. tostring(bgG) .. ":" .. tostring(bgB) .. ":" .. tostring(bgA)
+			if sb._rbSegmentBgColorKey ~= bgColorKey then
+				sb._rbSegmentBg:SetVertexColor(bgR, bgG, bgB, bgA)
+				sb._rbSegmentBgColorKey = bgColorKey
+			end
+			if not sb._rbSegmentBg:IsShown() then sb._rbSegmentBg:Show() end
+		else
+			if sb._rbSegmentBg:IsShown() then sb._rbSegmentBg:Hide() end
+			sb._rbSegmentBgPath = nil
+			sb._rbSegmentBgColorKey = nil
+		end
+		if ResourceBars.ApplyDiscreteSegmentBorder then
+			ResourceBars.ApplyDiscreteSegmentBorder(sb, bar, borderEnabled, borderTexture, borderEdgeSize, borderOutset, borderR, borderG, borderB, borderA)
 		end
 		-- cooldown text per segment
 		if not sb.fs then sb.fs = overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlight") end
