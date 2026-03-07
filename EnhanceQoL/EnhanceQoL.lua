@@ -78,6 +78,7 @@ local COOLDOWN_VIEWER_VISIBILITY_MODES = {
 	PLAYER_HAS_TARGET = "PLAYER_HAS_TARGET",
 	PLAYER_CASTING = "PLAYER_CASTING",
 	PLAYER_IN_GROUP = "PLAYER_IN_GROUP",
+	ALWAYS_HIDDEN = "ALWAYS_HIDDEN",
 }
 addon.constants.COOLDOWN_VIEWER_VISIBILITY_MODES = COOLDOWN_VIEWER_VISIBILITY_MODES
 
@@ -1130,6 +1131,7 @@ local function normalizeCooldownViewerConfigValue(val, acc)
 	if val == COOLDOWN_VIEWER_VISIBILITY_MODES.PLAYER_HAS_TARGET then acc[COOLDOWN_VIEWER_VISIBILITY_MODES.PLAYER_HAS_TARGET] = true end
 	if val == COOLDOWN_VIEWER_VISIBILITY_MODES.PLAYER_CASTING then acc[COOLDOWN_VIEWER_VISIBILITY_MODES.PLAYER_CASTING] = true end
 	if val == COOLDOWN_VIEWER_VISIBILITY_MODES.PLAYER_IN_GROUP then acc[COOLDOWN_VIEWER_VISIBILITY_MODES.PLAYER_IN_GROUP] = true end
+	if val == COOLDOWN_VIEWER_VISIBILITY_MODES.ALWAYS_HIDDEN then acc[COOLDOWN_VIEWER_VISIBILITY_MODES.ALWAYS_HIDDEN] = true end
 	-- Legacy mapping: "hide while mounted" -> show while not mounted
 	if val == "HIDE_WHILE_MOUNTED" then acc[COOLDOWN_VIEWER_VISIBILITY_MODES.WHILE_NOT_MOUNTED] = true end
 	if val == "HIDE_IN_COMBAT" then acc[COOLDOWN_VIEWER_VISIBILITY_MODES.IN_COMBAT] = nil end
@@ -1209,6 +1211,7 @@ local function computeCooldownViewerTargetAlpha(cfg, state)
 	local inGroup = IsInGroup and IsInGroup() and true or false
 	local isSkyriding = addon.variables and addon.variables.isPlayerSkyriding
 	local fadedAlpha = (addon.functions and addon.functions.GetCooldownViewerFadedAlpha and addon.functions.GetCooldownViewerFadedAlpha()) or 0
+	if cfg[COOLDOWN_VIEWER_VISIBILITY_MODES.ALWAYS_HIDDEN] then return 0 end
 	local hideSkyriding = cfg[COOLDOWN_VIEWER_VISIBILITY_MODES.SKYRIDING_INACTIVE] == true
 	local hasShowRules = cfg[COOLDOWN_VIEWER_VISIBILITY_MODES.IN_COMBAT]
 		or cfg[COOLDOWN_VIEWER_VISIBILITY_MODES.WHILE_MOUNTED]
@@ -3874,6 +3877,11 @@ local function initUI()
 	addon.functions.InitDBValue("squareMinimapStatsCoordinatesColor", { r = 1, g = 1, b = 1, a = 1 })
 	addon.functions.InitDBValue("squareMinimapStatsCoordinatesHideInInstance", true)
 	addon.functions.InitDBValue("squareMinimapStatsCoordinatesUpdateInterval", 0.2)
+	addon.functions.InitDBValue("squareMinimapStatsTrackingButton", false)
+	addon.functions.InitDBValue("squareMinimapStatsTrackingButtonAnchor", "TOPLEFT")
+	addon.functions.InitDBValue("squareMinimapStatsTrackingButtonOffsetX", 3)
+	addon.functions.InitDBValue("squareMinimapStatsTrackingButtonOffsetY", -3)
+	addon.functions.InitDBValue("squareMinimapStatsTrackingButtonScale", 1.0)
 	addon.functions.InitDBValue("minimapButtonsMouseover", false)
 	addon.functions.InitDBValue("unclampMinimapCluster", false)
 	addon.functions.InitDBValue("unclampDamageMeter", false)
@@ -4338,8 +4346,10 @@ local function initUI()
 	function addon.functions.ApplyMinimapElementVisibility()
 		local cfg = addon.db and addon.db.hiddenMinimapElements or {}
 		local elems = getMinimapElementFrames()
+		local customTrackingButtonEnabled = addon.db and addon.db.enableSquareMinimap and addon.db.enableSquareMinimapStats and addon.db.squareMinimapStatsTrackingButton == true
 		for key, frames in pairs(elems) do
 			local shouldHide = cfg and cfg[key]
+			if key == "Tracking" and customTrackingButtonEnabled then shouldHide = true end
 			for _, f in ipairs(frames) do
 				if shouldHide then
 					f:Hide()
@@ -4353,11 +4363,17 @@ local function initUI()
 					local hookKey = key
 					f:HookScript("OnShow", function(self)
 						local c = addon.db and addon.db.hiddenMinimapElements
-						if c and c[hookKey] then self:Hide() end
+						local hideForCustomTracking = hookKey == "Tracking"
+							and addon.db
+							and addon.db.enableSquareMinimap
+							and addon.db.enableSquareMinimapStats
+							and addon.db.squareMinimapStatsTrackingButton == true
+						if (c and c[hookKey]) or hideForCustomTracking then self:Hide() end
 					end)
 				end
 			end
 		end
+		if addon.functions.applySquareMinimapTrackingButton then addon.functions.applySquareMinimapTrackingButton() end
 	end
 
 	-- Apply on load with a tiny delay to ensure frames exist

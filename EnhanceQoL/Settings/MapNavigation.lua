@@ -1195,6 +1195,97 @@ data = {
 					},
 				},
 			},
+			{
+				text = "",
+				sType = "hint",
+				parentSection = mapExpandable,
+			},
+			{
+				var = "squareMinimapStatsTrackingButton",
+				text = L["squareMinimapStatsTrackingButton"] or "Tracking Button",
+				desc = L["squareMinimapStatsTrackingButtonDesc"]
+					or "Moves the Blizzard tracking button onto the minimap as a configurable stats element and keeps the default tracking slot hidden while active.",
+				func = function(key)
+					addon.db["squareMinimapStatsTrackingButton"] = key and true or false
+					applySquareMinimapStatsNow(true)
+					if addon.functions.ApplyMinimapElementVisibility then addon.functions.ApplyMinimapElementVisibility() end
+				end,
+				default = false,
+				sType = "checkbox",
+				parent = true,
+				parentCheck = isSquareMinimapStatsEnabledSetting,
+				notify = "enableSquareMinimapStats",
+				parentSection = mapExpandable,
+				children = {
+					{
+						var = "squareMinimapStatsTrackingButtonAnchor",
+						text = L["squareMinimapStatsAnchor"] or "Anchor",
+						list = squareMinimapStatsAnchorOptions,
+						order = squareMinimapStatsAnchorOrder,
+						get = function() return addon.db and addon.db.squareMinimapStatsTrackingButtonAnchor or "TOPLEFT" end,
+						set = function(value, maybeValue)
+							addon.db["squareMinimapStatsTrackingButtonAnchor"] = normalizeSquareMinimapAnchorSelection(value, maybeValue, "TOPLEFT")
+							applySquareMinimapStatsNow(true)
+						end,
+						default = "TOPLEFT",
+						sType = "dropdown",
+						parent = true,
+						parentCheck = isSquareMinimapStatElementEnabled("squareMinimapStatsTrackingButton"),
+						parentSection = mapExpandable,
+					},
+					{
+						var = "squareMinimapStatsTrackingButtonOffsetX",
+						text = L["squareMinimapStatsOffsetX"] or "Horizontal offset",
+						get = function() return addon.db and addon.db.squareMinimapStatsTrackingButtonOffsetX or 3 end,
+						set = function(value)
+							addon.db["squareMinimapStatsTrackingButtonOffsetX"] = value
+							applySquareMinimapStatsNow(true)
+						end,
+						min = -220,
+						max = 220,
+						step = 1,
+						default = 3,
+						sType = "slider",
+						parent = true,
+						parentCheck = isSquareMinimapStatElementEnabled("squareMinimapStatsTrackingButton"),
+						parentSection = mapExpandable,
+					},
+					{
+						var = "squareMinimapStatsTrackingButtonOffsetY",
+						text = L["squareMinimapStatsOffsetY"] or "Vertical offset",
+						get = function() return addon.db and addon.db.squareMinimapStatsTrackingButtonOffsetY or -3 end,
+						set = function(value)
+							addon.db["squareMinimapStatsTrackingButtonOffsetY"] = value
+							applySquareMinimapStatsNow(true)
+						end,
+						min = -220,
+						max = 220,
+						step = 1,
+						default = -3,
+						sType = "slider",
+						parent = true,
+						parentCheck = isSquareMinimapStatElementEnabled("squareMinimapStatsTrackingButton"),
+						parentSection = mapExpandable,
+					},
+					{
+						var = "squareMinimapStatsTrackingButtonScale",
+						text = L["squareMinimapStatsTrackingButtonScale"] or "Button scale",
+						get = function() return addon.db and addon.db.squareMinimapStatsTrackingButtonScale or 1.0 end,
+						set = function(value)
+							addon.db["squareMinimapStatsTrackingButtonScale"] = value
+							applySquareMinimapStatsNow(true)
+						end,
+						min = 0.5,
+						max = 2.0,
+						step = 0.05,
+						default = 1.0,
+						sType = "slider",
+						parent = true,
+						parentCheck = isSquareMinimapStatElementEnabled("squareMinimapStatsTrackingButton"),
+						parentSection = mapExpandable,
+					},
+				},
+			},
 		},
 	},
 }
@@ -2199,6 +2290,11 @@ local squareMinimapStatsDefaults = {
 	squareMinimapStatsCoordinatesHideInInstance = true,
 	squareMinimapStatsCoordinatesDecimals = 2,
 	squareMinimapStatsCoordinatesUpdateInterval = 0.2,
+	squareMinimapStatsTrackingButton = false,
+	squareMinimapStatsTrackingButtonAnchor = "TOPLEFT",
+	squareMinimapStatsTrackingButtonOffsetX = 3,
+	squareMinimapStatsTrackingButtonOffsetY = -3,
+	squareMinimapStatsTrackingButtonScale = 1.0,
 }
 
 local squareMinimapStatsConfig = {
@@ -2264,6 +2360,8 @@ local function ensureSquareMinimapStatsDefaults()
 	addon.db.squareMinimapStatsLocationAnchor = normalizeSquareMinimapAnchorSelection(addon.db.squareMinimapStatsLocationAnchor, nil, squareMinimapStatsDefaults.squareMinimapStatsLocationAnchor)
 	addon.db.squareMinimapStatsCoordinatesAnchor =
 		normalizeSquareMinimapAnchorSelection(addon.db.squareMinimapStatsCoordinatesAnchor, nil, squareMinimapStatsDefaults.squareMinimapStatsCoordinatesAnchor)
+	addon.db.squareMinimapStatsTrackingButtonAnchor =
+		normalizeSquareMinimapAnchorSelection(addon.db.squareMinimapStatsTrackingButtonAnchor, nil, squareMinimapStatsDefaults.squareMinimapStatsTrackingButtonAnchor)
 end
 
 local function getSquareMinimapStatsState()
@@ -2283,6 +2381,116 @@ local function clamp(value, minimum, maximum)
 end
 
 local function shouldShowSquareMinimapStats() return addon.db and addon.db.enableSquareMinimap and addon.db.enableSquareMinimapStats end
+
+local function shouldShowSquareMinimapTrackingButton() return shouldShowSquareMinimapStats() and addon.db and addon.db.squareMinimapStatsTrackingButton == true end
+
+local function isInGameTrackingDisabled() return C_GameRules and C_GameRules.IsGameRuleActive and Enum and Enum.GameRule and C_GameRules.IsGameRuleActive(Enum.GameRule.IngameTrackingDisabled) end
+
+local function getSquareMinimapTrackingButtonState()
+	addon.variables = addon.variables or {}
+	addon.variables.squareMinimapTrackingButton = addon.variables.squareMinimapTrackingButton or {}
+	return addon.variables.squareMinimapTrackingButton
+end
+
+local function getBlizzardTrackingButton() return MinimapCluster and MinimapCluster.Tracking and MinimapCluster.Tracking.Button or nil end
+
+local function rememberSquareMinimapTrackingButtonOrigin(button)
+	local state = getSquareMinimapTrackingButtonState()
+	if state.originalParent then return end
+	state.originalParent = button and button:GetParent() or nil
+	state.originalPoint = button and { button:GetPoint(1) } or nil
+	state.originalWidth = button and button:GetWidth() or nil
+	state.originalHeight = button and button:GetHeight() or nil
+	state.originalFrameLevel = button and button:GetFrameLevel() or nil
+	state.button = button
+end
+
+local function ensureSquareMinimapTrackingButtonHolder()
+	local state = getSquareMinimapTrackingButtonState()
+	if state.holder then return state.holder end
+	if not Minimap then return nil end
+
+	local holder = CreateFrame("Frame", addonName .. "SquareMinimapTrackingButtonHolder", Minimap)
+	holder:SetSize(17, 17)
+	holder:SetFrameStrata("HIGH")
+	holder:SetFrameLevel((Minimap:GetFrameLevel() or 2) + 20)
+
+	holder.Background = holder:CreateTexture(nil, "BACKGROUND")
+	holder.Background:SetAllPoints()
+	holder.Background:SetAtlas("ui-hud-minimap-button")
+
+	holder:Hide()
+	state.holder = holder
+	return holder
+end
+
+local function restoreSquareMinimapTrackingButton()
+	local state = getSquareMinimapTrackingButtonState()
+	local button = state.button or getBlizzardTrackingButton()
+	if not button then return end
+
+	local originalParent = state.originalParent
+	if originalParent and button:GetParent() ~= originalParent then button:SetParent(originalParent) end
+
+	button:ClearAllPoints()
+	local point = state.originalPoint
+	if point and point[1] then
+		local relativeTo = point[2] or originalParent
+		local relativePoint = point[3] or point[1]
+		button:SetPoint(point[1], relativeTo, relativePoint, point[4] or 0, point[5] or 0)
+	elseif originalParent then
+		button:SetPoint("CENTER", originalParent, "CENTER", 0, 0)
+	end
+
+	if state.originalWidth and state.originalHeight then button:SetSize(state.originalWidth, state.originalHeight) end
+	if state.originalFrameLevel and button.SetFrameLevel then button:SetFrameLevel(state.originalFrameLevel) end
+	if state.holder then state.holder:Hide() end
+end
+
+function addon.functions.applySquareMinimapTrackingButton()
+	if not MinimapCluster or not MinimapCluster.Tracking then return end
+
+	local trackingFrame = MinimapCluster.Tracking
+	local button = getBlizzardTrackingButton()
+	if not button then return end
+
+	local hiddenByUser = addon.db and addon.db.hiddenMinimapElements and addon.db.hiddenMinimapElements.Tracking == true
+	local showCustomButton = shouldShowSquareMinimapTrackingButton() and not isInGameTrackingDisabled()
+
+	if not showCustomButton then
+		restoreSquareMinimapTrackingButton()
+		if hiddenByUser or isInGameTrackingDisabled() then
+			trackingFrame:Hide()
+		else
+			trackingFrame:Show()
+		end
+		return
+	end
+
+	local holder = ensureSquareMinimapTrackingButtonHolder()
+	if not holder then return end
+
+	rememberSquareMinimapTrackingButtonOrigin(button)
+
+	local point = normalizeSquareMinimapAnchorSelection(addon.db and addon.db.squareMinimapStatsTrackingButtonAnchor, nil, squareMinimapStatsDefaults.squareMinimapStatsTrackingButtonAnchor)
+	local x = tonumber(addon.db and addon.db.squareMinimapStatsTrackingButtonOffsetX) or squareMinimapStatsDefaults.squareMinimapStatsTrackingButtonOffsetX or 0
+	local y = tonumber(addon.db and addon.db.squareMinimapStatsTrackingButtonOffsetY) or squareMinimapStatsDefaults.squareMinimapStatsTrackingButtonOffsetY or 0
+	local scale = clamp(tonumber(addon.db and addon.db.squareMinimapStatsTrackingButtonScale) or squareMinimapStatsDefaults.squareMinimapStatsTrackingButtonScale or 1, 0.5, 2.0)
+
+	if holder:GetParent() ~= Minimap then holder:SetParent(Minimap) end
+	holder:SetFrameLevel((Minimap:GetFrameLevel() or 2) + 20)
+	holder:ClearAllPoints()
+	holder:SetPoint(point, Minimap, point, x, y)
+	holder:SetScale(scale)
+
+	if button:GetParent() ~= holder then button:SetParent(holder) end
+	button:ClearAllPoints()
+	button:SetPoint("CENTER", holder, "CENTER", 0, 0)
+	if button.SetFrameLevel then button:SetFrameLevel((holder:GetFrameLevel() or 2) + 1) end
+
+	holder:Show()
+	trackingFrame:Hide()
+end
 
 local function getSquareMinimapStatsColor(colorKey)
 	local fallback = squareMinimapStatsDefaults[colorKey] or { r = 1, g = 1, b = 1, a = 1 }
@@ -3226,6 +3434,7 @@ function addon.functions.applySquareMinimapStats(force)
 
 	local state = getSquareMinimapStatsState()
 	if force then state.renderConfig = {} end
+	if addon.functions.applySquareMinimapTrackingButton then addon.functions.applySquareMinimapTrackingButton() end
 	syncSquareMinimapStatsEvents()
 	if not shouldRunSquareMinimapStats() then
 		hideSquareMinimapStats()
