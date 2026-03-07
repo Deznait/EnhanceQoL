@@ -3175,6 +3175,7 @@ function AuraUtil.applyAuraToButton(btn, aura, ac, isDebuff, unitToken)
 			local alphaOff = (ac and ac.blizzardDispelBorderAlphaNot) or 0
 			local canActivePlayerDispel = aura.canActivePlayerDispel
 			if issecretvalue and issecretvalue(canActivePlayerDispel) then canActivePlayerDispel = nil end
+			if canActivePlayerDispel == nil then canActivePlayerDispel = false end
 			btn.dispelIcon:SetAlphaFromBoolean(canActivePlayerDispel, alphaOn, alphaOff)
 			btn.dispelIcon:Show()
 		else
