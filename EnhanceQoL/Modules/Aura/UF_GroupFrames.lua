@@ -68,7 +68,6 @@ end
 local max = math.max
 local min = math.min
 local floor = math.floor
-local ceil = math.ceil
 local hooksecurefunc = hooksecurefunc
 local BAR_TEX_INHERIT = "__PER_BAR__"
 local EDIT_MODE_SAMPLE_MAX = 100
@@ -1156,7 +1155,13 @@ local function applyGroupIndicatorAnchor(fs, anchor, offset, scale, parent)
 	if justify and fs.SetJustifyH then fs:SetJustifyH(justify) end
 end
 
-local function stopDispelGlow(frame, effect)
+local function stopDispelGlow(frame, effect, st)
+	if st then
+		if not st._dispelGlowActive then return end
+		effect = effect or st._dispelGlowEffect
+		st._dispelGlowActive = nil
+		st._dispelGlowEffect = nil
+	end
 	if not (LCG and frame) then return end
 	if effect == "SHINE" then
 		if LCG.AutoCastGlow_Stop then LCG.AutoCastGlow_Stop(frame, DISPEL_GLOW_KEY) end
@@ -1167,14 +1172,6 @@ local function stopDispelGlow(frame, effect)
 	else
 		if LCG.PixelGlow_Stop then LCG.PixelGlow_Stop(frame, DISPEL_GLOW_KEY) end
 	end
-end
-
-local function stopTrackedDispelGlow(st, frame)
-	if not (st and st._dispelGlowActive) then return end
-	local effect = st._dispelGlowEffect
-	st._dispelGlowActive = nil
-	st._dispelGlowEffect = nil
-	stopDispelGlow(frame, effect)
 end
 
 local function resolveDispelIndicatorEnabled(cfg, kind)
@@ -3289,7 +3286,7 @@ function GF:BuildButton(self)
 		self:HookScript("OnHide", function(btn)
 			local s = getState(btn)
 			hideDispelTint(s)
-			stopTrackedDispelGlow(s, (s and s.barGroup) or btn)
+			stopDispelGlow((s and s.barGroup) or btn, nil, s)
 		end)
 	end
 
@@ -5834,7 +5831,7 @@ function GF:UpdateDispelTint(self, cache, dispelFilter, allowSample, requiredFla
 	if glowEnabled == nil then glowEnabled = defDispel.glowEnabled == true end
 	if not overlayEnabled and not glowEnabled then
 		hideDispelTint(st)
-		stopTrackedDispelGlow(st, st.barGroup or self)
+		stopDispelGlow(st.barGroup or self, nil, st)
 		return
 	end
 	if allowSample then
@@ -5842,7 +5839,7 @@ function GF:UpdateDispelTint(self, cache, dispelFilter, allowSample, requiredFla
 		if showSample == nil then showSample = defDispel.showSample == true end
 		if not showSample then
 			hideDispelTint(st)
-			stopTrackedDispelGlow(st, st.barGroup or self)
+			stopDispelGlow(st.barGroup or self, nil, st)
 			return
 		end
 	end
@@ -5932,7 +5929,7 @@ function GF:UpdateDispelTint(self, cache, dispelFilter, allowSample, requiredFla
 	if glowEnabled then
 		GF:UpdateDispelGlow(self, r, g, b)
 	else
-		stopTrackedDispelGlow(st, st.barGroup or self)
+		stopDispelGlow(st.barGroup or self, nil, st)
 	end
 end
 
@@ -5948,11 +5945,11 @@ function GF:UpdateDispelGlow(self, r, g, b)
 	local glowEnabled = dcfg.glowEnabled
 	if glowEnabled == nil then glowEnabled = defDispel.glowEnabled == true end
 	if not glowEnabled then
-		stopTrackedDispelGlow(st, st.barGroup or self)
+		stopDispelGlow(st.barGroup or self, nil, st)
 		return
 	end
 	if not (r and g and b) then
-		stopTrackedDispelGlow(st, st.barGroup or self)
+		stopDispelGlow(st.barGroup or self, nil, st)
 		return
 	end
 
@@ -5983,7 +5980,7 @@ function GF:UpdateDispelGlow(self, r, g, b)
 	elseif appliedEffect == "BLIZZARD" and not LCG.ButtonGlow_Start then
 		appliedEffect = "PIXEL"
 	end
-	if st._dispelGlowActive and st._dispelGlowEffect ~= appliedEffect then stopTrackedDispelGlow(st, target) end
+	if st._dispelGlowActive and st._dispelGlowEffect ~= appliedEffect then stopDispelGlow(target, nil, st) end
 	local glowColor = { cr, cg, cb, 1 }
 	if appliedEffect == "SHINE" and LCG.AutoCastGlow_Start then
 		LCG.AutoCastGlow_Start(target, glowColor, lines, freq, scale, xoff, yoff, DISPEL_GLOW_KEY)
@@ -6749,7 +6746,7 @@ function GF:UnitButton_ClearUnit(self)
 	if st then
 		GFH.CancelReadyCheckIconTimer(st)
 		hideDispelTint(st)
-		stopTrackedDispelGlow(st, st.barGroup or self)
+		stopDispelGlow(st.barGroup or self, nil, st)
 		st._guid = nil
 		st._unitToken = nil
 		st._class = nil
@@ -7362,7 +7359,7 @@ function GF:UpdatePreviewLayout(kind)
 		local limit = #samples
 		if kind == "raid" then limit = tonumber(GF._previewSampleSize and GF._previewSampleSize[kind]) or 10 end
 		maxShown = min(#frames, limit, #samples)
-		local requiredColumns = max(1, ceil(maxShown / max(1, unitsPerColumn)))
+		local requiredColumns = max(1, math.ceil(maxShown / max(1, unitsPerColumn)))
 		previewScale = (GFH.GetRaidViewportScaleForColumns and GFH.GetRaidViewportScaleForColumns(growth, w, h, spacing, columnSpacing, viewportColumns, requiredColumns)) or 1
 	else
 		maxShown = min(#frames, #samples)
@@ -8507,7 +8504,7 @@ function GF:ApplyHeaderAttributes(kind)
 		else
 			local raidCount = (GFH.GetCurrentRaidUnitCount and GFH.GetCurrentRaidUnitCount()) or 0
 			local requiredColumns = raidMaxColumns or 1
-			if raidCount > 0 then requiredColumns = max(requiredColumns, ceil(raidCount / max(1, raidUnitsPerColumn or 1))) end
+			if raidCount > 0 then requiredColumns = max(requiredColumns, math.ceil(raidCount / max(1, raidUnitsPerColumn or 1))) end
 			raidRuntimeMaxColumns = requiredColumns
 			raidViewportScale = (
 				GFH.GetRaidViewportScaleForColumns and GFH.GetRaidViewportScaleForColumns(growth, w, h, spacing, layoutColumnSpacing or spacing, raidMaxColumns or 1, raidRuntimeMaxColumns)
