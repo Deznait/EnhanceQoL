@@ -75,6 +75,8 @@ local AURA_FILTERS = GFH.AuraFilters
 local SECRET_TEXT_UPDATE_INTERVAL = 0.1
 local FONT_DROPDOWN_SCROLL_HEIGHT = 220
 
+GFH.COLOR_INCOMING_HEAL_DEFAULT = GFH.COLOR_INCOMING_HEAL_DEFAULT or { 0.2, 0.85, 0.35, 0.45 }
+
 function GF.NormalizeBuffHelpfulFilterMode(value)
 	value = tostring(value or ""):upper()
 	if value == "RAID" then return "RAID" end
@@ -1456,6 +1458,9 @@ local DEFAULTS = {
 			absorbColor = { 0.85, 0.95, 1.0, 0.7 },
 			absorbTexture = "SOLID",
 			absorbReverseFill = false,
+			incomingHealEnabled = false,
+			incomingHealColor = { 0.2, 0.85, 0.35, 0.45 },
+			showSampleIncomingHeal = false,
 			healAbsorbEnabled = true,
 			healAbsorbUseCustomColor = false,
 			showSampleHealAbsorb = false,
@@ -1867,6 +1872,9 @@ local DEFAULTS = {
 			absorbColor = { 1.0, 0.8196, 0.1490, 1.0 },
 			absorbTexture = "EQOL: Absorb",
 			absorbReverseFill = false,
+			incomingHealEnabled = false,
+			incomingHealColor = { 0.2, 0.85, 0.35, 0.45 },
+			showSampleIncomingHeal = false,
 			healAbsorbEnabled = true,
 			healAbsorbUseCustomColor = false,
 			showSampleHealAbsorb = false,
@@ -2949,6 +2957,24 @@ function GF:UpdateAbsorbCache(self, which, unit, st)
 	if which == nil or which == "heal" then st._healAbsorbAmount = UnitGetTotalHealAbsorbs and UnitGetTotalHealAbsorbs(unit) or 0 end
 end
 
+function GF.EnsureHealPredictionCalculator(st)
+	if not st or st._healPredictionCalcUnsupported then return nil end
+	if st._healPredictionCalc then return st._healPredictionCalc end
+	if not (CreateUnitHealPredictionCalculator and UnitGetDetailedHealPrediction) then
+		st._healPredictionCalcUnsupported = true
+		return nil
+	end
+
+	local calc = CreateUnitHealPredictionCalculator()
+	if not calc then
+		st._healPredictionCalcUnsupported = true
+		return nil
+	end
+	if calc.SetIncomingHealOverflowPercent then calc:SetIncomingHealOverflowPercent(1) end
+	st._healPredictionCalc = calc
+	return calc
+end
+
 local function updateButtonConfig(self, cfg)
 	if not self then return end
 	cfg = cfg or self._eqolCfg or getCfg(self._eqolGroupKind or "party")
@@ -2964,6 +2990,7 @@ local function updateButtonConfig(self, cfg)
 
 	st._wantsName = tc.showName ~= false
 	st._wantsLevel = scfg.levelEnabled ~= false
+	st._wantsIncomingHeal = hc.incomingHealEnabled == true
 	st._wantsAbsorb = (hc.absorbEnabled ~= false) or (hc.healAbsorbEnabled ~= false)
 	st._wantsStatusText = scfg and scfg.unitStatus and scfg.unitStatus.enabled ~= false
 	st._wantsRangeFade = scfg and scfg.rangeFade and scfg.rangeFade.enabled ~= false
@@ -3150,6 +3177,13 @@ function GF:BuildButton(self)
 	if healthBackdropClampToFill == nil then healthBackdropClampToFill = false end
 	applyBarBackdrop(st.health, hc, { clampToFill = healthBackdropClampToFill == true, textureKey = healthTexKey })
 
+	if not st.incomingHeal then
+		st.incomingHeal = CreateFrame("StatusBar", nil, st.health, "BackdropTemplate")
+		st.incomingHeal:SetMinMaxValues(0, 1)
+		st.incomingHeal:SetValue(0)
+		if st.incomingHeal.SetStatusBarDesaturated then st.incomingHeal:SetStatusBarDesaturated(false) end
+		st.incomingHeal:Hide()
+	end
 	if not st.absorb then
 		st.absorb = CreateFrame("StatusBar", nil, st.health, "BackdropTemplate")
 		st.absorb:SetMinMaxValues(0, 1)
@@ -3524,6 +3558,32 @@ function GF:LayoutButton(self)
 	end
 
 	local healthHeight = st.health.GetHeight and st.health:GetHeight() or (h - powerH)
+	if st.incomingHeal then
+		local incomingHealTextureKey = hc.incomingHealTexture or healthTexKey
+		if st.incomingHeal.SetStatusBarTexture and UFHelper and UFHelper.resolveTexture then
+			if st._lastIncomingHealTexture ~= incomingHealTextureKey then
+				st.incomingHeal:SetStatusBarTexture(UFHelper.resolveTexture(incomingHealTextureKey))
+				if UFHelper.configureSpecialTexture then UFHelper.configureSpecialTexture(st.incomingHeal, "HEALTH", incomingHealTextureKey, hc) end
+				st._lastIncomingHealTexture = incomingHealTextureKey
+			end
+		end
+		if st.incomingHeal.SetStatusBarDesaturated then st.incomingHeal:SetStatusBarDesaturated(false) end
+		local reverseHealth = hc.reverseFill
+		if reverseHealth == nil then reverseHealth = defH.reverseFill == true end
+		if UFHelper and UFHelper.setupAbsorbClampReverseAware then
+			UFHelper.setupAbsorbClampReverseAware(st.health, st.incomingHeal)
+		elseif UFHelper and UFHelper.setupAbsorbClamp then
+			UFHelper.setupAbsorbClamp(st.health, st.incomingHeal)
+			if UFHelper.applyStatusBarReverseFill then UFHelper.applyStatusBarReverseFill(st.incomingHeal, reverseHealth) end
+		end
+		if UFHelper and UFHelper.applyAbsorbClampLayout then
+			UFHelper.applyAbsorbClampLayout(st.incomingHeal, st.health, healthHeight, healthHeight, reverseHealth)
+		else
+			GF._applyOverlayHeight(st.incomingHeal, st.health, healthHeight, healthHeight)
+		end
+		stabilizeStatusBarTexture(st.incomingHeal)
+		setFrameLevelAbove(st.incomingHeal, st.health, 1)
+	end
 	if st.absorb then
 		local absorbTextureKey = hc.absorbTexture or healthTexKey
 		if st.absorb.SetStatusBarTexture and UFHelper and UFHelper.resolveTexture then
@@ -3545,7 +3605,7 @@ function GF:LayoutButton(self)
 		local absorbHeight = hc.absorbOverlayHeight
 		if absorbHeight == nil then absorbHeight = defH.absorbOverlayHeight end
 		GF._applyOverlayHeight(st.absorb, st.health, absorbHeight, healthHeight)
-		setFrameLevelAbove(st.absorb, st.health, 1)
+		setFrameLevelAbove(st.absorb, st.incomingHeal or st.health, 1)
 		if reverseAbsorb and st.absorb2 then
 			if st.absorb2.SetStatusBarTexture and UFHelper and UFHelper.resolveTexture then
 				st.absorb2:SetStatusBarTexture(UFHelper.resolveTexture(absorbTextureKey))
@@ -3566,7 +3626,7 @@ function GF:LayoutButton(self)
 				syncTextFrameLevels(st)
 			end
 			stabilizeStatusBarTexture(st.absorb2)
-			setFrameLevelAbove(st.absorb2, st.health, 1)
+			setFrameLevelAbove(st.absorb2, st.incomingHeal or st.health, 1)
 			st.absorb2:SetMinMaxValues(0, 1)
 			st.absorb2:SetValue(0)
 			st.absorb2:Hide()
@@ -3584,7 +3644,7 @@ function GF:LayoutButton(self)
 		local healAbsorbHeight = hc.healAbsorbOverlayHeight
 		if healAbsorbHeight == nil then healAbsorbHeight = defH.healAbsorbOverlayHeight end
 		GF._applyOverlayHeight(st.healAbsorb, st.health, healAbsorbHeight, healthHeight)
-		setFrameLevelAbove(st.healAbsorb, st.absorb or st.health, 1)
+		setFrameLevelAbove(st.healAbsorb, st.absorb or st.incomingHeal or st.health, 1)
 	end
 
 	local tc = cfg.text or {}
@@ -6074,6 +6134,7 @@ function GF:UpdateHealthValue(self, unit, st)
 	if UnitExists and not UnitExists(unit) then
 		st.health:SetMinMaxValues(0, 1)
 		st.health:SetValue(0)
+		if st.incomingHeal then st.incomingHeal:Hide() end
 		if st.absorb then st.absorb:Hide() end
 		if st.absorb2 then st.absorb2:Hide() end
 		if st.healAbsorb then st.healAbsorb:Hide() end
@@ -6121,15 +6182,66 @@ function GF:UpdateHealthValue(self, unit, st)
 	local hc = cfg and cfg.health or {}
 	local kind = self._eqolGroupKind or "party"
 	local defH = (DEFAULTS[kind] and DEFAULTS[kind].health) or {}
+	local incomingHealEnabled = hc.incomingHealEnabled == true
 	local absorbEnabled = hc.absorbEnabled ~= false
 	local healAbsorbEnabled = hc.healAbsorbEnabled ~= false
 	local curSecret = issecretvalue and issecretvalue(cur)
 	local inEditMode = isEditModeActive()
+	local sampleIncomingHeal = inEditMode and hc.showSampleIncomingHeal == true
 	local sampleAbsorb = inEditMode and hc.showSampleAbsorb == true
 	local sampleHealAbsorb = inEditMode and hc.showSampleHealAbsorb == true
 	local maxIsSecret = issecretvalue and issecretvalue(maxForValue)
 	local sampleMax = maxForValue
-	if (sampleAbsorb or sampleHealAbsorb) and maxIsSecret then sampleMax = EDIT_MODE_SAMPLE_MAX end
+	if (sampleIncomingHeal or sampleAbsorb or sampleHealAbsorb) and maxIsSecret then sampleMax = EDIT_MODE_SAMPLE_MAX end
+	if incomingHealEnabled and st.incomingHeal then
+		local incomingHeal = 0
+		local calc = GF.EnsureHealPredictionCalculator(st)
+		if calc and UnitGetDetailedHealPrediction then
+			UnitGetDetailedHealPrediction(unit, "player", calc)
+			incomingHeal = calc.GetIncomingHeals and calc:GetIncomingHeals() or 0
+		elseif UnitGetIncomingHeals then
+			incomingHeal = UnitGetIncomingHeals(unit) or 0
+		end
+		if incomingHeal == nil then incomingHeal = 0 end
+		local incomingHealSecret = issecretvalue and issecretvalue(incomingHeal)
+		local incomingHealValue = incomingHeal
+		if sampleIncomingHeal then
+			local useSample = false
+			if incomingHealSecret then
+				useSample = true
+			else
+				incomingHealValue = tonumber(incomingHeal) or 0
+				if incomingHealValue <= 0 then useSample = true end
+			end
+			if useSample then
+				incomingHealValue = (sampleMax or 1) * 0.25
+				incomingHealSecret = false
+			end
+		elseif not incomingHealSecret then
+			incomingHealValue = tonumber(incomingHeal) or 0
+		end
+		if not incomingHealSecret and not curSecret then
+			local missingHealth = (tonumber(maxForValue) or 0) - (tonumber(cur) or 0)
+			if missingHealth < 0 then missingHealth = 0 end
+			if incomingHealValue > missingHealth then incomingHealValue = missingHealth end
+		end
+		st.incomingHeal:SetMinMaxValues(0, maxForValue or 1)
+		st.incomingHeal:SetValue(incomingHealValue or 0)
+		if incomingHealSecret then
+			st.incomingHeal:Show()
+		elseif incomingHealValue and incomingHealValue > 0 then
+			st.incomingHeal:Show()
+		else
+			st.incomingHeal:Hide()
+		end
+		local incomingHealR, incomingHealG, incomingHealB, incomingHealA = unpackColor(hc.incomingHealColor, defH.incomingHealColor or GFH.COLOR_INCOMING_HEAL_DEFAULT)
+		if st._lastIncomingHealR ~= incomingHealR or st._lastIncomingHealG ~= incomingHealG or st._lastIncomingHealB ~= incomingHealB or st._lastIncomingHealA ~= incomingHealA then
+			st._lastIncomingHealR, st._lastIncomingHealG, st._lastIncomingHealB, st._lastIncomingHealA = incomingHealR, incomingHealG, incomingHealB, incomingHealA
+			st.incomingHeal:SetStatusBarColor(incomingHealR, incomingHealG, incomingHealB, incomingHealA)
+		end
+	elseif st.incomingHeal then
+		st.incomingHeal:Hide()
+	end
 	if absorbEnabled and st.absorb then
 		local abs = st._absorbAmount
 		if abs == nil then abs = 0 end
@@ -6765,6 +6877,7 @@ function GF:UnitButton_ClearUnit(self)
 		st._classR, st._classG, st._classB, st._classA = nil, nil, nil, nil
 		st._absorbAmount = nil
 		st._healAbsorbAmount = nil
+		if st._healPredictionCalc and st._healPredictionCalc.ResetPredictedValues then st._healPredictionCalc:ResetPredictedValues() end
 		st._auraCache = nil
 		st._auraCacheByKey = nil
 		st._auraQueryMax = nil
@@ -6772,6 +6885,7 @@ function GF:UnitButton_ClearUnit(self)
 		st._summonActiveReal = false
 		st._phaseReason = nil
 		clearDispelAuraState(st)
+		if st.incomingHeal then st.incomingHeal:Hide() end
 		if st.portrait then
 			st.portrait:SetTexture(nil)
 			st.portrait:Hide()
@@ -6807,6 +6921,10 @@ function GF:UnitButton_RegisterUnitEvents(self, unit)
 	reg("UNIT_CONNECTION")
 	reg("UNIT_HEALTH")
 	reg("UNIT_MAXHEALTH")
+	if self._eqolUFState and self._eqolUFState._wantsIncomingHeal then
+		reg("UNIT_HEAL_PREDICTION")
+		reg("UNIT_MAX_HEALTH_MODIFIERS_CHANGED")
+	end
 	if self._eqolUFState and self._eqolUFState._wantsAbsorb then
 		reg("UNIT_ABSORB_AMOUNT_CHANGED")
 		reg("UNIT_HEAL_ABSORB_AMOUNT_CHANGED")
@@ -6916,8 +7034,13 @@ end
 local UNIT_DISPATCH = {
 	UNIT_HEALTH = dispatchUnitHealth,
 	UNIT_MAXHEALTH = dispatchUnitHealth,
+	UNIT_HEAL_PREDICTION = function(btn, unit)
+		local st = getState(btn)
+		GF:UpdateHealthValue(btn, unit, st)
+	end,
 	UNIT_ABSORB_AMOUNT_CHANGED = dispatchUnitAbsorb,
 	UNIT_HEAL_ABSORB_AMOUNT_CHANGED = dispatchUnitHealAbsorb,
+	UNIT_MAX_HEALTH_MODIFIERS_CHANGED = dispatchUnitHealth,
 	UNIT_POWER_UPDATE = dispatchUnitPower,
 	UNIT_MAXPOWER = dispatchUnitPower,
 	UNIT_DISPLAYPOWER = dispatchUnitDisplayPower,
@@ -9031,6 +9154,7 @@ GF._groupCopySectionOrder = {
 	"portrait",
 	"text",
 	"health",
+	"incomingheal",
 	"absorb",
 	"healabsorb",
 	"level",
@@ -9051,25 +9175,26 @@ GF._groupCopySectionOrder = {
 }
 
 GF._groupCopySectionLabels = {
-	frame = "Frame",
-	layout = "Layout",
-	border = "Border",
-	hoverHighlight = "Hover highlight",
-	targetHighlight = "Target highlight",
+	frame = L["Frame"] or "Frame",
+	layout = L["Layout"] or "Layout",
+	border = L["Border"] or "Border",
+	hoverHighlight = L["Hover highlight"] or "Hover highlight",
+	targetHighlight = L["Target highlight"] or "Target highlight",
 	portrait = "Portrait",
-	text = "Name",
-	health = "Health",
-	absorb = "Absorb",
-	healabsorb = "Heal absorb",
-	level = "Level",
-	statustext = "Status line",
-	dispeltint = "Dispel tint",
-	groupicons = "Group icons",
-	raidmarker = "Raid marker",
+	text = L["Name"] or "Name",
+	health = L["Health"] or "Health",
+	incomingheal = L["Incoming heals"] or "Incoming heals",
+	absorb = L["Absorb"] or "Absorb",
+	healabsorb = L["Heal absorb"] or "Heal absorb",
+	level = L["Level"] or "Level",
+	statustext = L["Status text"] or "Status text",
+	dispeltint = L["UFDispelIndicator"] or "Dispel indicator",
+	groupicons = L["Group icons"] or "Group icons",
+	raidmarker = L["Raid marker"] or "Raid marker",
 	statusicons = "Status icons",
-	roleicons = "Role icons",
-	power = "Power",
-	buffs = "Buffs",
+	roleicons = L["Role icons"] or "Role icons",
+	power = L["Power"] or "Power",
+	buffs = L["Buffs"] or "Buffs",
 	debuffs = "Debuffs",
 	externals = "Externals",
 	healerBuffPlacement = "Healer buff placement",
@@ -9119,6 +9244,12 @@ GF._groupCopySectionRules = {
 	},
 	health = {
 		{ "health" },
+	},
+	incomingheal = {
+		{ "health", "incomingHealEnabled" },
+		{ "health", "showSampleIncomingHeal" },
+		{ "health", "incomingHealTexture" },
+		{ "health", "incomingHealColor" },
 	},
 	absorb = {
 		{ "health", "absorbEnabled" },
@@ -9219,6 +9350,7 @@ GF._groupCopyUnitSections = {
 	text = true,
 	portrait = true,
 	health = true,
+	incomingheal = true,
 	absorb = true,
 	healabsorb = true,
 	level = true,
@@ -9337,6 +9469,7 @@ function GF._buildGroupCopySectionSetForGroupKind(kind)
 		portrait = kind ~= "raid",
 		text = true,
 		health = true,
+		incomingheal = true,
 		absorb = true,
 		healabsorb = true,
 		level = true,
@@ -9764,6 +9897,18 @@ function GF._copyUnitSourceSectionToGroup(sectionId, src, dest)
 		if type(src.health) ~= "table" then return false end
 		dest.health = GF._groupCopyCloneValue(src.health)
 		return true
+	elseif sectionId == "incomingheal" then
+		local hc = src.health
+		if type(hc) ~= "table" then return false end
+		dest.health = dest.health or {}
+		local copied = false
+		for _, field in ipairs({ "incomingHealEnabled", "showSampleIncomingHeal", "incomingHealTexture", "incomingHealColor" }) do
+			if hc[field] ~= nil then
+				dest.health[field] = GF._groupCopyCloneValue(hc[field])
+				copied = true
+			end
+		end
+		return copied
 	elseif sectionId == "absorb" then
 		local hc = src.health
 		if type(hc) ~= "table" then return false end
@@ -10606,7 +10751,7 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 		},
 		{
-			name = "Frame",
+			name = L["Frame"] or "Frame",
 			kind = SettingType.Collapsible,
 			id = "frame",
 			defaultCollapsed = true,
@@ -10960,7 +11105,7 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 		},
 		{
-			name = "Layout",
+			name = L["Layout"] or "Layout",
 			kind = SettingType.Collapsible,
 			id = "layout",
 			defaultCollapsed = true,
@@ -11197,7 +11342,7 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 		},
 		{
-			name = "Border",
+			name = L["Border"] or "Border",
 			kind = SettingType.Collapsible,
 			id = "border",
 			defaultCollapsed = true,
@@ -11496,13 +11641,13 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 		},
 		{
-			name = "Hover highlight",
+			name = L["Hover highlight"] or "Hover highlight",
 			kind = SettingType.Collapsible,
 			id = "hoverHighlight",
 			defaultCollapsed = true,
 		},
 		{
-			name = "Enable hover highlight",
+			name = L["Enable hover highlight"] or "Enable hover highlight",
 			kind = SettingType.Checkbox,
 			field = "hoverHighlightEnabled",
 			parentId = "hoverHighlight",
@@ -11521,7 +11666,7 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 		},
 		{
-			name = "Color",
+			name = L["Color"] or "Color",
 			kind = SettingType.Color,
 			field = "hoverHighlightColor",
 			parentId = "hoverHighlight",
@@ -11543,7 +11688,7 @@ local function buildEditModeSettings(kind, editModeId)
 			isEnabled = function() return isHighlightEnabled("highlightHover") end,
 		},
 		{
-			name = "Texture",
+			name = L["Texture"] or "Texture",
 			kind = SettingType.Dropdown,
 			field = "hoverHighlightTexture",
 			parentId = "hoverHighlight",
@@ -11578,7 +11723,7 @@ local function buildEditModeSettings(kind, editModeId)
 			isEnabled = function() return isHighlightEnabled("highlightHover") end,
 		},
 		{
-			name = "Size",
+			name = L["Size"] or "Size",
 			kind = SettingType.Slider,
 			allowInput = true,
 			field = "hoverHighlightSize",
@@ -11601,7 +11746,7 @@ local function buildEditModeSettings(kind, editModeId)
 			isEnabled = function() return isHighlightEnabled("highlightHover") end,
 		},
 		{
-			name = "Offset",
+			name = L["Offset"] or "Offset",
 			kind = SettingType.Slider,
 			allowInput = true,
 			field = "hoverHighlightOffset",
@@ -11624,13 +11769,13 @@ local function buildEditModeSettings(kind, editModeId)
 			isEnabled = function() return isHighlightEnabled("highlightHover") end,
 		},
 		{
-			name = "Target highlight",
+			name = L["Target highlight"] or "Target highlight",
 			kind = SettingType.Collapsible,
 			id = "targetHighlight",
 			defaultCollapsed = true,
 		},
 		{
-			name = "Enable target highlight",
+			name = L["Enable target highlight"] or "Enable target highlight",
 			kind = SettingType.Checkbox,
 			field = "targetHighlightEnabled",
 			parentId = "targetHighlight",
@@ -11649,7 +11794,7 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 		},
 		{
-			name = "Color",
+			name = L["Color"] or "Color",
 			kind = SettingType.Color,
 			field = "targetHighlightColor",
 			parentId = "targetHighlight",
@@ -11671,7 +11816,7 @@ local function buildEditModeSettings(kind, editModeId)
 			isEnabled = function() return isHighlightEnabled("highlightTarget") end,
 		},
 		{
-			name = "Texture",
+			name = L["Texture"] or "Texture",
 			kind = SettingType.Dropdown,
 			field = "targetHighlightTexture",
 			parentId = "targetHighlight",
@@ -11727,7 +11872,7 @@ local function buildEditModeSettings(kind, editModeId)
 			isEnabled = function() return isHighlightEnabled("highlightTarget") end,
 		},
 		{
-			name = "Size",
+			name = L["Size"] or "Size",
 			kind = SettingType.Slider,
 			allowInput = true,
 			field = "targetHighlightSize",
@@ -11750,7 +11895,7 @@ local function buildEditModeSettings(kind, editModeId)
 			isEnabled = function() return isHighlightEnabled("highlightTarget") end,
 		},
 		{
-			name = "Offset",
+			name = L["Offset"] or "Offset",
 			kind = SettingType.Slider,
 			allowInput = true,
 			field = "targetHighlightOffset",
@@ -12036,7 +12181,7 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 		},
 		{
-			name = "Name",
+			name = L["Name"] or "Name",
 			kind = SettingType.Collapsible,
 			id = "text",
 			defaultCollapsed = true,
@@ -12381,7 +12526,7 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 		},
 		{
-			name = "Health",
+			name = L["Health"] or "Health",
 			kind = SettingType.Collapsible,
 			id = "health",
 			defaultCollapsed = true,
@@ -13163,7 +13308,124 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 		},
 		{
-			name = "Absorb",
+			name = L["Incoming heals"] or "Incoming heals",
+			kind = SettingType.Collapsible,
+			id = "incomingheal",
+			defaultCollapsed = true,
+		},
+		{
+			name = L["Show incoming heal bar"] or "Show incoming heal bar",
+			kind = SettingType.Checkbox,
+			field = "incomingHealEnabled",
+			parentId = "incomingheal",
+			get = function()
+				local cfg = getCfg(kind)
+				local hc = cfg and cfg.health or {}
+				return hc.incomingHealEnabled == true
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.health = cfg.health or {}
+				cfg.health.incomingHealEnabled = value and true or false
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "incomingHealEnabled", cfg.health.incomingHealEnabled, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+		},
+		{
+			name = L["Show sample incoming heals"] or "Show sample incoming heals",
+			kind = SettingType.Checkbox,
+			field = "incomingHealSample",
+			parentId = "incomingheal",
+			get = function()
+				local cfg = getCfg(kind)
+				local hc = cfg and cfg.health or {}
+				return hc.showSampleIncomingHeal == true
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.health = cfg.health or {}
+				cfg.health.showSampleIncomingHeal = value and true or false
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "incomingHealSample", cfg.health.showSampleIncomingHeal, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function()
+				local cfg = getCfg(kind)
+				local hc = cfg and cfg.health or {}
+				return hc.incomingHealEnabled == true
+			end,
+		},
+		{
+			name = L["Incoming heal texture"] or "Incoming heal texture",
+			kind = SettingType.Dropdown,
+			field = "incomingHealTexture",
+			parentId = "incomingheal",
+			height = 180,
+			get = function()
+				local cfg = getCfg(kind)
+				local hc = cfg and cfg.health or {}
+				local def = (DEFAULTS[kind] and DEFAULTS[kind].health) or {}
+				return hc.incomingHealTexture or hc.texture or def.incomingHealTexture or def.texture or "DEFAULT"
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.health = cfg.health or {}
+				cfg.health.incomingHealTexture = value or "DEFAULT"
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			generator = function(_, root)
+				for _, option in ipairs(textureOptions()) do
+					root:CreateRadio(option.label, function()
+						local cfg = getCfg(kind)
+						local hc = cfg and cfg.health or {}
+						local def = (DEFAULTS[kind] and DEFAULTS[kind].health) or {}
+						return (hc.incomingHealTexture or hc.texture or def.incomingHealTexture or def.texture or "DEFAULT") == option.value
+					end, function()
+						local cfg = getCfg(kind)
+						if not cfg then return end
+						cfg.health = cfg.health or {}
+						cfg.health.incomingHealTexture = option.value
+						GF:ApplyHeaderAttributes(kind)
+					end)
+				end
+			end,
+			isEnabled = function()
+				local cfg = getCfg(kind)
+				local hc = cfg and cfg.health or {}
+				return hc.incomingHealEnabled == true
+			end,
+		},
+		{
+			name = L["Incoming heal color"] or "Incoming heal color",
+			kind = SettingType.Color,
+			field = "incomingHealColor",
+			parentId = "incomingheal",
+			hasOpacity = true,
+			default = (DEFAULTS[kind] and DEFAULTS[kind].health and DEFAULTS[kind].health.incomingHealColor) or { 0.2, 0.85, 0.35, 0.45 },
+			get = function()
+				local cfg = getCfg(kind)
+				local hc = cfg and cfg.health or {}
+				local def = (DEFAULTS[kind] and DEFAULTS[kind].health and DEFAULTS[kind].health.incomingHealColor) or { 0.2, 0.85, 0.35, 0.45 }
+				local r, g, b, a = unpackColor(hc.incomingHealColor, def)
+				return { r = r, g = g, b = b, a = a }
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not (cfg and value) then return end
+				cfg.health = cfg.health or {}
+				cfg.health.incomingHealColor = { value.r or 0.2, value.g or 0.85, value.b or 0.35, value.a or 0.45 }
+				GF:ApplyHeaderAttributes(kind)
+			end,
+			isEnabled = function()
+				local cfg = getCfg(kind)
+				local hc = cfg and cfg.health or {}
+				return hc.incomingHealEnabled == true
+			end,
+		},
+		{
+			name = L["Absorb"] or "Absorb",
 			kind = SettingType.Collapsible,
 			id = "absorb",
 			defaultCollapsed = true,
@@ -13369,7 +13631,7 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 		},
 		{
-			name = "Heal absorb",
+			name = L["Heal absorb"] or "Heal absorb",
 			kind = SettingType.Collapsible,
 			id = "healabsorb",
 			defaultCollapsed = true,
@@ -13575,7 +13837,7 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 		},
 		{
-			name = "Level",
+			name = L["Level"] or "Level",
 			kind = SettingType.Collapsible,
 			id = "level",
 			defaultCollapsed = true,
@@ -13881,7 +14143,7 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 		},
 		{
-			name = "Status text",
+			name = L["Status text"] or "Status text",
 			kind = SettingType.Collapsible,
 			id = "statustext",
 			defaultCollapsed = true,
@@ -14024,7 +14286,7 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 		},
 		{
-			name = "Color",
+			name = L["Color"] or "Color",
 			kind = SettingType.Color,
 			field = "statusTextColor",
 			parentId = "statustext",
@@ -14348,7 +14610,7 @@ local function buildEditModeSettings(kind, editModeId)
 			isShown = function() return kind == "raid" end,
 		},
 		{
-			name = "Color",
+			name = L["Color"] or "Color",
 			kind = SettingType.Color,
 			field = "groupNumberColor",
 			parentId = "statustext",
@@ -14567,7 +14829,7 @@ local function buildEditModeSettings(kind, editModeId)
 			isShown = function() return kind == "raid" end,
 		},
 		{
-			name = "Dispel indicator",
+			name = L["UFDispelIndicator"] or "Dispel indicator",
 			kind = SettingType.Collapsible,
 			id = "dispeltint",
 			defaultCollapsed = true,
@@ -15096,7 +15358,7 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 		},
 		{
-			name = "Group icons",
+			name = L["Group icons"] or "Group icons",
 			kind = SettingType.Collapsible,
 			id = "groupicons",
 			defaultCollapsed = true,
@@ -15395,7 +15657,7 @@ local function buildEditModeSettings(kind, editModeId)
 			isShown = function() return kind == "raid" end,
 		},
 		{
-			name = "Raid marker",
+			name = L["Raid marker"] or "Raid marker",
 			kind = SettingType.Collapsible,
 			id = "raidmarker",
 			defaultCollapsed = true,
@@ -15550,7 +15812,7 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 		},
 		{
-			name = "Role icons",
+			name = L["Role icons"] or "Role icons",
 			kind = SettingType.Collapsible,
 			id = "roleicons",
 			defaultCollapsed = true,
@@ -15771,7 +16033,7 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 		},
 		{
-			name = "Power",
+			name = L["Power"] or "Power",
 			kind = SettingType.Collapsible,
 			id = "power",
 			defaultCollapsed = true,
@@ -16508,7 +16770,7 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 		},
 		{
-			name = "Buffs",
+			name = L["Buffs"] or "Buffs",
 			kind = SettingType.Collapsible,
 			id = "buffs",
 			defaultCollapsed = true,
@@ -19324,7 +19586,7 @@ local function buildEditModeSettings(kind, editModeId)
 			isShown = function() return isGroupIndicatorShown() end,
 		}
 		settings[#settings + 1] = {
-			name = "Color",
+			name = L["Color"] or "Color",
 			kind = SettingType.Color,
 			field = "groupIndicatorColor",
 			parentId = "raid",
@@ -19863,6 +20125,14 @@ local function applyEditModeData(kind, data)
 	if data.absorbEnabled ~= nil then
 		cfg.health = cfg.health or {}
 		cfg.health.absorbEnabled = data.absorbEnabled and true or false
+	end
+	if data.incomingHealEnabled ~= nil then
+		cfg.health = cfg.health or {}
+		cfg.health.incomingHealEnabled = data.incomingHealEnabled and true or false
+	end
+	if data.incomingHealSample ~= nil then
+		cfg.health = cfg.health or {}
+		cfg.health.showSampleIncomingHeal = data.incomingHealSample and true or false
 	end
 	if data.absorbSample ~= nil then
 		cfg.health = cfg.health or {}
@@ -20713,6 +20983,8 @@ function GF:EnsureEditMode()
 				healthCenterY = (cfg.health and cfg.health.offsetCenter and cfg.health.offsetCenter.y) or 0,
 				healthRightX = (cfg.health and cfg.health.offsetRight and cfg.health.offsetRight.x) or 0,
 				healthRightY = (cfg.health and cfg.health.offsetRight and cfg.health.offsetRight.y) or 0,
+				incomingHealEnabled = (cfg.health and cfg.health.incomingHealEnabled) == true,
+				incomingHealSample = hc.showSampleIncomingHeal == true,
 				absorbEnabled = (cfg.health and cfg.health.absorbEnabled) ~= false,
 				absorbSample = hc.showSampleAbsorb == true,
 				absorbTexture = (cfg.health and cfg.health.absorbTexture) or "SOLID",
@@ -21066,22 +21338,24 @@ function GF:EnsureEditMode()
 			if EditMode and EditMode.RegisterButtons then
 				local buttons = {
 					{
-						text = "Toggle sample frames",
+						text = L["Toggle sample frames"] or "Toggle sample frames",
 						click = function() GF:ToggleEditModeSampleFrames(kind) end,
 					},
 					{
-						text = "Toggle sample auras",
+						text = L["Toggle sample auras"] or "Toggle sample auras",
 						click = function() GF:ToggleEditModeSampleAuras() end,
 					},
 					{
-						text = "Toggle status text",
+						text = L["Toggle status text"] or "Toggle status text",
 						click = function() GF:ToggleEditModeStatusText() end,
 					},
 				}
-				if kind == "raid" or kind == "party" then table.insert(buttons, 1, {
-					text = "Edit custom sort order",
-					click = function() GF:ToggleCustomSortEditor(kind) end,
-				}) end
+				if kind == "raid" or kind == "party" then
+					table.insert(buttons, 1, {
+						text = L["Edit custom sort order"] or "Edit custom sort order",
+						click = function() GF:ToggleCustomSortEditor(kind) end,
+					})
+				end
 				if kind == "raid" or kind == "party" then
 					table.insert(buttons, 2, {
 						text = L["UFGroupHealerBuffEditModeButton"] or "Edit healer buff placement",
