@@ -3480,6 +3480,16 @@ local function initChatFrame()
 		end
 	end
 
+	local function refreshChatUnclampFrame()
+		if not (addon.functions and addon.functions.ApplyChatUnclampFrame) then return end
+		local pending = addon.variables and addon.variables.pendingChatUnclampFrame
+		if pending ~= nil then
+			addon.functions.ApplyChatUnclampFrame(pending)
+		elseif addon.db then
+			addon.functions.ApplyChatUnclampFrame(addon.db.chatUnclampFrame)
+		end
+	end
+
 	local function ensureChatFrameHooks()
 		addon.variables = addon.variables or {}
 		if addon.variables.chatFrameHooksInstalled then return end
@@ -3488,7 +3498,7 @@ local function initChatFrame()
 		hooksecurefunc("FCF_OpenTemporaryWindow", function()
 			if addon.db and addon.db.chatUseArrowKeys and addon.functions.ApplyChatArrowKeys then addon.functions.ApplyChatArrowKeys(true) end
 			if addon.db and addon.db.chatEditBoxOnTop and addon.functions.ApplyChatEditBoxOnTop then addon.functions.ApplyChatEditBoxOnTop(true) end
-			if addon.db and addon.db.chatUnclampFrame and addon.functions.ApplyChatUnclampFrame then addon.functions.ApplyChatUnclampFrame(true) end
+			refreshChatUnclampFrame()
 			if addon.db and addon.db.chatHideCombatLogTab and addon.functions.ApplyChatHideCombatLogTab then addon.functions.ApplyChatHideCombatLogTab(true) end
 			if addon.db and addon.functions.ApplyChatFrameFade then addon.functions.ApplyChatFrameFade() end
 		end)
@@ -3500,10 +3510,11 @@ local function initChatFrame()
 
 		local frame = CreateFrame("Frame")
 		frame:RegisterEvent("UPDATE_CHAT_WINDOWS")
+		frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 		frame:SetScript("OnEvent", function()
 			if addon.db and addon.db.chatUseArrowKeys and addon.functions.ApplyChatArrowKeys then addon.functions.ApplyChatArrowKeys(true) end
 			if addon.db and addon.db.chatEditBoxOnTop and addon.functions.ApplyChatEditBoxOnTop then addon.functions.ApplyChatEditBoxOnTop(true) end
-			if addon.db and addon.db.chatUnclampFrame and addon.functions.ApplyChatUnclampFrame then addon.functions.ApplyChatUnclampFrame(true) end
+			refreshChatUnclampFrame()
 			if addon.db and addon.db.chatHideCombatLogTab and addon.functions.ApplyChatHideCombatLogTab then addon.functions.ApplyChatHideCombatLogTab(true) end
 			if addon.db and addon.functions.ApplyChatFrameFade then addon.functions.ApplyChatFrameFade() end
 		end)
@@ -3576,6 +3587,15 @@ local function initChatFrame()
 
 	addon.functions.ApplyChatUnclampFrame = addon.functions.ApplyChatUnclampFrame
 		or function(enabled)
+			ensureChatFrameHooks()
+			addon.variables = addon.variables or {}
+			if InCombatLockdown and InCombatLockdown() then
+				-- Chat frames are protected in combat; replay the requested clamp state afterwards.
+				addon.variables.pendingChatUnclampFrame = enabled and true or false
+				return
+			end
+			addon.variables.pendingChatUnclampFrame = nil
+
 			forEachChatFrame(function(frame)
 				if not frame then return end
 				if enabled then
@@ -3585,8 +3605,6 @@ local function initChatFrame()
 					restoreChatClampState(frame)
 				end
 			end)
-
-			ensureChatFrameHooks()
 		end
 
 	addon.functions.ApplyChatFrameFade = addon.functions.ApplyChatFrameFade
@@ -6388,9 +6406,7 @@ local eventHandlers = {
 			addon.variables.safedAuctionFilters = nil
 		end
 	end,
-	["CRAFTINGORDERS_SHOW_CUSTOMER"] = function()
-		applyCurrentExpansionCraftingOrdersFilter(3)
-	end,
+	["CRAFTINGORDERS_SHOW_CUSTOMER"] = function() applyCurrentExpansionCraftingOrdersFilter(3) end,
 	["CINEMATIC_START"] = function()
 		if addon.db["autoCancelCinematic"] and not addon.db["quickSkipCinematic"] then
 			if CinematicFrame.isRealCinematic then
