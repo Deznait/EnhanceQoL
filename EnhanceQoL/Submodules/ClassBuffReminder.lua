@@ -42,6 +42,8 @@ local DB_SHOW_PARTY = "classBuffReminderShowParty"
 local DB_SHOW_RAID = "classBuffReminderShowRaid"
 local DB_SHOW_SOLO = "classBuffReminderShowSolo"
 local DB_GLOW = "classBuffReminderGlow"
+local DB_GLOW_STYLE = "classBuffReminderGlowStyle"
+local DB_GLOW_INSET = "classBuffReminderGlowInset"
 local DB_SOUND_ON_MISSING = "classBuffReminderSoundOnMissing"
 local DB_MISSING_SOUND = "classBuffReminderMissingSound"
 local DB_DISPLAY_MODE = "classBuffReminderDisplayMode"
@@ -68,6 +70,8 @@ Reminder.defaults = Reminder.defaults
 		showRaid = true,
 		showSolo = false,
 		glow = true,
+		glowStyle = "MARCHING_ANTS",
+		glowInset = 0,
 		soundOnMissing = false,
 		missingSound = "",
 		displayMode = DISPLAY_MODE_ICON_ONLY,
@@ -87,6 +91,8 @@ Reminder.defaults = Reminder.defaults
 	}
 
 local defaults = Reminder.defaults
+if defaults.glowStyle == nil then defaults.glowStyle = "MARCHING_ANTS" end
+if defaults.glowInset == nil then defaults.glowInset = 0 end
 
 local PROVIDER_SCOPE_GROUP = "GROUP"
 local PROVIDER_SCOPE_SELF = "SELF"
@@ -436,6 +442,30 @@ local function normalizeTextOutline(value)
 	if value == TEXT_OUTLINE_MONO then return TEXT_OUTLINE_MONO end
 	return TEXT_OUTLINE_OUTLINE
 end
+
+Reminder.GLOW_INSET_RANGE = Reminder.GLOW_INSET_RANGE or 100
+Reminder.GLOW_STYLE_OPTIONS = Reminder.GLOW_STYLE_OPTIONS
+	or {
+		{ value = "MARCHING_ANTS", labelKey = "ClassBuffReminderGlowStyleMarchingAnts", fallback = "Marching ants" },
+		{ value = "FLASH", labelKey = "ClassBuffReminderGlowStyleFlash", fallback = "Flash" },
+	}
+
+local function normalizeGlowStyle(value)
+	local normalized = type(value) == "string" and string.upper(value) or nil
+	if normalized == "MARCHING_ANTS" or normalized == "MARCHINGANTS" or normalized == "ANTS" then return "MARCHING_ANTS" end
+	if normalized == "FLASH" then return "FLASH" end
+	return "MARCHING_ANTS"
+end
+
+local function normalizeGlowInset(value)
+	local inset = clamp(value, -(Reminder.GLOW_INSET_RANGE or 100), Reminder.GLOW_INSET_RANGE or 100, defaults.glowInset or 0)
+	if inset == nil then inset = defaults.glowInset or 0 end
+	if inset < 0 then return math.ceil(inset - 0.5) end
+	return math.floor(inset + 0.5)
+end
+
+Reminder.NormalizeGlowStyle = normalizeGlowStyle
+Reminder.NormalizeGlowInset = normalizeGlowInset
 
 local function textOutlineFlags(value)
 	local outline = normalizeTextOutline(value)
@@ -1467,6 +1497,10 @@ function Reminder:InvalidateProviderAvailabilityCache()
 end
 
 function Reminder:GetGrowthDirection() return normalizeGrowthDirection(getValue(DB_GROWTH_DIRECTION, defaults.growthDirection)) end
+
+function Reminder:GetGlowStyle() return normalizeGlowStyle(getValue(DB_GLOW_STYLE, defaults.glowStyle)) end
+
+function Reminder:GetGlowInset() return normalizeGlowInset(getValue(DB_GLOW_INSET, defaults.glowInset)) end
 function Reminder:GetGrowthFromCenter() return getValue(DB_GROWTH_FROM_CENTER, defaults.growthFromCenter) == true end
 
 function Reminder:GetIconCountTextStyle()
@@ -2279,10 +2313,8 @@ function Reminder:SetGlowShown(show)
 	end
 
 	for target in pairs(nextTargets) do
-		if not self.glowTargets[target] then
-			Glow.Start(target, REMINDER_GLOW_KEY, Glow.STYLE.BLIZZARD)
-			self.glowTargets[target] = true
-		end
+		Glow.Start(target, REMINDER_GLOW_KEY, self:GetGlowStyle(), { inset = self:GetGlowInset() })
+		self.glowTargets[target] = true
 	end
 
 	self.glowShown = next(self.glowTargets) ~= nil
@@ -2931,6 +2963,16 @@ function Reminder:RegisterEditMode()
 		Reminder:RequestUpdate(true)
 	end
 
+	local function setGlowStyle(value)
+		if addon.db then addon.db[DB_GLOW_STYLE] = normalizeGlowStyle(value) end
+		Reminder:RequestUpdate(true)
+	end
+
+	local function setGlowInset(value)
+		if addon.db then addon.db[DB_GLOW_INSET] = normalizeGlowInset(value) end
+		Reminder:RequestUpdate(true)
+	end
+
 	local function setDisplayMode(value)
 		if addon.db then addon.db[DB_DISPLAY_MODE] = normalizeDisplayMode(value) end
 		Reminder:ApplyVisualSettings()
@@ -3032,6 +3074,35 @@ function Reminder:RegisterEditMode()
 				default = defaults.glow,
 				get = function() return getValue(DB_GLOW, defaults.glow) == true end,
 				set = function(_, value) setBool(DB_GLOW, value) end,
+			},
+			{
+				name = L["ClassBuffReminderGlowStyle"] or "Glow style",
+				kind = SettingType.Dropdown,
+				parentId = "classBuffs",
+				height = 180,
+				default = defaults.glowStyle,
+				get = function() return normalizeGlowStyle(getValue(DB_GLOW_STYLE, defaults.glowStyle)) end,
+				set = function(_, value) setGlowStyle(value) end,
+				generator = function(_, root)
+					for _, option in ipairs(Reminder.GLOW_STYLE_OPTIONS or {}) do
+						local label = L[option.labelKey] or option.fallback
+						root:CreateRadio(label, function() return normalizeGlowStyle(getValue(DB_GLOW_STYLE, defaults.glowStyle)) == option.value end, function() setGlowStyle(option.value) end)
+					end
+				end,
+				isEnabled = function() return getValue(DB_GLOW, defaults.glow) == true end,
+			},
+			{
+				name = L["ClassBuffReminderGlowInset"] or "Glow inset",
+				kind = SettingType.Slider,
+				parentId = "classBuffs",
+				default = defaults.glowInset,
+				minValue = -(Reminder.GLOW_INSET_RANGE or 20),
+				maxValue = Reminder.GLOW_INSET_RANGE or 20,
+				valueStep = 1,
+				get = function() return normalizeGlowInset(getValue(DB_GLOW_INSET, defaults.glowInset)) end,
+				set = function(_, value) setGlowInset(value) end,
+				formatter = function(value) return tostring(math.floor((tonumber(value) or defaults.glowInset or 0) + 0.5)) end,
+				isEnabled = function() return getValue(DB_GLOW, defaults.glow) == true end,
 			},
 			{
 				name = L["ClassBuffReminderSectionFlasks"] or "Flasks",

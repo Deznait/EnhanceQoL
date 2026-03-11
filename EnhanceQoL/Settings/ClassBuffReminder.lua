@@ -11,6 +11,8 @@ local DB_SHOW_PARTY = "classBuffReminderShowParty"
 local DB_SHOW_RAID = "classBuffReminderShowRaid"
 local DB_SHOW_SOLO = "classBuffReminderShowSolo"
 local DB_GLOW = "classBuffReminderGlow"
+local DB_GLOW_STYLE = "classBuffReminderGlowStyle"
+local DB_GLOW_INSET = "classBuffReminderGlowInset"
 local DB_SOUND_ON_MISSING = "classBuffReminderSoundOnMissing"
 local DB_MISSING_SOUND = "classBuffReminderMissingSound"
 local DB_DISPLAY_MODE = "classBuffReminderDisplayMode"
@@ -35,6 +37,8 @@ local defaults = (Reminder and Reminder.defaults)
 		showRaid = true,
 		showSolo = false,
 		glow = true,
+		glowStyle = "MARCHING_ANTS",
+		glowInset = 0,
 		soundOnMissing = false,
 		missingSound = "",
 		displayMode = "ICON_ONLY",
@@ -52,9 +56,36 @@ local defaults = (Reminder and Reminder.defaults)
 		xyTextOffsetX = 0,
 		xyTextOffsetY = 0,
 	}
+if defaults.glowStyle == nil then defaults.glowStyle = "MARCHING_ANTS" end
+if defaults.glowInset == nil then defaults.glowInset = 0 end
 
 local function refreshReminder()
 	if Reminder and Reminder.OnSettingChanged then Reminder:OnSettingChanged() end
+end
+
+local glowStyleValues = {
+	MARCHING_ANTS = L["ClassBuffReminderGlowStyleMarchingAnts"] or "Marching ants",
+	FLASH = L["ClassBuffReminderGlowStyleFlash"] or "Flash",
+}
+local glowStyleOrder = { "MARCHING_ANTS", "FLASH" }
+
+local function normalizeGlowStyle(value)
+	if Reminder and Reminder.NormalizeGlowStyle then return Reminder.NormalizeGlowStyle(value) end
+	local normalized = type(value) == "string" and string.upper(value) or nil
+	if normalized == "MARCHING_ANTS" or normalized == "MARCHINGANTS" or normalized == "ANTS" then return "MARCHING_ANTS" end
+	if normalized == "FLASH" then return "FLASH" end
+	return "MARCHING_ANTS"
+end
+
+local function normalizeGlowInset(value)
+	if Reminder and Reminder.NormalizeGlowInset then return Reminder.NormalizeGlowInset(value) end
+	local n = tonumber(value)
+	if n == nil then n = defaults.glowInset or 0 end
+	local range = Reminder and Reminder.GLOW_INSET_RANGE or 20
+	if n < -range then n = -range end
+	if n > range then n = range end
+	if n < 0 then return math.ceil(n - 0.5) end
+	return math.floor(n + 0.5)
 end
 
 local function openFlaskSettings()
@@ -101,6 +132,48 @@ addon.functions.SettingsCreateCheckbox(cat, {
 })
 
 addon.functions.SettingsCreateCheckbox(cat, {
+	var = DB_GLOW,
+	text = L["ClassBuffReminderGlow"] or "Glow when missing",
+	func = function(value)
+		addon.db[DB_GLOW] = value == true
+		refreshReminder()
+	end,
+	parentSection = expandable,
+})
+
+addon.functions.SettingsCreateDropdown(cat, {
+	var = DB_GLOW_STYLE,
+	text = L["ClassBuffReminderGlowStyle"] or "Glow style",
+	default = defaults.glowStyle,
+	list = glowStyleValues,
+	order = glowStyleOrder,
+	get = function() return normalizeGlowStyle(addon.db and addon.db[DB_GLOW_STYLE] or defaults.glowStyle) end,
+	set = function(_, value)
+		addon.db[DB_GLOW_STYLE] = normalizeGlowStyle(value)
+		refreshReminder()
+	end,
+	parentSection = expandable,
+	parentCheck = function() return addon.db and addon.db[DB_GLOW] == true end,
+})
+
+addon.functions.SettingsCreateSlider(cat, {
+	var = DB_GLOW_INSET,
+	text = L["ClassBuffReminderGlowInset"] or "Glow inset",
+	default = defaults.glowInset,
+	min = -(Reminder and Reminder.GLOW_INSET_RANGE or 20),
+	max = Reminder and Reminder.GLOW_INSET_RANGE or 20,
+	step = 1,
+	get = function() return normalizeGlowInset(addon.db and addon.db[DB_GLOW_INSET] or defaults.glowInset) end,
+	set = function(_, value)
+		addon.db[DB_GLOW_INSET] = normalizeGlowInset(value)
+		refreshReminder()
+	end,
+	formatter = function(value) return tostring(math.floor((tonumber(value) or defaults.glowInset or 0) + 0.5)) end,
+	parentSection = expandable,
+	parentCheck = function() return addon.db and addon.db[DB_GLOW] == true end,
+})
+
+addon.functions.SettingsCreateCheckbox(cat, {
 	var = DB_TRACK_FLASKS,
 	text = L["ClassBuffReminderTrackFlasks"] or "Track missing flask buff",
 	desc = L["ClassBuffReminderTrackFlasksDesc"] or "Shows a flask reminder only when a matching flask is available in your bags.",
@@ -143,6 +216,8 @@ function addon.functions.initClassBuffReminder()
 	init(DB_SHOW_RAID, defaults.showRaid)
 	init(DB_SHOW_SOLO, defaults.showSolo)
 	init(DB_GLOW, defaults.glow)
+	init(DB_GLOW_STYLE, defaults.glowStyle)
+	init(DB_GLOW_INSET, defaults.glowInset)
 	init(DB_SOUND_ON_MISSING, defaults.soundOnMissing)
 	init(DB_MISSING_SOUND, defaults.missingSound)
 	init(DB_DISPLAY_MODE, defaults.displayMode)

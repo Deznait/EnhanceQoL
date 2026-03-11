@@ -78,6 +78,11 @@ local function roundOffset(value)
 	return floor(value + 0.5)
 end
 
+local function normalizeInset(opts)
+	if type(opts) ~= "table" then return 0 end
+	return roundOffset(opts.inset)
+end
+
 local function getState(target, key, create)
 	if not target then return nil end
 	local states = target._eqolGlowStates
@@ -140,11 +145,12 @@ local function applyStateAlpha(state)
 	host:SetAlpha(tonumber(state.alphaValue) or 1)
 end
 
-local function anchorCooldownViewerAlert(frame, host)
+local function anchorCooldownViewerAlert(frame, host, inset)
 	if not (frame and host) then return end
+	inset = roundOffset(inset)
 	frame:ClearAllPoints()
-	frame:SetPoint("TOPLEFT", host, "TOPLEFT", -8, 8)
-	frame:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 9, -9)
+	frame:SetPoint("TOPLEFT", host, "TOPLEFT", -8 - inset, 8 + inset)
+	frame:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 9 + inset, -9 - inset)
 end
 
 local function ensureMarchingAntsOverlay(host)
@@ -203,7 +209,7 @@ local function updateMarchingAntsOverlay(host, opts)
 	overlay:SetParent(host)
 	overlay:SetFrameStrata(host:GetFrameStrata())
 	overlay:SetFrameLevel(max(0, (host:GetFrameLevel() or 0) + 3))
-	anchorCooldownViewerAlert(overlay, host)
+	anchorCooldownViewerAlert(overlay, host, normalizeInset(opts))
 	overlay.Texture:SetVertexColor(color[1], color[2], color[3], color[4])
 	return overlay
 end
@@ -263,7 +269,7 @@ local function updateFlashOverlay(host, opts)
 	overlay:SetParent(host)
 	overlay:SetFrameStrata(host:GetFrameStrata())
 	overlay:SetFrameLevel(max(0, (host:GetFrameLevel() or 0) + 3))
-	anchorCooldownViewerAlert(overlay, host)
+	anchorCooldownViewerAlert(overlay, host, normalizeInset(opts))
 	overlay.Texture:SetVertexColor(color[1], color[2], color[3], color[4])
 	if overlay.AlphaAnim then
 		overlay.AlphaAnim:SetFromAlpha(color[4] * 0.25)
@@ -288,8 +294,10 @@ end
 
 local function stopBlizzardLoops(overlay)
 	if not overlay then return end
-	if overlay.sparkPulse and overlay.sparkPulse:IsPlaying() then overlay.sparkPulse:Stop() end
-	if overlay._sparkAlpha then overlay.spark:SetAlpha(overlay._sparkAlpha) end
+	if overlay.glowPulse and overlay.glowPulse:IsPlaying() then overlay.glowPulse:Stop() end
+	overlay.spark:SetAlpha(0)
+	if overlay._innerGlowAlpha then overlay.innerGlow:SetAlpha(overlay._innerGlowAlpha) end
+	if overlay._outerGlowAlpha then overlay.outerGlow:SetAlpha(overlay._outerGlowAlpha) end
 	overlay:SetScale(1)
 end
 
@@ -338,7 +346,8 @@ local function ensureBlizzardOverlay(host)
 	overlay.animIn:SetScript("OnFinished", function(self)
 		local parent = self:GetParent()
 		parent:SetAlpha(1)
-		if parent.sparkPulse then parent.sparkPulse:Play() end
+		parent.spark:SetAlpha(0)
+		if parent.glowPulse then parent.glowPulse:Play() end
 	end)
 
 	overlay.animOut = overlay:CreateAnimationGroup()
@@ -360,25 +369,25 @@ local function ensureBlizzardOverlay(host)
 		parent:Hide()
 	end)
 
-	overlay.sparkPulse = overlay.spark:CreateAnimationGroup()
-	overlay.sparkPulse:SetLooping("REPEAT")
+	overlay.glowPulse = overlay.outerGlow:CreateAnimationGroup()
+	overlay.glowPulse:SetLooping("REPEAT")
 	do
-		local fadeIn = overlay.sparkPulse:CreateAnimation("Alpha")
+		local fadeIn = overlay.glowPulse:CreateAnimation("Alpha")
 		fadeIn:SetOrder(1)
-		fadeIn:SetFromAlpha(0.2)
-		fadeIn:SetToAlpha(0.5)
-		fadeIn:SetDuration(0.55)
+		fadeIn:SetFromAlpha(0.55)
+		fadeIn:SetToAlpha(0.9)
+		fadeIn:SetDuration(0.65)
 		fadeIn:SetSmoothing("OUT")
 
-		local fadeOut = overlay.sparkPulse:CreateAnimation("Alpha")
+		local fadeOut = overlay.glowPulse:CreateAnimation("Alpha")
 		fadeOut:SetOrder(2)
-		fadeOut:SetFromAlpha(0.5)
-		fadeOut:SetToAlpha(0.2)
-		fadeOut:SetDuration(1.0)
+		fadeOut:SetFromAlpha(0.9)
+		fadeOut:SetToAlpha(0.55)
+		fadeOut:SetDuration(1.15)
 		fadeOut:SetSmoothing("IN")
 
-		overlay.sparkPulse.fadeIn = fadeIn
-		overlay.sparkPulse.fadeOut = fadeOut
+		overlay.glowPulse.fadeIn = fadeIn
+		overlay.glowPulse.fadeOut = fadeOut
 	end
 
 	overlay:SetScript("OnHide", function(self)
@@ -395,6 +404,9 @@ local function updateBlizzardOverlay(host, opts)
 	local overlay = ensureBlizzardOverlay(host)
 	local width = max(1, host:GetWidth() or 0)
 	local height = max(1, host:GetHeight() or 0)
+	local inset = normalizeInset(opts)
+	local expandedWidth = max(1, width + (inset * 2))
+	local expandedHeight = max(1, height + (inset * 2))
 	local color = normalizeColor(type(opts) == "table" and opts.color or nil, { 1, 1, 1, 1 })
 	local r, g, b, a = color[1], color[2], color[3], color[4]
 
@@ -402,11 +414,11 @@ local function updateBlizzardOverlay(host, opts)
 	overlay:SetFrameLevel(max(0, (host:GetFrameLevel() or 0) + 3))
 	overlay:ClearAllPoints()
 	overlay:SetPoint("CENTER", host, "CENTER", 0, 0)
-	overlay:SetSize(width * 1.5, height * 1.5)
+	overlay:SetSize(expandedWidth * 1.5, expandedHeight * 1.5)
 
-	overlay.spark:SetSize(width * 1.22, height * 1.22)
-	overlay.innerGlow:SetSize(width * 1.42, height * 1.42)
-	overlay.outerGlow:SetSize(width * 1.48, height * 1.48)
+	overlay.spark:SetSize(expandedWidth * 1.22, expandedHeight * 1.22)
+	overlay.innerGlow:SetSize(expandedWidth * 1.42, expandedHeight * 1.42)
+	overlay.outerGlow:SetSize(expandedWidth * 1.48, expandedHeight * 1.48)
 
 	overlay.spark:SetDesaturated(true)
 	overlay.innerGlow:SetDesaturated(true)
@@ -416,15 +428,17 @@ local function updateBlizzardOverlay(host, opts)
 	overlay.innerGlow:SetVertexColor(r, g, b, a * 0.55)
 	overlay.outerGlow:SetVertexColor(r, g, b, a * 0.9)
 
-	overlay._sparkAlpha = a * 0.42
-	overlay.spark:SetAlpha(overlay._sparkAlpha)
-	overlay.innerGlow:SetAlpha(a * 0.38)
-	overlay.outerGlow:SetAlpha(a * 0.72)
-	if overlay.sparkPulse and overlay.sparkPulse.fadeIn and overlay.sparkPulse.fadeOut then
-		overlay.sparkPulse.fadeIn:SetFromAlpha(a * 0.28)
-		overlay.sparkPulse.fadeIn:SetToAlpha(a * 0.62)
-		overlay.sparkPulse.fadeOut:SetFromAlpha(a * 0.62)
-		overlay.sparkPulse.fadeOut:SetToAlpha(a * 0.28)
+	overlay._sparkAlpha = 0
+	overlay._innerGlowAlpha = a * 0.34
+	overlay._outerGlowAlpha = a * 0.76
+	overlay.spark:SetAlpha(0)
+	overlay.innerGlow:SetAlpha(overlay._innerGlowAlpha)
+	overlay.outerGlow:SetAlpha(overlay._outerGlowAlpha)
+	if overlay.glowPulse and overlay.glowPulse.fadeIn and overlay.glowPulse.fadeOut then
+		overlay.glowPulse.fadeIn:SetFromAlpha(a * 0.58)
+		overlay.glowPulse.fadeIn:SetToAlpha(a * 0.88)
+		overlay.glowPulse.fadeOut:SetFromAlpha(a * 0.88)
+		overlay.glowPulse.fadeOut:SetToAlpha(a * 0.58)
 	end
 
 	return overlay
@@ -440,7 +454,7 @@ local function startBlizzard(host, opts)
 		return
 	end
 	if overlay.animIn and overlay.animIn:IsPlaying() then return end
-	if overlay.sparkPulse and not overlay.sparkPulse:IsPlaying() then overlay.sparkPulse:Play() end
+	if overlay.glowPulse and not overlay.glowPulse:IsPlaying() then overlay.glowPulse:Play() end
 end
 
 local function stopBlizzard(host)
