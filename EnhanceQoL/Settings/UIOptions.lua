@@ -1212,17 +1212,6 @@ local function createFrameCategory()
 		parentSection = expandable,
 	})
 
-	addon.functions.SettingsCreateCheckbox(category, {
-		var = "unclampDamageMeter",
-		text = L["unclampDamageMeter"] or "Unclamp Blizzard damage meter",
-		desc = L["unclampDamageMeterDesc"] or "Allow Blizzard damage meter windows to be moved beyond the screen edges.",
-		func = function(value)
-			addon.db["unclampDamageMeter"] = value and true or false
-			if addon.functions.applyDamageMeterClamp then addon.functions.applyDamageMeterClamp() end
-		end,
-		default = false,
-		parentSection = expandable,
-	})
 end
 
 function addon.functions.initUIOptions()

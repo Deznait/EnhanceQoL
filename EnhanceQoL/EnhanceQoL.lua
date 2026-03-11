@@ -3968,7 +3968,6 @@ local function initUI()
 	addon.functions.InitDBValue("squareMinimapStatsTrackingButtonScale", 1.0)
 	addon.functions.InitDBValue("minimapButtonsMouseover", false)
 	addon.functions.InitDBValue("unclampMinimapCluster", false)
-	addon.functions.InitDBValue("unclampDamageMeter", false)
 	addon.functions.InitDBValue("enableMinimapClusterScale", false)
 	addon.functions.InitDBValue("minimapClusterScale", 1)
 	addon.functions.InitDBValue("showWorldMapCoordinates", false)
@@ -4144,62 +4143,6 @@ local function initUI()
 		if addon.functions.applySquareMinimapBorder then addon.functions.applySquareMinimapBorder() end
 		if addon.functions.applySquareMinimapHousingBackdrop then addon.functions.applySquareMinimapHousingBackdrop() end
 	end)
-
-	function addon.functions.applyDamageMeterClamp()
-		local damageMeter = _G.DamageMeter
-		local clampedToScreen = not (addon.db and addon.db.unclampDamageMeter == true)
-
-		local function applyClamp(frame)
-			if frame and frame.SetClampedToScreen then frame:SetClampedToScreen(clampedToScreen) end
-		end
-
-		applyClamp(damageMeter)
-
-		if damageMeter and damageMeter.ForEachSessionWindow then
-			damageMeter:ForEachSessionWindow(function(sessionWindow) applyClamp(sessionWindow) end)
-		else
-			for index = 1, 3 do
-				applyClamp(_G["DamageMeterSessionWindow" .. index])
-			end
-		end
-	end
-
-	local function ensureDamageMeterClampHook()
-		addon.variables = addon.variables or {}
-		if addon.variables.damageMeterClampHooked then return end
-
-		local damageMeter = _G.DamageMeter
-		if not (damageMeter and damageMeter.SetupSessionWindow) then return end
-
-		hooksecurefunc(damageMeter, "SetupSessionWindow", function()
-			if addon.functions and addon.functions.applyDamageMeterClamp then addon.functions.applyDamageMeterClamp() end
-		end)
-
-		addon.variables.damageMeterClampHooked = true
-	end
-
-	local function onDamageMeterAddonLoaded()
-		ensureDamageMeterClampHook()
-		if addon.functions.applyDamageMeterClamp then addon.functions.applyDamageMeterClamp() end
-	end
-
-	addon.variables = addon.variables or {}
-	if not addon.variables.damageMeterClampLoadHookRegistered then
-		addon.variables.damageMeterClampLoadHookRegistered = true
-		if EventUtil and EventUtil.ContinueOnAddOnLoaded then
-			EventUtil.ContinueOnAddOnLoaded("Blizzard_DamageMeter", onDamageMeterAddonLoaded)
-		else
-			local clampLoader = CreateFrame("Frame")
-			clampLoader:RegisterEvent("ADDON_LOADED")
-			clampLoader:SetScript("OnEvent", function(_, _, loadedAddonName)
-				if loadedAddonName ~= "Blizzard_DamageMeter" then return end
-				onDamageMeterAddonLoaded()
-				clampLoader:UnregisterEvent("ADDON_LOADED")
-			end)
-		end
-	end
-
-	onDamageMeterAddonLoaded()
 
 	function addon.functions.applyMinimapClusterClamp()
 		if not MinimapCluster or not MinimapCluster.SetClampedToScreen then return end

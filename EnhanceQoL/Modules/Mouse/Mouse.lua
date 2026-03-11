@@ -475,6 +475,8 @@ end
 
 local function shouldShowCastProgress(db) return db and db["mouseRingCastProgress"] == true end
 
+local function shouldShowCastProgressOutsideCombat(db) return db and db["mouseRingCastProgressShowOutsideCombat"] == true end
+
 local function shouldShowGCDProgress(db) return db and db["mouseRingGCDProgress"] == true end
 
 local function normalizeProgressStyle(value)
@@ -818,6 +820,21 @@ local function getGCDProgressValue(now)
 	if progress > 1 then progress = 1 end
 	if normalizeGCDProgressMode(addon.db and addon.db["mouseRingGCDProgressMode"]) ~= "ELAPSED" then progress = 1 - progress end
 	return progress
+end
+
+local function isCastProgressOutsideCombatWanted(db, inCombat, rightClickActive)
+	if not db or db["mouseRingEnabled"] ~= true then return false end
+	if inCombat or db["mouseRingOnlyInCombat"] ~= true then return false end
+	if not shouldShowCastProgress(db) or not shouldShowCastProgressOutsideCombat(db) then return false end
+	if db["mouseRingOnlyOnRightClick"] and not rightClickActive then return false end
+	local nowMs = (GetTime and GetTime() or 0) * 1000
+	local progress = getCastProgressValue(nowMs)
+	return progress ~= nil
+end
+
+local function isRingDisplayWanted(db, inCombat, rightClickActive)
+	if isRingWanted(db, inCombat, rightClickActive) then return true end
+	return isCastProgressOutsideCombatWanted(db, inCombat, rightClickActive)
 end
 
 local function setSwipeIndicatorState(indicator, active, startTime, durationValue, modRate, reverse, r, g, b, a)
@@ -1439,7 +1456,7 @@ local function refreshRingVisibility()
 	local inCombat = false
 	if ringOnly or combatOverride or combatOverlay then inCombat = UnitAffectingCombat and UnitAffectingCombat("player") and true or false end
 	local rightClickActive = db["mouseRingOnlyOnRightClick"] and IsMouseButtonDown and IsMouseButtonDown("RightButton")
-	local ringWanted = isRingWanted(db, inCombat, rightClickActive)
+	local ringWanted = isRingDisplayWanted(db, inCombat, rightClickActive)
 
 	if ringWanted then
 		if not addon.mousePointer then createMouseRing(inCombat) end
@@ -1595,7 +1612,7 @@ if not addon.mouseTrailRunner then
 		local inCombat = false
 		if ringOnly or trailOnly or combatOverride or combatOverlay then inCombat = UnitAffectingCombat and UnitAffectingCombat("player") and true or false end
 		local rightClickActive = rightClickOnly and IsMouseButtonDown and IsMouseButtonDown("RightButton")
-		local ringWanted = isRingWanted(db, inCombat, rightClickActive)
+		local ringWanted = isRingDisplayWanted(db, inCombat, rightClickActive)
 		local trailWanted = db["mouseTrailEnabled"] and (not trailOnly or inCombat)
 		if trailWanted and currentPreset ~= db["mouseTrailDensity"] then applyPreset(db["mouseTrailDensity"]) end
 		if trailWanted and not lastTrailWanted then

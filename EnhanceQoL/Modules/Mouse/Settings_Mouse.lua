@@ -43,6 +43,13 @@ local function isRingSwipeStyleSetting()
 	return (db["mouseRingProgressStyle"] or "DOT") == "RING"
 end
 
+local function isCastProgressEnabledSetting()
+	return isRingEnabledSetting()
+		and addon.SettingsLayout.elements["mouseRingCastProgress"]
+		and addon.SettingsLayout.elements["mouseRingCastProgress"].setting
+		and addon.SettingsLayout.elements["mouseRingCastProgress"].setting:GetValue() == true
+end
+
 local data = {
 	{
 		var = "mouseRingEnabled",
@@ -389,6 +396,7 @@ local data = {
 				func = function(v)
 					addon.db["mouseRingCastProgress"] = v
 					if addon.Mouse.functions.syncRingProgressState then addon.Mouse.functions.syncRingProgressState() end
+					if addon.Mouse.functions.refreshRingVisibility then addon.Mouse.functions.refreshRingVisibility() end
 					if addon.Mouse.functions.refreshRingStyle then addon.Mouse.functions.refreshRingStyle() end
 				end,
 				parentCheck = function() return isRingEnabledSetting() end,
@@ -399,14 +407,23 @@ local data = {
 				parentSection = expandable,
 			},
 			{
+				var = "mouseRingCastProgressShowOutsideCombat",
+				text = L["mouseRingCastProgressShowOutsideCombat"],
+				func = function(v)
+					addon.db["mouseRingCastProgressShowOutsideCombat"] = v and true or false
+					if addon.Mouse.functions.refreshRingVisibility then addon.Mouse.functions.refreshRingVisibility() end
+				end,
+				parentCheck = function() return isCastProgressEnabledSetting() end,
+				parent = true,
+				default = false,
+				type = Settings.VarType.Boolean,
+				sType = "checkbox",
+				parentSection = expandable,
+			},
+			{
 				var = "mouseRingCastProgressColor",
 				text = L["mouseRingCastProgressColor"],
-				parentCheck = function()
-					return isRingEnabledSetting()
-						and addon.SettingsLayout.elements["mouseRingCastProgress"]
-						and addon.SettingsLayout.elements["mouseRingCastProgress"].setting
-						and addon.SettingsLayout.elements["mouseRingCastProgress"].setting:GetValue() == true
-				end,
+				parentCheck = function() return isCastProgressEnabledSetting() end,
 				callback = function(r, g, b, a)
 					if addon.Mouse.functions.refreshRingStyle then addon.Mouse.functions.refreshRingStyle() end
 				end,
