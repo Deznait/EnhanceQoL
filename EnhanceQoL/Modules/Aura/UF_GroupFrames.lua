@@ -4017,12 +4017,21 @@ local function hideAuraButtons(buttons, startIndex)
 		local btn = buttons[i]
 		if btn then
 			btn._showTooltip = false
-			if btn.SetMouseClickEnabled then btn:SetMouseClickEnabled(false) end
-			if btn.SetMouseMotionEnabled then btn:SetMouseMotionEnabled(false) end
-			if btn.EnableMouse then
-				btn._eqolAuraMouseEnabled = false
-				btn:EnableMouse(false)
+			btn._tooltipUseEditMode = nil
+			btn._tooltipAnchor = nil
+			if btn.SetMouseClickEnabled and btn._eqolAuraMouseClickEnabled ~= false then
+				btn:SetMouseClickEnabled(false)
+				btn._eqolAuraMouseClickEnabled = false
 			end
+			if btn.SetMouseMotionEnabled and btn._eqolAuraMouseMotionEnabled ~= false then
+				btn:SetMouseMotionEnabled(false)
+				btn._eqolAuraMouseMotionEnabled = false
+			end
+			if btn.EnableMouse then
+				if btn._eqolAuraMouseEnabled ~= false then btn:EnableMouse(false) end
+				btn._eqolAuraMouseEnabled = false
+			end
+			if GameTooltip and GameTooltip.IsOwned and GameTooltip.Hide and GameTooltip:IsOwned(btn) then GameTooltip:Hide() end
 			btn:Hide()
 		end
 	end
@@ -4031,14 +4040,24 @@ end
 local function setAuraTooltipState(btn, style)
 	if not (btn and style) then return end
 	local show = style.showTooltip == true
+	btn._tooltipUseEditMode = style.tooltipUseEditMode == true
+	btn._tooltipAnchor = style.tooltipAnchor or "ANCHOR_BOTTOMRIGHT"
 	if btn._showTooltip ~= show then btn._showTooltip = show end
-	if btn.SetMouseClickEnabled then btn:SetMouseClickEnabled(show) end
-	if btn.SetMouseMotionEnabled then btn:SetMouseMotionEnabled(show) end
-	if btn.EnableMouse then
-		if btn._eqolAuraMouseEnabled ~= show then btn._eqolAuraMouseEnabled = show end
-		btn:EnableMouse(show)
+	if btn.SetMouseClickEnabled and btn._eqolAuraMouseClickEnabled ~= show then
+		btn:SetMouseClickEnabled(show)
+		btn._eqolAuraMouseClickEnabled = show
 	end
-	if not show and GameTooltip and GameTooltip.Hide then GameTooltip:Hide() end
+	if btn.SetMouseMotionEnabled and btn._eqolAuraMouseMotionEnabled ~= show then
+		btn:SetMouseMotionEnabled(show)
+		btn._eqolAuraMouseMotionEnabled = show
+	end
+	if btn.EnableMouse then
+		if btn._eqolAuraMouseEnabled ~= show then
+			btn:EnableMouse(show)
+			btn._eqolAuraMouseEnabled = show
+		end
+	end
+	if not show and GameTooltip and GameTooltip.IsOwned and GameTooltip.Hide and GameTooltip:IsOwned(btn) then GameTooltip:Hide() end
 end
 
 local function calcAuraGridSize(shown, perRow, size, spacing, primary)
@@ -4826,6 +4845,8 @@ function GF:LayoutAuras(self)
 			style.size = size
 			style.padding = spacing
 			style.showTooltip = typeCfg.showTooltip ~= false
+			style.tooltipUseEditMode = st._tooltipUseEditMode == true
+			style.tooltipAnchor = "ANCHOR_RIGHT"
 			style.showCooldown = typeCfg.showCooldown ~= false
 			style.blizzardDispelBorder = typeCfg.showDispelIcon == true
 			if typeCfg.showCooldownText ~= nil then style.showCooldownText = typeCfg.showCooldownText end
@@ -4896,6 +4917,8 @@ local function updateAuraType(self, unit, st, ac, kindKey, cache, changed, heale
 	end
 	local shown = 0
 	local maxCount = layout.maxCount or 0
+	style.tooltipUseEditMode = st._tooltipUseEditMode == true
+	style.tooltipAnchor = "ANCHOR_RIGHT"
 	for i = 1, #order do
 		if shown >= maxCount then break end
 		local auraId = order[i]
@@ -5419,6 +5442,8 @@ function GF:UpdateSampleAuras(self)
 		local shown = math.min(maxCount, #iconList)
 		local now = GetTime and GetTime() or 0
 		local sampleStyle = getSampleStyle(st, kindKey, style)
+		sampleStyle.tooltipUseEditMode = st._tooltipUseEditMode == true
+		sampleStyle.tooltipAnchor = "ANCHOR_RIGHT"
 		local unitToken = unit or "player"
 		for i = 1, shown do
 			local aura = getSampleAuraData(kindKey, i, now)

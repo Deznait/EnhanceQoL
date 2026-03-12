@@ -3004,7 +3004,11 @@ function AuraUtil.ensureAuraButton(container, icons, index, ac)
 			local auraInstanceID = self.auraInstanceID
 			if not unitToken or not auraInstanceID then return end
 			if type(auraInstanceID) ~= "number" or auraInstanceID <= 0 then return end
-			tooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
+			if self._tooltipUseEditMode == true and GameTooltip_SetDefaultAnchor then
+				GameTooltip_SetDefaultAnchor(tooltip, self)
+			else
+				tooltip:SetOwner(self, self._tooltipAnchor or "ANCHOR_BOTTOMRIGHT")
+			end
 			if self.isDebuff then
 				if tooltip.SetUnitDebuffByAuraInstanceID then
 					tooltip:SetUnitDebuffByAuraInstanceID(unitToken, auraInstanceID)

@@ -1134,9 +1134,21 @@ local function clearHiddenAuraButton(btn)
 	if not btn then return end
 	btn._showTooltip = false
 	btn._hbTooltipShown = false
-	if btn.SetMouseClickEnabled then btn:SetMouseClickEnabled(false) end
-	if btn.SetMouseMotionEnabled then btn:SetMouseMotionEnabled(false) end
-	if btn.EnableMouse then btn:EnableMouse(false) end
+	btn._tooltipUseEditMode = nil
+	btn._tooltipAnchor = nil
+	if btn.SetMouseClickEnabled and btn._hbMouseClickEnabled ~= false then
+		btn:SetMouseClickEnabled(false)
+		btn._hbMouseClickEnabled = false
+	end
+	if btn.SetMouseMotionEnabled and btn._hbMouseMotionEnabled ~= false then
+		btn:SetMouseMotionEnabled(false)
+		btn._hbMouseMotionEnabled = false
+	end
+	if btn.EnableMouse then
+		if btn._hbMouseEnabled ~= false then btn:EnableMouse(false) end
+		btn._hbMouseEnabled = false
+	end
+	if GameTooltip and GameTooltip.IsOwned and GameTooltip.Hide and GameTooltip:IsOwned(btn) then GameTooltip:Hide() end
 	if btn.Hide then btn:Hide() end
 end
 
@@ -1150,10 +1162,19 @@ end
 local function setAuraTooltipState(btn, show)
 	if not btn then return end
 	btn._showTooltip = show == true
-	if btn.SetMouseClickEnabled then btn:SetMouseClickEnabled(show == true) end
-	if btn.SetMouseMotionEnabled then btn:SetMouseMotionEnabled(show == true) end
-	if btn.EnableMouse then btn:EnableMouse(show == true) end
-	if show ~= true and GameTooltip and GameTooltip.Hide then GameTooltip:Hide() end
+	if btn.SetMouseClickEnabled and btn._hbMouseClickEnabled ~= (show == true) then
+		btn:SetMouseClickEnabled(show == true)
+		btn._hbMouseClickEnabled = show == true
+	end
+	if btn.SetMouseMotionEnabled and btn._hbMouseMotionEnabled ~= (show == true) then
+		btn:SetMouseMotionEnabled(show == true)
+		btn._hbMouseMotionEnabled = show == true
+	end
+	if btn.EnableMouse and btn._hbMouseEnabled ~= (show == true) then
+		btn:EnableMouse(show == true)
+		btn._hbMouseEnabled = show == true
+	end
+	if show ~= true and GameTooltip and GameTooltip.IsOwned and GameTooltip.Hide and GameTooltip:IsOwned(btn) then GameTooltip:Hide() end
 end
 
 local function calcGridSize(shown, perRow, size, spacing, primary)
@@ -2045,6 +2066,8 @@ local function renderIconStyleForGroup(btn, st, state, compiled, cfg, group, cha
 	local maxRules = (group.iconMode == ICON_MODE_PRIORITY) and 1 or nil
 	local force = collectActiveRulesForGroup(state, compiled, group.id, activeRules, changedFamilies, maxRules)
 	local style = getAuraStyleForGroup(state, cfg, group)
+	style.tooltipUseEditMode = st and st._tooltipUseEditMode == true
+	style.tooltipAnchor = "ANCHOR_RIGHT"
 	local styleRevision = style._eqolStyleRevision or 0
 	local layoutRevision = st._hbHealerBuffLayoutRevision or 0
 	local renderState = renderHashes[group.id]
@@ -2074,6 +2097,8 @@ local function renderIconStyleForGroup(btn, st, state, compiled, cfg, group, cha
 		local button = buttons[index]
 		if not button then button = AuraUtil.ensureAuraButton(container, buttons, index, style) end
 		if not button then break end
+		button._tooltipUseEditMode = style.tooltipUseEditMode == true
+		button._tooltipAnchor = style.tooltipAnchor or "ANCHOR_BOTTOMRIGHT"
 		local drawCooldownSwipe = style.showCooldownSwipe ~= false
 		if button.cd and button._hbDrawCooldownSwipe ~= drawCooldownSwipe then
 			button._hbDrawCooldownSwipe = drawCooldownSwipe
