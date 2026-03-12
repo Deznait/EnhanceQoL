@@ -2331,7 +2331,7 @@ function ResourceBars.ResolveAbsoluteThresholdColor(cfg, currentValue, pType, ma
 	return selectedColor[1] or 1, selectedColor[2] or 1, selectedColor[3] or 1, selectedColor[4] or 1
 end
 
-function ResourceBars.ResolveAbsoluteThresholdColorForSecretPower(cfg, pType, powerEnum, curPower, maxPower, baseColor)
+function ResourceBars.ResolveAbsoluteThresholdColorForSecretPower(cfg, pType, powerEnum, curPower, maxPower, baseColor, maxColor)
 	if type(cfg) ~= "table" or cfg.useAbsoluteThresholdColors ~= true then return nil end
 	if not powerEnum then return nil end
 	local points = ResourceBars.NormalizeAbsoluteThresholdColorPoints(cfg, pType)
@@ -2345,6 +2345,14 @@ function ResourceBars.ResolveAbsoluteThresholdColorForSecretPower(cfg, pType, po
 		bb = baseColor[3] or 1
 		ba = baseColor[4] or 1
 	end
+	local useMaxColor = type(maxColor) == "table"
+	local mr, mg, mb, ma = br, bg, bb, ba
+	if useMaxColor then
+		mr = maxColor[1] or mr
+		mg = maxColor[2] or mg
+		mb = maxColor[3] or mb
+		ma = maxColor[4] or ma
+	end
 
 	local pointsCache = cfg._eqolAbsoluteThresholdColorCache and cfg._eqolAbsoluteThresholdColorCache[pType]
 	local curveCacheByType = cfg._eqolAbsoluteThresholdCurveCache
@@ -2354,6 +2362,8 @@ function ResourceBars.ResolveAbsoluteThresholdColorForSecretPower(cfg, pType, po
 	end
 	local signature = ResourceBars.HashCurveStep(17, pointsCache and pointsCache.signature or #points)
 	signature = ResourceBars.HashCurveColor(signature, { br, bg, bb, ba })
+	signature = ResourceBars.HashCurveStep(signature, useMaxColor and 1 or 0)
+	if useMaxColor then signature = ResourceBars.HashCurveColor(signature, { mr, mg, mb, ma }) end
 	local curveCache = curveCacheByType[pType]
 	local curve = curveCache and curveCache.curve or nil
 	if not (curve and curveCache.signature == signature) then
@@ -2361,27 +2371,39 @@ function ResourceBars.ResolveAbsoluteThresholdColorForSecretPower(cfg, pType, po
 		if not curve then return nil end
 		curve:SetType(Enum.LuaCurveType.Step)
 
-		local highest = points[#points] and points[#points].color
-		local hr = highest and highest[1] or br
-		local hg = highest and highest[2] or bg
-		local hb = highest and highest[3] or bb
-		local ha = highest and highest[4] or ba
+		local lastR, lastG, lastB, lastA = br, bg, bb, ba
+		local lastProgress = nil
+		local firstProgress = nil
+		if points[1] then
+			firstProgress = tonumber(points[1].value) or 0
+			firstProgress = firstProgress / 100
+			if firstProgress < 0 then firstProgress = 0 end
+			if firstProgress > 1 then firstProgress = 1 end
+		end
+		if firstProgress == nil or firstProgress > 0 then curve:AddPoint(0.0, CreateColor(br, bg, bb, ba)) end
 
-		curve:AddPoint(1.0, CreateColor(hr, hg, hb, ha))
-		for i = #points, 1, -1 do
+		for i = 1, #points do
 			local point = points[i]
 			local value = tonumber(point and point.value) or 0
 			local progress = value / 100
 			if progress < 0 then progress = 0 end
 			if progress > 1 then progress = 1 end
-			local color = point and point.color
-			local r = color and color[1] or 1
-			local g = color and color[2] or 1
-			local b = color and color[3] or 1
-			local a = color and color[4] or 1
-			curve:AddPoint(progress, CreateColor(r, g, b, a))
+			if not (useMaxColor and progress >= 1) then
+				local color = point and point.color
+				local r = color and color[1] or 1
+				local g = color and color[2] or 1
+				local b = color and color[3] or 1
+				local a = color and color[4] or 1
+				curve:AddPoint(progress, CreateColor(r, g, b, a))
+				lastR, lastG, lastB, lastA = r, g, b, a
+				lastProgress = progress
+			end
 		end
-		curve:AddPoint(0.0, CreateColor(br, bg, bb, ba))
+		if useMaxColor then
+			curve:AddPoint(1.0, CreateColor(mr, mg, mb, ma))
+		elseif lastProgress == nil or lastProgress < 1 then
+			curve:AddPoint(1.0, CreateColor(lastR, lastG, lastB, lastA))
+		end
 		curveCacheByType[pType] = {
 			signature = signature,
 			curve = curve,
@@ -2446,29 +2468,46 @@ local function applyBarFillColor(bar, cfg, pType)
 
 	local targetR, targetG, targetB, targetA = baseR, baseG, baseB, baseA
 	local usingMaxColor = false
+	local usingThresholdColor = false
 	local secretCurveColor
-	if cfg.useMaxColor == true then
-		local capState = isAtCap()
-		if capState == true then
-			local maxCol = cfg.maxColor or RB.DEFAULT_MAX_COLOR
-			targetR = maxCol[1] or targetR
-			targetG = maxCol[2] or targetG
-			targetB = maxCol[3] or targetB
-			targetA = maxCol[4] or targetA
-			usingMaxColor = true
-		elseif capState == nil then
-			-- Midnight secret values must use curve-based coloring instead of direct comparisons.
+	local thresholdMode = ResourceBars.GetThresholdColorModeAndCap and ResourceBars.GetThresholdColorModeAndCap(pType) or nil
+	local wantsSecretThresholdCurve = cfg.useAbsoluteThresholdColors == true and pType ~= "RUNES" and thresholdMode == "PERCENT"
+	local capState = (cfg.useMaxColor == true or wantsSecretThresholdCurve) and isAtCap() or false
+	if cfg.useMaxColor == true and capState == true then
+		local maxCol = cfg.maxColor or RB.DEFAULT_MAX_COLOR
+		targetR = maxCol[1] or targetR
+		targetG = maxCol[2] or targetG
+		targetB = maxCol[3] or targetB
+		targetA = maxCol[4] or targetA
+		usingMaxColor = true
+	elseif capState == nil and pType ~= "RUNES" then
+		-- Midnight secret values must use curves instead of direct comparisons.
+		local powerEnum = POWER_ENUM and POWER_ENUM[pType]
+		local useRawPower = pType == "SOUL_SHARDS" and addon.variables and addon.variables.unitClass == "WARLOCK" and addon.variables.unitSpec == 3
+		if powerEnum and ResourceBars.ResolveAbsoluteThresholdColorForSecretPower and thresholdMode == "PERCENT" then
+			local tr, tg, tb, ta = ResourceBars.ResolveAbsoluteThresholdColorForSecretPower(
+				cfg,
+				pType,
+				powerEnum,
+				UnitPower("player", powerEnum, useRawPower),
+				UnitPowerMax("player", powerEnum, useRawPower),
+				{ baseR, baseG, baseB, baseA or 1 },
+				cfg.useMaxColor == true and (cfg.maxColor or RB.DEFAULT_MAX_COLOR) or nil
+			)
+			if tr ~= nil then
+				targetR, targetG, targetB, targetA = tr, tg, tb, ta
+				usingThresholdColor = true
+			end
+		end
+		if not usingThresholdColor then
 			if pType == "HEALTH" then
 				if UnitHealthPercent and curve then
 					SetColorCurvePoints(cfg.maxColor or RB.DEFAULT_MAX_COLOR)
 					secretCurveColor = UnitHealthPercent("player", true, curve)
 				end
-			elseif pType ~= "RUNES" then
-				local powerEnum = POWER_ENUM and POWER_ENUM[pType]
-				if powerEnum and UnitPowerPercent then
-					SetColorCurvePointsPower(pType, cfg.maxColor or RB.DEFAULT_MAX_COLOR, { baseR, baseG, baseB, baseA or 1 })
-					if curvePower[pType] then secretCurveColor = UnitPowerPercent("player", powerEnum, false, curvePower[pType]) end
-				end
+			elseif cfg.useMaxColor == true and powerEnum and UnitPowerPercent then
+				SetColorCurvePointsPower(pType, cfg.maxColor or RB.DEFAULT_MAX_COLOR, { baseR, baseG, baseB, baseA or 1 })
+				if curvePower[pType] then secretCurveColor = UnitPowerPercent("player", powerEnum, false, curvePower[pType]) end
 			end
 			if secretCurveColor then usingMaxColor = true end
 		end
@@ -2481,7 +2520,7 @@ local function applyBarFillColor(bar, cfg, pType)
 	bar._lastColor = bar._lastColor or {}
 	bar._lastColor[1], bar._lastColor[2], bar._lastColor[3], bar._lastColor[4] = targetR, targetG, targetB, targetA or 1
 	bar._usingMaxColor = usingMaxColor
-	bar._usingAbsoluteThresholdColor = false
+	bar._usingAbsoluteThresholdColor = usingThresholdColor and not usingMaxColor
 	if pType and pType ~= "RUNES" then SetColorCurvePointsPower(pType, cfg.maxColor, bar._baseColor) end
 	configureSpecialTexture(bar, pType, cfg)
 	if ResourceBars.RefreshStatusBarGradient then ResourceBars.RefreshStatusBarGradient(bar, cfg) end
@@ -4073,7 +4112,8 @@ function updatePowerBar(type, runeSlot)
 	local thresholdSampleValue = isSoulShards and displayCur or curPower
 	local secretThresholdR, secretThresholdG, secretThresholdB, secretThresholdA
 	if hasSecretPower and thresholdModeForBar == "PERCENT" then
-		secretThresholdR, secretThresholdG, secretThresholdB, secretThresholdA = ResourceBars.ResolveAbsoluteThresholdColorForSecretPower(cfg, type, pType, curPower, maxPower, bar._baseColor)
+		secretThresholdR, secretThresholdG, secretThresholdB, secretThresholdA =
+			ResourceBars.ResolveAbsoluteThresholdColorForSecretPower(cfg, type, pType, curPower, maxPower, bar._baseColor, cfg.useMaxColor == true and (cfg.maxColor or RB.DEFAULT_MAX_COLOR) or nil)
 	end
 	if not hasSecretPower then
 		local reachedCap = curPower >= max(maxPower, 1)
@@ -4113,7 +4153,10 @@ function updatePowerBar(type, runeSlot)
 			local targetR, targetG, targetB, targetA = br, bgc, bb, ba
 			local useMaxColor = cfg.useMaxColor == true
 			local flag
-			if useMaxColor and UnitPowerPercent then
+			if secretThresholdR ~= nil then
+				targetR, targetG, targetB, targetA = secretThresholdR, secretThresholdG, secretThresholdB, secretThresholdA
+				flag = "threshold"
+			elseif useMaxColor and UnitPowerPercent then
 				SetColorCurvePointsPower(type, cfg.maxColor or RB.DEFAULT_MAX_COLOR, { br, bgc, bb, ba })
 				if curvePower[type] then
 					local curveColor = UnitPowerPercent("player", pType, false, curvePower[type])
@@ -4126,15 +4169,11 @@ function updatePowerBar(type, runeSlot)
 						flag = "maxCurve"
 					end
 				end
+			elseif reachedThree then
+				targetR, targetG, targetB, targetA = getHolyThreeColor(cfg)
+				flag = "holy3"
 			end
-			if not flag then
-				if secretThresholdR ~= nil then
-					targetR, targetG, targetB, targetA = secretThresholdR, secretThresholdG, secretThresholdB, secretThresholdA
-					flag = "threshold"
-				elseif reachedThree then
-					targetR, targetG, targetB, targetA = getHolyThreeColor(cfg)
-					flag = "holy3"
-				end
+			if flag ~= "maxCurve" then
 				lc[1], lc[2], lc[3], lc[4] = targetR, targetG, targetB, targetA
 				bar._lastColor = lc
 				if cfg.useBarColor and not cfg.useMaxColor and not reachedThree then

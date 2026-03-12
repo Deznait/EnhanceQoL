@@ -1,6 +1,6 @@
 # Changelog
 
-## [9.0.0] - 2026-03-10
+## [9.0.0] - 2026-03-15 (planned release)
 
 ### ✨ Added
 
@@ -61,6 +61,7 @@
 - Resource Bars (Gradient / Edit Mode): Fixed a Retail Lua error when switching from specs without resource bars to specs with them, especially on fresh characters. Gradient refreshes now skip protected/invalid bar colors instead of crashing when opening, moving, or configuring the bar.
 - Resource Bars (Vertical Orientation): Fixed a bug where vertical bars could revert to horizontal sizing after being moved in Edit Mode because stale layout width/height values were written back into the bar config.
 - Resource Bars (Health / Absorb): Fixed vertical absorb rendering on health bars so the absorb segment now follows the bar orientation correctly instead of appearing as a horizontal strip across the bar.
+- Resource Bars (Threshold Colors / Max Color): Fixed percent-based secret/curve resource bars (for example Fury) so `Use max color` no longer suppresses `Threshold colors`. Threshold colors now evaluate through a step color curve for protected percentage values, while `Max color` still applies cleanly at full resource.
 - Ignore List: Fixed a Retail secret-value error while scanning party/raid members for ignored players.
 - Minimap Button Bin: Fixed `GatherMatePin*` minimap pins being treated as minimap buttons, so they no longer appear in the Button Sink or its exclude list.
 - Item Upgrades: Fixed upgrade indicators and upgrade-only checks suggesting off-armor-type gear (for example Cloth on Leather classes). Bag, merchant, and loot-toast upgrade checks now respect the current spec's actual armor proficiency.
