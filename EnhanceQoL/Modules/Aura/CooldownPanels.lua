@@ -2546,8 +2546,16 @@ function CooldownPanels:ProxyEditModeDragStart(panelId)
 	local runtime = panelId and getRuntime(panelId) or nil
 	local frame = runtime and runtime.frame
 	local selection = frame and frame.Selection
-	if selection and selection.OnMouseDown then selection:OnMouseDown() end
-	if selection and selection.OnDragStart then
+	local onMouseDown = selection and selection.GetScript and selection:GetScript("OnMouseDown") or nil
+	if onMouseDown then
+		onMouseDown(selection, "LeftButton")
+	elseif selection and selection.OnMouseDown then
+		selection:OnMouseDown()
+	end
+	local onDragStart = selection and selection.GetScript and selection:GetScript("OnDragStart") or nil
+	if onDragStart then
+		onDragStart(selection)
+	elseif selection and selection.OnDragStart then
 		selection:OnDragStart()
 	elseif frame and frame.OnDragStart then
 		frame:OnDragStart()
@@ -2559,11 +2567,55 @@ function CooldownPanels:ProxyEditModeDragStop(panelId)
 	local runtime = panelId and getRuntime(panelId) or nil
 	local frame = runtime and runtime.frame
 	local selection = frame and frame.Selection
-	if selection and selection.OnDragStop then
+	local onDragStop = selection and selection.GetScript and selection:GetScript("OnDragStop") or nil
+	if onDragStop then
+		onDragStop(selection)
+	elseif selection and selection.OnDragStop then
 		selection:OnDragStop()
 	elseif frame and frame.OnDragStop then
 		frame:OnDragStop()
 	end
+end
+
+function CooldownPanels:BeginStandalonePanelDrag(panelId)
+	panelId = normalizeId(panelId)
+	local panel = panelId and self:GetPanel(panelId) or nil
+	local runtime = panelId and getRuntime(panelId) or nil
+	local frame = runtime and runtime.frame
+	if not (panel and frame and self:IsPanelLayoutEditActive(panelId)) then return false end
+	local anchor = ensurePanelAnchor(panel)
+	if not anchorUsesUIParent(anchor) then return false end
+	if InCombatLockdown and InCombatLockdown() then return false end
+	runtime._eqolStandalonePanelDragging = true
+	frame:StartMoving()
+	return true
+end
+
+function CooldownPanels:FinishStandalonePanelDrag(panelId)
+	panelId = normalizeId(panelId)
+	local panel = panelId and self:GetPanel(panelId) or nil
+	local runtime = panelId and getRuntime(panelId) or nil
+	local frame = runtime and runtime.frame
+	if not (panel and frame and runtime and runtime._eqolStandalonePanelDragging) then return false end
+	runtime._eqolStandalonePanelDragging = nil
+	frame:StopMovingOrSizing()
+	local anchor = ensurePanelAnchor(panel)
+	local point, _, relativePoint, x, y = frame:GetPoint(1)
+	point = Helper.NormalizeAnchor(point, anchor and anchor.point or "CENTER")
+	relativePoint = Helper.NormalizeAnchor(relativePoint, anchor and anchor.relativePoint or point)
+	x = tonumber(x) or 0
+	y = tonumber(y) or 0
+	self:HandlePositionChanged(panelId, {
+		point = point,
+		relativePoint = relativePoint,
+		x = x,
+		y = y,
+	})
+	self:ApplyPanelPosition(panelId)
+	self:SyncEditModeDataFromPanel(panelId, runtime.editModeId)
+	refreshEditModePanelFrame(panelId, runtime.editModeId)
+	refreshEditModeSettingValues()
+	return true
 end
 
 function CooldownPanels.ShowIconTooltip(self)
@@ -4108,7 +4160,7 @@ local function createPanelFrame(panelId, panel)
 	frame.editMoveHandle = editMoveHandle
 
 	local editPanelHandle = CreateFrame("Button", nil, frame, "BackdropTemplate")
-	editPanelHandle:SetSize(56, 16)
+	editPanelHandle:SetSize(72, 16)
 	editPanelHandle:SetPoint("BOTTOM", frame, "TOP", 0, 4)
 	editPanelHandle:SetBackdrop({
 		bgFile = "Interface\\Buttons\\WHITE8x8",
@@ -4118,6 +4170,7 @@ local function createPanelFrame(panelId, panel)
 	editPanelHandle:SetBackdropColor(0, 0, 0, 0.72)
 	editPanelHandle:SetBackdropBorderColor(0.95, 0.82, 0.25, 0.95)
 	editPanelHandle:RegisterForClicks("LeftButtonUp")
+	editPanelHandle:RegisterForDrag("LeftButton")
 	editPanelHandle:EnableMouse(false)
 	editPanelHandle:Hide()
 	editPanelHandle.panelId = panelId
@@ -4125,11 +4178,29 @@ local function createPanelFrame(panelId, panel)
 	editPanelHandle.label:SetPoint("CENTER")
 	editPanelHandle.label:SetText(L["CooldownPanelPanelHandle"] or "Panel")
 	editPanelHandle.label:SetTextColor(1, 0.86, 0.24, 1)
+	editPanelHandle:SetScript("OnMouseDown", function(self, btn)
+		if btn ~= "LeftButton" then return end
+		self._eqolDragged = nil
+		CooldownPanels:SelectPanel(self.panelId)
+	end)
 	editPanelHandle:SetScript("OnClick", function(self, btn)
 		if btn ~= "LeftButton" then return end
+		if self._eqolDragged then
+			self._eqolDragged = nil
+			return
+		end
 		if not (CooldownPanels and CooldownPanels:IsPanelLayoutEditActive(self.panelId)) then return end
 		CooldownPanels:SelectPanel(self.panelId)
 		CooldownPanels:OpenLayoutPanelStandaloneMenu(self.panelId, self)
+	end)
+	editPanelHandle:SetScript("OnDragStart", function(self)
+		if not (CooldownPanels and CooldownPanels:IsPanelLayoutEditActive(self.panelId)) then return end
+		self._eqolDragged = CooldownPanels:BeginStandalonePanelDrag(self.panelId) and true or nil
+		CooldownPanels:SelectPanel(self.panelId)
+	end)
+	editPanelHandle:SetScript("OnDragStop", function(self)
+		if not (CooldownPanels and CooldownPanels:IsPanelLayoutEditActive(self.panelId)) then return end
+		CooldownPanels:FinishStandalonePanelDrag(self.panelId)
 	end)
 	frame.editPanelHandle = editPanelHandle
 
@@ -7330,8 +7401,8 @@ end
 function CooldownPanels:IsLayoutPanelStandaloneMenuAvailable(panelId)
 	panelId = normalizeId(panelId)
 	if not panelId or not self:IsPanelLayoutEditActive(panelId) then return false end
-	local panel = self:GetPanel(panelId)
-	return panel and Helper.IsFixedLayout(panel.layout) or false
+	local runtime = getRuntime(panelId)
+	return runtime and runtime.editModeSettings ~= nil or false
 end
 
 function CooldownPanels:HideLayoutPanelStandaloneMenu(panelId)
@@ -7367,6 +7438,35 @@ function CooldownPanels:OpenLayoutPanelStandaloneMenu(panelId, anchorFrame)
 	panelId = normalizeId(panelId)
 	if not (panelId and self:IsLayoutPanelStandaloneMenuAvailable(panelId)) then return end
 	self:HideLayoutEntryStandaloneMenu(panelId)
+
+	self:RegisterEditModePanel(panelId)
+	local runtime = getRuntime(panelId)
+	local panel = self:GetPanel(panelId)
+	local hostFrame = runtime and runtime.frame or nil
+	local settings = runtime and runtime.editModeSettings or nil
+	if panel and hostFrame and settings then
+		local spawnPosition = self:GetStandaloneDialogSpawnPosition(anchorFrame, hostFrame, 12, 0)
+		local dialog = lib:ShowStandaloneSettingsDialog(hostFrame, {
+			title = panel.name or "Cooldown Panel",
+			settings = settings,
+			showReset = false,
+			showSettingsReset = false,
+			settingsMaxHeight = runtime.editModeSettingsMaxHeight or 620,
+			point = spawnPosition.point,
+			relativePoint = spawnPosition.relativePoint,
+			relativeTo = spawnPosition.relativeTo,
+			x = spawnPosition.x,
+			y = spawnPosition.y,
+			onHide = function() CooldownPanels:ClearLayoutPanelStandaloneMenuState() end,
+		})
+		if dialog then
+			local state = self:GetLayoutPanelStandaloneMenuState()
+			state.panelId = panelId
+			state.hostFrame = hostFrame
+			state.dialog = dialog
+		end
+		return
+	end
 
 	local panel = self:GetPanel(panelId)
 	local runtime = getRuntime(panelId)
@@ -12305,17 +12405,35 @@ function CooldownPanels:UpdatePanelMouseState(panelId)
 			frame.editDropZone:EnableMouse(showDropZone)
 		end
 	end
+	local showMoveHandle = false
+	local showPanelHandle = layoutEditActive and self:IsLayoutPanelStandaloneMenuAvailable(panelId)
+	local handleLayoutKey
+	if showMoveHandle then
+		handleLayoutKey = "MOVE"
+	elseif showPanelHandle then
+		handleLayoutKey = "PANEL"
+	else
+		handleLayoutKey = "NONE"
+	end
+	if frame._eqolPanelHandleLayout ~= handleLayoutKey then
+		frame._eqolPanelHandleLayout = handleLayoutKey
+		if frame.editMoveHandle then
+			frame.editMoveHandle:ClearAllPoints()
+			frame.editMoveHandle:SetPoint("BOTTOM", frame, "TOP", 0, 4)
+		end
+		if frame.editPanelHandle then
+			frame.editPanelHandle:ClearAllPoints()
+			frame.editPanelHandle:SetPoint("BOTTOM", frame, "TOP", 0, 4)
+		end
+	end
 	if frame.editMoveHandle then
-		local showHandle = false
-		frame.editMoveHandle:SetShown(showHandle == true)
-		if frame._eqolMoveHandleMouseEnabled ~= showHandle then
-			frame._eqolMoveHandleMouseEnabled = showHandle
-			frame.editMoveHandle:EnableMouse(showHandle == true)
+		frame.editMoveHandle:SetShown(showMoveHandle == true)
+		if frame._eqolMoveHandleMouseEnabled ~= showMoveHandle then
+			frame._eqolMoveHandleMouseEnabled = showMoveHandle
+			frame.editMoveHandle:EnableMouse(showMoveHandle == true)
 		end
 	end
 	if frame.editPanelHandle then
-		local panel = self:GetPanel(panelId)
-		local showPanelHandle = layoutEditActive and panel and Helper.IsFixedLayout(panel.layout) or false
 		frame.editPanelHandle:SetShown(showPanelHandle == true)
 		if frame._eqolPanelHandleMouseEnabled ~= showPanelHandle then
 			frame._eqolPanelHandleMouseEnabled = showPanelHandle
@@ -12421,6 +12539,24 @@ local function syncEditModeValue(panelId, field, value)
 	local runtime = getRuntime(panelId)
 	if not runtime or runtime.applyingFromEditMode then return end
 	if runtime.editModeId and EditMode and EditMode.SetValue then EditMode:SetValue(runtime.editModeId, field, value, nil, true) end
+end
+
+function CooldownPanels:RefreshPanelForCurrentEditContext(panelId, refreshEditor)
+	local runtime = getRuntime(panelId)
+	if CooldownPanels:IsPanelLayoutEditActive(panelId) then
+		if runtime then clearRuntimeLayoutShapeCache(runtime) end
+		CooldownPanels:ApplyLayout(panelId)
+		CooldownPanels:UpdateRuntimeIcons(panelId)
+		CooldownPanels:UpdateVisibility(panelId)
+	elseif CooldownPanels:IsInEditMode() then
+		if runtime then clearRuntimeLayoutShapeCache(runtime) end
+		CooldownPanels:ApplyLayout(panelId)
+		CooldownPanels:UpdatePreviewIcons(panelId)
+		CooldownPanels:UpdateVisibility(panelId)
+	else
+		CooldownPanels:RefreshPanel(panelId)
+	end
+	if refreshEditor and CooldownPanels:IsEditorOpen() then CooldownPanels:RefreshEditor() end
 end
 
 applyEditLayout = function(panelId, field, value, skipRefresh)
@@ -12666,11 +12802,7 @@ applyEditLayout = function(panelId, field, value, skipRefresh)
 		end
 	end
 
-	if not skipRefresh then
-		CooldownPanels:ApplyLayout(panelId)
-		CooldownPanels:UpdatePreviewIcons(panelId)
-		CooldownPanels:UpdateVisibility(panelId)
-	end
+	if not skipRefresh then CooldownPanels:RefreshPanelForCurrentEditContext(panelId, false) end
 	if field == "layoutMode" and not skipRefresh then refreshEditModeSettings() end
 end
 
@@ -12755,10 +12887,7 @@ function CooldownPanels:ApplyEditMode(panelId, data)
 	applyEditLayout(panelId, "opacityInCombat", data.opacityInCombat, true)
 
 	runtime.applyingFromEditMode = nil
-	self:ApplyLayout(panelId)
-	self:UpdatePreviewIcons(panelId)
-	self:UpdateVisibility(panelId)
-	if self:IsEditorOpen() then self:RefreshEditor() end
+	self:RefreshPanelForCurrentEditContext(panelId, true)
 end
 
 local function getCopySettingsEntries(panelKey)
@@ -14013,9 +14142,34 @@ function CooldownPanels:RegisterEditModePanel(panelId)
 				hasOpacity = true,
 			},
 			{
-				name = L["CooldownPanelProcGlow"] or "Proc glow",
+				name = L["CooldownPanelNoDesaturation"] or "No desaturation",
 				kind = SettingType.Checkbox,
 				parentId = "cooldownPanelOverlays",
+				default = layout.noDesaturation == true,
+				get = function() return layout.noDesaturation == true end,
+				set = function(_, value) applyEditLayout(panelId, "noDesaturation", value) end,
+			},
+			{
+				name = L["CooldownPanelPowerTint"] or "Check power",
+				kind = SettingType.CheckboxColor,
+				parentId = "cooldownPanelOverlays",
+				default = layout.checkPower == true,
+				get = function() return layout.checkPower == true end,
+				set = function(_, value) applyEditLayout(panelId, "checkPower", value) end,
+				colorDefault = Helper.NormalizeColor(layout.powerTintColor, Helper.PANEL_LAYOUT_DEFAULTS.powerTintColor),
+				colorGet = function() return layout.powerTintColor or Helper.PANEL_LAYOUT_DEFAULTS.powerTintColor end,
+				colorSet = function(_, value) applyEditLayout(panelId, "powerTintColor", value) end,
+			},
+			{
+				name = _G.GLOW or "Glow",
+				kind = SettingType.Collapsible,
+				id = "cooldownPanelGlow",
+				defaultCollapsed = true,
+			},
+			{
+				name = L["CooldownPanelProcGlow"] or "Proc glow",
+				kind = SettingType.Checkbox,
+				parentId = "cooldownPanelGlow",
 				default = layout.procGlowEnabled ~= false,
 				get = function() return layout.procGlowEnabled ~= false end,
 				set = function(_, value) applyEditLayout(panelId, "procGlowEnabled", value) end,
@@ -14023,7 +14177,7 @@ function CooldownPanels:RegisterEditModePanel(panelId)
 			{
 				name = L["CooldownPanelProcGlowStyle"] or "Proc glow style",
 				kind = SettingType.Dropdown,
-				parentId = "cooldownPanelOverlays",
+				parentId = "cooldownPanelGlow",
 				height = 180,
 				default = select(1, CooldownPanels:ResolveEntryProcGlowVisual(layout, nil)),
 				get = function() return select(1, CooldownPanels:ResolveEntryProcGlowVisual(layout, nil)) end,
@@ -14042,7 +14196,7 @@ function CooldownPanels:RegisterEditModePanel(panelId)
 			{
 				name = L["CooldownPanelProcGlowInset"] or "Proc glow inset",
 				kind = SettingType.Slider,
-				parentId = "cooldownPanelOverlays",
+				parentId = "cooldownPanelGlow",
 				minValue = -(Helper.GLOW_INSET_RANGE or 20),
 				maxValue = Helper.GLOW_INSET_RANGE or 20,
 				valueStep = 1,
@@ -14055,7 +14209,7 @@ function CooldownPanels:RegisterEditModePanel(panelId)
 			{
 				name = L["CooldownPanelReadyGlowCheckPower"] or "Require resource for ready glow",
 				kind = SettingType.Checkbox,
-				parentId = "cooldownPanelOverlays",
+				parentId = "cooldownPanelGlow",
 				default = layout.readyGlowCheckPower == true,
 				get = function() return layout.readyGlowCheckPower == true end,
 				set = function(_, value) applyEditLayout(panelId, "readyGlowCheckPower", value) end,
@@ -14063,7 +14217,7 @@ function CooldownPanels:RegisterEditModePanel(panelId)
 			{
 				name = L["CooldownPanelGlowStyle"] or "Glow style",
 				kind = SettingType.Dropdown,
-				parentId = "cooldownPanelOverlays",
+				parentId = "cooldownPanelGlow",
 				height = 180,
 				default = Helper.NormalizeGlowStyle(layout.readyGlowStyle, Helper.PANEL_LAYOUT_DEFAULTS.readyGlowStyle),
 				get = function() return Helper.NormalizeGlowStyle(layout.readyGlowStyle, Helper.PANEL_LAYOUT_DEFAULTS.readyGlowStyle) end,
@@ -14082,7 +14236,7 @@ function CooldownPanels:RegisterEditModePanel(panelId)
 			{
 				name = L["CooldownPanelGlowStylePandemic"] or "Pandemic glow style",
 				kind = SettingType.Dropdown,
-				parentId = "cooldownPanelOverlays",
+				parentId = "cooldownPanelGlow",
 				height = 180,
 				default = Helper.NormalizeGlowStyle(layout.pandemicGlowStyle, layout.readyGlowStyle or Helper.PANEL_LAYOUT_DEFAULTS.readyGlowStyle),
 				get = function() return Helper.NormalizeGlowStyle(layout.pandemicGlowStyle, layout.readyGlowStyle or Helper.PANEL_LAYOUT_DEFAULTS.readyGlowStyle) end,
@@ -14101,7 +14255,7 @@ function CooldownPanels:RegisterEditModePanel(panelId)
 			{
 				name = L["CooldownPanelGlowInset"] or "Glow inset",
 				kind = SettingType.Slider,
-				parentId = "cooldownPanelOverlays",
+				parentId = "cooldownPanelGlow",
 				minValue = -(Helper.GLOW_INSET_RANGE or 20),
 				maxValue = Helper.GLOW_INSET_RANGE or 20,
 				valueStep = 1,
@@ -14114,7 +14268,7 @@ function CooldownPanels:RegisterEditModePanel(panelId)
 			{
 				name = L["CooldownPanelGlowColor"] or "Ready glow color",
 				kind = SettingType.Color,
-				parentId = "cooldownPanelOverlays",
+				parentId = "cooldownPanelGlow",
 				hasOpacity = true,
 				default = Helper.NormalizeColor(layout.readyGlowColor, Helper.PANEL_LAYOUT_DEFAULTS.readyGlowColor),
 				get = function()
@@ -14126,7 +14280,7 @@ function CooldownPanels:RegisterEditModePanel(panelId)
 			{
 				name = L["CooldownPanelGlowColorPandemic"] or "Pandemic glow color",
 				kind = SettingType.Color,
-				parentId = "cooldownPanelOverlays",
+				parentId = "cooldownPanelGlow",
 				hasOpacity = true,
 				default = Helper.NormalizeColor(layout.pandemicGlowColor, layout.readyGlowColor or Helper.PANEL_LAYOUT_DEFAULTS.pandemicGlowColor or Helper.PANEL_LAYOUT_DEFAULTS.readyGlowColor),
 				get = function()
@@ -14139,7 +14293,7 @@ function CooldownPanels:RegisterEditModePanel(panelId)
 			{
 				name = L["CooldownPanelGlowInsetPandemic"] or "Pandemic glow inset",
 				kind = SettingType.Slider,
-				parentId = "cooldownPanelOverlays",
+				parentId = "cooldownPanelGlow",
 				minValue = -(Helper.GLOW_INSET_RANGE or 20),
 				maxValue = Helper.GLOW_INSET_RANGE or 20,
 				valueStep = 1,
@@ -14148,25 +14302,6 @@ function CooldownPanels:RegisterEditModePanel(panelId)
 				get = function() return Helper.NormalizeGlowInset(layout.pandemicGlowInset, layout.readyGlowInset or Helper.PANEL_LAYOUT_DEFAULTS.readyGlowInset or 0) end,
 				set = function(_, value) applyEditLayout(panelId, "pandemicGlowInset", value) end,
 				formatter = function(value) return tostring(math.floor((tonumber(value) or 0) + 0.5)) end,
-			},
-			{
-				name = L["CooldownPanelNoDesaturation"] or "No desaturation",
-				kind = SettingType.Checkbox,
-				parentId = "cooldownPanelOverlays",
-				default = layout.noDesaturation == true,
-				get = function() return layout.noDesaturation == true end,
-				set = function(_, value) applyEditLayout(panelId, "noDesaturation", value) end,
-			},
-			{
-				name = L["CooldownPanelPowerTint"] or "Check power",
-				kind = SettingType.CheckboxColor,
-				parentId = "cooldownPanelOverlays",
-				default = layout.checkPower == true,
-				get = function() return layout.checkPower == true end,
-				set = function(_, value) applyEditLayout(panelId, "checkPower", value) end,
-				colorDefault = Helper.NormalizeColor(layout.powerTintColor, Helper.PANEL_LAYOUT_DEFAULTS.powerTintColor),
-				colorGet = function() return layout.powerTintColor or Helper.PANEL_LAYOUT_DEFAULTS.powerTintColor end,
-				colorSet = function(_, value) applyEditLayout(panelId, "powerTintColor", value) end,
 			},
 			{
 				name = L["CooldownPanelStacksHeader"] or "Stacks / Item Count",
@@ -14550,6 +14685,8 @@ function CooldownPanels:RegisterEditModePanel(panelId)
 			},
 		}
 	end
+	runtime.editModeSettings = settings
+	runtime.editModeSettingsMaxHeight = 620
 
 	EditMode:RegisterFrame(editModeId, {
 		frame = frame,
