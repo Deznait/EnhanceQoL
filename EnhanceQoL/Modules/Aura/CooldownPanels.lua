@@ -901,10 +901,14 @@ CooldownPanels._styleCacheRoots = CooldownPanels._styleCacheRoots
 	or {
 		cooldownTextPanel = setmetatable({}, { __mode = "k" }),
 		cooldownTextEntry = setmetatable({}, { __mode = "k" }),
+		stackTextPanel = setmetatable({}, { __mode = "k" }),
+		stackTextEntry = setmetatable({}, { __mode = "k" }),
 		chargesTextPanel = setmetatable({}, { __mode = "k" }),
 		chargesTextEntry = setmetatable({}, { __mode = "k" }),
 		glowPanel = setmetatable({}, { __mode = "k" }),
 		glowEntry = setmetatable({}, { __mode = "k" }),
+		procGlowPanel = setmetatable({}, { __mode = "k" }),
+		procGlowEntry = setmetatable({}, { __mode = "k" }),
 		iconLayoutEntry = setmetatable({}, { __mode = "k" }),
 	}
 CooldownPanels.POWER_USABLE_REFRESH_DELAY = CooldownPanels.POWER_USABLE_REFRESH_DELAY or 0.05
@@ -2753,33 +2757,115 @@ function CooldownPanels:ApplyEntryCooldownTextStyle(icon, layout, entry)
 end
 
 function CooldownPanels:ResolveEntryStackTextStyle(layout, entry, fallbackFontPath, fallbackFontSize, fallbackFontStyle)
-	local panelFontPath = Helper.ResolveFontPath(layout and layout.stackFont, fallbackFontPath)
-	local panelFontSize = Helper.ClampInt(layout and layout.stackFontSize, 6, 64, fallbackFontSize or 12)
-	local panelFontStyleChoice = Helper.NormalizeFontStyleChoice(layout and layout.stackFontStyle, fallbackFontStyle)
-	local panelFontStyle = Helper.NormalizeFontStyle(panelFontStyleChoice, fallbackFontStyle) or ""
-	local panelFontColor = Helper.NormalizeColor(layout and layout.stackColor, Helper.PANEL_LAYOUT_DEFAULTS.stackColor or { 1, 1, 1, 1 })
-	local panelAnchor = Helper.NormalizeAnchor(layout and layout.stackAnchor, Helper.PANEL_LAYOUT_DEFAULTS.stackAnchor or "BOTTOMRIGHT")
-	local panelX = Helper.ClampInt(layout and layout.stackX, -Helper.OFFSET_RANGE, Helper.OFFSET_RANGE, Helper.PANEL_LAYOUT_DEFAULTS.stackX or 0)
-	local panelY = Helper.ClampInt(layout and layout.stackY, -Helper.OFFSET_RANGE, Helper.OFFSET_RANGE, Helper.PANEL_LAYOUT_DEFAULTS.stackY or 0)
-	if not entry or entry.stackStyleUseGlobal ~= false then return panelFontPath, panelFontSize, panelFontStyle, panelFontColor, panelAnchor, panelX, panelY end
-	local fontPath = Helper.ResolveFontPath(entry.stackFont, panelFontPath)
-	local fontSize = Helper.ClampInt(entry.stackFontSize, 6, 64, panelFontSize)
-	local fontStyleChoice = Helper.NormalizeFontStyleChoice(entry.stackFontStyle, panelFontStyleChoice)
-	local fontStyle = Helper.NormalizeFontStyle(fontStyleChoice, panelFontStyle) or ""
-	local fontColor = Helper.NormalizeColor(entry.stackColor, panelFontColor)
-	local anchor = Helper.NormalizeAnchor(entry.stackAnchor, panelAnchor)
-	local x = Helper.ClampInt(entry.stackX, -Helper.OFFSET_RANGE, Helper.OFFSET_RANGE, panelX)
-	local y = Helper.ClampInt(entry.stackY, -Helper.OFFSET_RANGE, Helper.OFFSET_RANGE, panelY)
-	return fontPath, fontSize, fontStyle, fontColor, anchor, x, y
+	local panelCache = CooldownPanels._styleCacheRoots.stackTextPanel[layout]
+	local srcFont = layout and layout.stackFont or nil
+	local srcSize = layout and layout.stackFontSize or nil
+	local srcStyle = layout and layout.stackFontStyle or nil
+	local srcColor = layout and layout.stackColor or nil
+	local srcAnchor = layout and layout.stackAnchor or nil
+	local srcX = layout and layout.stackX or nil
+	local srcY = layout and layout.stackY or nil
+	if
+		not panelCache
+		or panelCache.fallbackFontPath ~= fallbackFontPath
+		or panelCache.fallbackFontSize ~= fallbackFontSize
+		or panelCache.fallbackFontStyle ~= fallbackFontStyle
+		or panelCache.srcFont ~= srcFont
+		or panelCache.srcSize ~= srcSize
+		or panelCache.srcStyle ~= srcStyle
+		or panelCache.srcColor ~= srcColor
+		or panelCache.srcAnchor ~= srcAnchor
+		or panelCache.srcX ~= srcX
+		or panelCache.srcY ~= srcY
+	then
+		panelCache = panelCache or {}
+		panelCache.fallbackFontPath = fallbackFontPath
+		panelCache.fallbackFontSize = fallbackFontSize
+		panelCache.fallbackFontStyle = fallbackFontStyle
+		panelCache.srcFont = srcFont
+		panelCache.srcSize = srcSize
+		panelCache.srcStyle = srcStyle
+		panelCache.srcColor = srcColor
+		panelCache.srcAnchor = srcAnchor
+		panelCache.srcX = srcX
+		panelCache.srcY = srcY
+		panelCache.fontPath = Helper.ResolveFontPath(srcFont, fallbackFontPath)
+		panelCache.fontSize = Helper.ClampInt(srcSize, 6, 64, fallbackFontSize or 12)
+		panelCache.fontStyleChoice = Helper.NormalizeFontStyleChoice(srcStyle, fallbackFontStyle)
+		panelCache.fontStyle = Helper.NormalizeFontStyle(panelCache.fontStyleChoice, fallbackFontStyle) or ""
+		local r, g, b, a = Helper.ResolveColor(srcColor, Helper.PANEL_LAYOUT_DEFAULTS.stackColor or { 1, 1, 1, 1 })
+		panelCache.fontColor = CooldownPanels.FillCachedColor(panelCache.fontColor, r, g, b, a)
+		panelCache.anchor = Helper.NormalizeAnchor(srcAnchor, Helper.PANEL_LAYOUT_DEFAULTS.stackAnchor or "BOTTOMRIGHT")
+		panelCache.x = Helper.ClampInt(srcX, -Helper.OFFSET_RANGE, Helper.OFFSET_RANGE, Helper.PANEL_LAYOUT_DEFAULTS.stackX or 0)
+		panelCache.y = Helper.ClampInt(srcY, -Helper.OFFSET_RANGE, Helper.OFFSET_RANGE, Helper.PANEL_LAYOUT_DEFAULTS.stackY or 0)
+		panelCache.version = (panelCache.version or 0) + 1
+		CooldownPanels._styleCacheRoots.stackTextPanel[layout] = panelCache
+	end
+	if not entry or entry.stackStyleUseGlobal ~= false then
+		return panelCache.fontPath, panelCache.fontSize, panelCache.fontStyle, panelCache.fontColor, panelCache.anchor, panelCache.x, panelCache.y
+	end
+	local cache = CooldownPanels._styleCacheRoots.stackTextEntry[entry]
+	if
+		not cache
+		or cache.panelVersion ~= panelCache.version
+		or cache.srcFont ~= entry.stackFont
+		or cache.srcSize ~= entry.stackFontSize
+		or cache.srcStyle ~= entry.stackFontStyle
+		or cache.srcColor ~= entry.stackColor
+		or cache.srcAnchor ~= entry.stackAnchor
+		or cache.srcX ~= entry.stackX
+		or cache.srcY ~= entry.stackY
+	then
+		cache = cache or {}
+		cache.panelVersion = panelCache.version
+		cache.srcFont = entry.stackFont
+		cache.srcSize = entry.stackFontSize
+		cache.srcStyle = entry.stackFontStyle
+		cache.srcColor = entry.stackColor
+		cache.srcAnchor = entry.stackAnchor
+		cache.srcX = entry.stackX
+		cache.srcY = entry.stackY
+		cache.fontPath = Helper.ResolveFontPath(entry.stackFont, panelCache.fontPath)
+		cache.fontSize = Helper.ClampInt(entry.stackFontSize, 6, 64, panelCache.fontSize)
+		local fontStyleChoice = Helper.NormalizeFontStyleChoice(entry.stackFontStyle, panelCache.fontStyleChoice)
+		cache.fontStyle = Helper.NormalizeFontStyle(fontStyleChoice, panelCache.fontStyle) or ""
+		local r, g, b, a = Helper.ResolveColor(entry.stackColor, panelCache.fontColor)
+		cache.fontColor = CooldownPanels.FillCachedColor(cache.fontColor, r, g, b, a)
+		cache.anchor = Helper.NormalizeAnchor(entry.stackAnchor, panelCache.anchor)
+		cache.x = Helper.ClampInt(entry.stackX, -Helper.OFFSET_RANGE, Helper.OFFSET_RANGE, panelCache.x)
+		cache.y = Helper.ClampInt(entry.stackY, -Helper.OFFSET_RANGE, Helper.OFFSET_RANGE, panelCache.y)
+		CooldownPanels._styleCacheRoots.stackTextEntry[entry] = cache
+	end
+	return cache.fontPath, cache.fontSize, cache.fontStyle, cache.fontColor, cache.anchor, cache.x, cache.y
 end
 
 function CooldownPanels:ApplyEntryStackTextStyle(icon, layout, entry, fallbackFontPath, fallbackFontSize, fallbackFontStyle)
 	if not (icon and icon.count) then return end
 	local fontPath, fontSize, fontStyle, fontColor, anchor, x, y = self:ResolveEntryStackTextStyle(layout, entry, fallbackFontPath, fallbackFontSize, fallbackFontStyle)
-	icon.count:ClearAllPoints()
-	icon.count:SetPoint(anchor, icon, anchor, x, y)
-	icon.count:SetFont(fontPath, fontSize, fontStyle)
-	icon.count:SetTextColor(fontColor[1] or 1, fontColor[2] or 1, fontColor[3] or 1, fontColor[4] or 1)
+	if icon.count._eqolStackAnchor ~= anchor or icon.count._eqolStackX ~= x or icon.count._eqolStackY ~= y then
+		icon.count:ClearAllPoints()
+		icon.count:SetPoint(anchor, icon, anchor, x, y)
+		icon.count._eqolStackAnchor = anchor
+		icon.count._eqolStackX = x
+		icon.count._eqolStackY = y
+	end
+	if icon.count._eqolStackFont ~= fontPath or icon.count._eqolStackFontSize ~= fontSize or icon.count._eqolStackFontStyle ~= fontStyle then
+		icon.count:SetFont(fontPath, fontSize, fontStyle)
+		icon.count._eqolStackFont = fontPath
+		icon.count._eqolStackFontSize = fontSize
+		icon.count._eqolStackFontStyle = fontStyle
+	end
+	local r = fontColor[1] or 1
+	local g = fontColor[2] or 1
+	local b = fontColor[3] or 1
+	local a = fontColor[4] or 1
+	if icon.count._eqolStackColorR ~= r or icon.count._eqolStackColorG ~= g or icon.count._eqolStackColorB ~= b or icon.count._eqolStackColorA ~= a then
+		icon.count:SetTextColor(r, g, b, a)
+		icon.count._eqolStackColorR = r
+		icon.count._eqolStackColorG = g
+		icon.count._eqolStackColorB = b
+		icon.count._eqolStackColorA = a
+	end
 end
 
 function CooldownPanels:ResolveEntryChargesTextStyle(layout, entry, fallbackFontPath, fallbackFontSize, fallbackFontStyle)
@@ -2983,6 +3069,36 @@ function CooldownPanels:ResolveEntryPandemicGlowVisual(layout, entry)
 	local style = Helper.NormalizeGlowStyle(entry.pandemicGlowStyle, panelPandemicStyle)
 	local inset = Helper.NormalizeGlowInset(entry.pandemicGlowInset, panelPandemicInset)
 	return color, style, inset
+end
+
+function CooldownPanels:ResolveEntryProcGlowVisual(layout, entry)
+	local _, _, panelReadyStyle, panelReadyInset = self:ResolveEntryGlowStyle(layout, nil)
+	local panelCache = CooldownPanels._styleCacheRoots.procGlowPanel[layout]
+	local srcStyle = layout and layout.procGlowStyle or nil
+	local srcInset = layout and layout.procGlowInset or nil
+	if not panelCache or panelCache.srcStyle ~= srcStyle or panelCache.srcInset ~= srcInset or panelCache.readyStyle ~= panelReadyStyle or panelCache.readyInset ~= panelReadyInset then
+		panelCache = panelCache or {}
+		panelCache.srcStyle = srcStyle
+		panelCache.srcInset = srcInset
+		panelCache.readyStyle = panelReadyStyle
+		panelCache.readyInset = panelReadyInset
+		panelCache.style = Helper.NormalizeGlowStyle(srcStyle, panelReadyStyle)
+		panelCache.inset = Helper.NormalizeGlowInset(srcInset, panelReadyInset)
+		panelCache.version = (panelCache.version or 0) + 1
+		CooldownPanels._styleCacheRoots.procGlowPanel[layout] = panelCache
+	end
+	if not entry or entry.procGlowUseGlobal ~= false then return panelCache.style, panelCache.inset end
+	local cache = CooldownPanels._styleCacheRoots.procGlowEntry[entry]
+	if not cache or cache.panelVersion ~= panelCache.version or cache.srcStyle ~= entry.procGlowStyle or cache.srcInset ~= entry.procGlowInset then
+		cache = cache or {}
+		cache.panelVersion = panelCache.version
+		cache.srcStyle = entry.procGlowStyle
+		cache.srcInset = entry.procGlowInset
+		cache.style = Helper.NormalizeGlowStyle(entry.procGlowStyle, panelCache.style)
+		cache.inset = Helper.NormalizeGlowInset(entry.procGlowInset, panelCache.inset)
+		CooldownPanels._styleCacheRoots.procGlowEntry[entry] = cache
+	end
+	return cache.style, cache.inset
 end
 
 function CooldownPanels:ResolveEntryProcGlowEnabled(layout, entry)
@@ -5017,6 +5133,26 @@ function CooldownPanels:OpenLayoutEntryStandaloneMenu(panelId, entryId, anchorFr
 		refreshEntryViews()
 	end
 
+	local function setProcGlowStyle(_, value)
+		local _, currentEntry = getEntry()
+		if not currentEntry then return end
+		local layout = getLayout()
+		local panelStyle = CooldownPanels:ResolveEntryProcGlowVisual(layout, nil)
+		local normalized = Helper.NormalizeGlowStyle(value, panelStyle)
+		currentEntry.procGlowStyle = normalized == panelStyle and nil or normalized
+		refreshEntryViews()
+	end
+
+	local function setProcGlowInset(_, value)
+		local _, currentEntry = getEntry()
+		if not currentEntry then return end
+		local layout = getLayout()
+		local _, panelInset = CooldownPanels:ResolveEntryProcGlowVisual(layout, nil)
+		local normalized = Helper.NormalizeGlowInset(value, panelInset)
+		currentEntry.procGlowInset = normalized == panelInset and nil or normalized
+		refreshEntryViews()
+	end
+
 	local function setGlowDuration(_, value)
 		local _, currentEntry = getEntry()
 		if not currentEntry then return end
@@ -5292,6 +5428,20 @@ function CooldownPanels:OpenLayoutEntryStandaloneMenu(panelId, entryId, anchorFr
 		local layout = getLayout()
 		local _, currentEntry = getEntry()
 		return CooldownPanels:ResolveEntryProcGlowEnabled(layout, currentEntry)
+	end
+
+	local function getResolvedProcGlowStyle()
+		local layout = getLayout()
+		local _, currentEntry = getEntry()
+		local style = CooldownPanels:ResolveEntryProcGlowVisual(layout, currentEntry)
+		return style
+	end
+
+	local function getResolvedProcGlowInset()
+		local layout = getLayout()
+		local _, currentEntry = getEntry()
+		local _, inset = CooldownPanels:ResolveEntryProcGlowVisual(layout, currentEntry)
+		return inset
 	end
 
 	local function getResolvedReadyGlowCheckPower()
@@ -6465,6 +6615,42 @@ function CooldownPanels:OpenLayoutEntryStandaloneMenu(panelId, entryId, anchorFr
 			set = setProcGlowEnabled,
 		},
 		{
+			name = L["CooldownPanelProcGlowStyle"] or "Proc glow style",
+			kind = SettingType.Dropdown,
+			parentId = "cooldownPanelStandaloneGlow",
+			height = 180,
+			isShown = function() return getEffectiveType() == "SPELL" end,
+			disabled = function()
+				local _, currentEntry = getEntry()
+				return not (currentEntry and currentEntry.procGlowUseGlobal == false)
+			end,
+			get = function() return getResolvedProcGlowStyle() end,
+			set = setProcGlowStyle,
+			generator = function(_, root)
+				for _, option in ipairs(Helper.GLOW_STYLE_OPTIONS or {}) do
+					local label = L[option.labelKey] or option.fallback
+					root:CreateRadio(label, function() return getResolvedProcGlowStyle() == option.value end, function() setProcGlowStyle(nil, option.value) end)
+				end
+			end,
+		},
+		{
+			name = L["CooldownPanelProcGlowInset"] or "Proc glow inset",
+			kind = SettingType.Slider,
+			parentId = "cooldownPanelStandaloneGlow",
+			minValue = -(Helper.GLOW_INSET_RANGE or 20),
+			maxValue = Helper.GLOW_INSET_RANGE or 20,
+			valueStep = 1,
+			allowInput = true,
+			isShown = function() return getEffectiveType() == "SPELL" end,
+			disabled = function()
+				local _, currentEntry = getEntry()
+				return not (currentEntry and currentEntry.procGlowUseGlobal == false)
+			end,
+			get = function() return getResolvedProcGlowInset() end,
+			set = setProcGlowInset,
+			formatter = function(value) return tostring(math.floor((tonumber(value) or 0) + 0.5)) end,
+		},
+		{
 			name = L["CooldownPanelGlowDuration"] or "Glow duration",
 			kind = SettingType.Slider,
 			parentId = "cooldownPanelStandaloneGlow",
@@ -6844,6 +7030,18 @@ function CooldownPanels:OpenLayoutPanelStandaloneMenu(panelId, anchorFrame)
 	local function getResolvedPanelGlowInset()
 		local layout = getLayout()
 		local _, _, _, inset = CooldownPanels:ResolveEntryGlowStyle(layout, nil)
+		return inset
+	end
+
+	local function getResolvedPanelProcGlowStyle()
+		local layout = getLayout()
+		local style = CooldownPanels:ResolveEntryProcGlowVisual(layout, nil)
+		return style
+	end
+
+	local function getResolvedPanelProcGlowInset()
+		local layout = getLayout()
+		local _, inset = CooldownPanels:ResolveEntryProcGlowVisual(layout, nil)
 		return inset
 	end
 
@@ -7781,6 +7979,32 @@ function CooldownPanels:OpenLayoutPanelStandaloneMenu(panelId, anchorFrame)
 				return not (layout and layout.procGlowEnabled == false)
 			end,
 			set = function(_, value) setPanelLayout("procGlowEnabled", value) end,
+		},
+		{
+			name = L["CooldownPanelProcGlowStyle"] or "Proc glow style",
+			kind = SettingType.Dropdown,
+			parentId = "cooldownPanelStandalonePanelGlow",
+			height = 180,
+			get = function() return getResolvedPanelProcGlowStyle() end,
+			set = function(_, value) setPanelLayout("procGlowStyle", value) end,
+			generator = function(_, root)
+				for _, option in ipairs(Helper.GLOW_STYLE_OPTIONS or {}) do
+					local label = L[option.labelKey] or option.fallback
+					root:CreateRadio(label, function() return getResolvedPanelProcGlowStyle() == option.value end, function() setPanelLayout("procGlowStyle", option.value) end)
+				end
+			end,
+		},
+		{
+			name = L["CooldownPanelProcGlowInset"] or "Proc glow inset",
+			kind = SettingType.Slider,
+			parentId = "cooldownPanelStandalonePanelGlow",
+			minValue = -(Helper.GLOW_INSET_RANGE or 20),
+			maxValue = Helper.GLOW_INSET_RANGE or 20,
+			valueStep = 1,
+			allowInput = true,
+			get = function() return getResolvedPanelProcGlowInset() end,
+			set = function(_, value) setPanelLayout("procGlowInset", value) end,
+			formatter = function(value) return tostring(math.floor((tonumber(value) or 0) + 0.5)) end,
 		},
 		{
 			name = L["CooldownPanelReadyGlowCheckPower"] or "Require resource for ready glow",
@@ -10314,7 +10538,7 @@ function CooldownPanels:UpdatePreviewIcons(panelId, countOverride)
 			end
 			CooldownPanels.ApplyIconTooltip(icon, entry, showTooltips)
 		end
-		self:ConfigureEditModePanelIcon(panelId, icon, entryId, slotColumn, slotRow)
+		if layoutEditActive or (icon.layoutHandle and icon.layoutHandle._eqolLayoutConfigured == true) then self:ConfigureEditModePanelIcon(panelId, icon, entryId, slotColumn, slotRow) end
 	end
 	for i = count + 1, #(frame.icons or {}) do
 		local icon = frame.icons[i]
@@ -10547,6 +10771,7 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 			local cdmAuraPandemicGlow = entry.type == "CDM_AURA" and entry.pandemicGlow == true
 			local glowReady = entry.type ~= "MACRO" and entry.type ~= "CDM_AURA" and entry.glowReady ~= false
 			local glowDuration, glowColor, glowStyle, glowInset = CooldownPanels:ResolveEntryGlowStyle(layout, entry)
+			local procGlowStyle, procGlowInset = CooldownPanels:ResolveEntryProcGlowVisual(layout, entry)
 			local pandemicGlowColor, pandemicGlowStyle, pandemicGlowInset = glowColor, glowStyle, glowInset
 			if resolvedType == "CDM_AURA" then
 				pandemicGlowColor, pandemicGlowStyle, pandemicGlowInset = CooldownPanels:ResolveEntryPandemicGlowVisual(layout, entry)
@@ -10782,8 +11007,8 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 				data.resolvedType = resolvedType
 				data.overlayGlow = overlayGlow
 				data.overlayGlowColor = nil
-				data.overlayGlowStyle = glowStyle
-				data.overlayGlowInset = glowInset
+				data.overlayGlowStyle = procGlowStyle
+				data.overlayGlowInset = procGlowInset
 				if resolvedType == "STANCE" and glowReady then
 					data.overlayGlow = true
 					data.overlayGlowColor = glowColor
@@ -10887,7 +11112,9 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 		local icon = frame.icons[i]
 		local slotColumn = fixedLayout and fixedGridColumns > 0 and (((i - 1) % fixedGridColumns) + 1) or (editGridColumns and (((i - 1) % editGridColumns) + 1) or nil)
 		local slotRow = fixedLayout and fixedGridColumns > 0 and (math.floor((i - 1) / fixedGridColumns) + 1) or (editGridColumns and (math.floor((i - 1) / editGridColumns) + 1) or nil)
-		self:ConfigureEditModePanelIcon(panelId, icon, data and data.entryId or nil, slotColumn, slotRow)
+		if layoutEditActive or (icon.layoutHandle and icon.layoutHandle._eqolLayoutConfigured == true) then
+			self:ConfigureEditModePanelIcon(panelId, icon, data and data.entryId or nil, slotColumn, slotRow)
+		end
 		if not data then
 			icon.entryId = nil
 			CooldownPanels:ApplyEntryIconVisualLayout(icon, nil)
@@ -11372,7 +11599,7 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 	for i = count + 1, #frame.icons do
 		local icon = frame.icons[i]
 		if icon then
-			self:ConfigureEditModePanelIcon(panelId, icon, nil, nil, nil)
+			if layoutEditActive or (icon.layoutHandle and icon.layoutHandle._eqolLayoutConfigured == true) then self:ConfigureEditModePanelIcon(panelId, icon, nil, nil, nil) end
 			icon.entryId = nil
 			clearPreviewCooldown(icon.cooldown)
 			icon.cooldown:Clear()
@@ -11730,6 +11957,10 @@ applyEditLayout = function(panelId, field, value, skipRefresh)
 		layout.rangeOverlayColor = Helper.NormalizeColor(value, Helper.PANEL_LAYOUT_DEFAULTS.rangeOverlayColor)
 	elseif field == "procGlowEnabled" then
 		layout.procGlowEnabled = value ~= false
+	elseif field == "procGlowStyle" then
+		layout.procGlowStyle = Helper.NormalizeGlowStyle(value, layout.procGlowStyle or layout.readyGlowStyle or Helper.PANEL_LAYOUT_DEFAULTS.readyGlowStyle)
+	elseif field == "procGlowInset" then
+		layout.procGlowInset = Helper.NormalizeGlowInset(value, layout.procGlowInset or layout.readyGlowInset or Helper.PANEL_LAYOUT_DEFAULTS.readyGlowInset or 0)
 	elseif field == "readyGlowStyle" then
 		layout.readyGlowStyle = Helper.NormalizeGlowStyle(value, layout.readyGlowStyle or Helper.PANEL_LAYOUT_DEFAULTS.readyGlowStyle)
 	elseif field == "pandemicGlowStyle" then
@@ -13267,6 +13498,38 @@ function CooldownPanels:RegisterEditModePanel(panelId)
 				default = layout.procGlowEnabled ~= false,
 				get = function() return layout.procGlowEnabled ~= false end,
 				set = function(_, value) applyEditLayout(panelId, "procGlowEnabled", value) end,
+			},
+			{
+				name = L["CooldownPanelProcGlowStyle"] or "Proc glow style",
+				kind = SettingType.Dropdown,
+				parentId = "cooldownPanelOverlays",
+				height = 180,
+				default = select(1, CooldownPanels:ResolveEntryProcGlowVisual(layout, nil)),
+				get = function() return select(1, CooldownPanels:ResolveEntryProcGlowVisual(layout, nil)) end,
+				set = function(_, value) applyEditLayout(panelId, "procGlowStyle", value) end,
+				generator = function(_, root)
+					for _, option in ipairs(Helper.GLOW_STYLE_OPTIONS or {}) do
+						local label = L[option.labelKey] or option.fallback
+						root:CreateRadio(
+							label,
+							function() return select(1, CooldownPanels:ResolveEntryProcGlowVisual(layout, nil)) == option.value end,
+							function() applyEditLayout(panelId, "procGlowStyle", option.value) end
+						)
+					end
+				end,
+			},
+			{
+				name = L["CooldownPanelProcGlowInset"] or "Proc glow inset",
+				kind = SettingType.Slider,
+				parentId = "cooldownPanelOverlays",
+				minValue = -(Helper.GLOW_INSET_RANGE or 20),
+				maxValue = Helper.GLOW_INSET_RANGE or 20,
+				valueStep = 1,
+				allowInput = true,
+				default = select(2, CooldownPanels:ResolveEntryProcGlowVisual(layout, nil)),
+				get = function() return select(2, CooldownPanels:ResolveEntryProcGlowVisual(layout, nil)) end,
+				set = function(_, value) applyEditLayout(panelId, "procGlowInset", value) end,
+				formatter = function(value) return tostring(math.floor((tonumber(value) or 0) + 0.5)) end,
 			},
 			{
 				name = L["CooldownPanelReadyGlowCheckPower"] or "Require resource for ready glow",

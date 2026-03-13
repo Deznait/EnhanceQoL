@@ -16,6 +16,7 @@
 - Group Frames (Portraits): Added portrait support for Party/MT/MA frames with configurable side, square background, separator (toggle/size/texture/custom color), and optional `Extend border over portrait`.
 - Group Frames (Role Icons): Added new role icon style `FRAME` using legacy atlas icons (`UI-Frame-TankIcon`, `UI-Frame-HealerIcon`, `UI-Frame-DpsIcon`).
 - Group Frames (Border): Added an option to change the Strata and level of the border.
+- Group Frames (Range Fade): Added Edit Mode controls for `Range fade` (`Enable range fade`, `Out of range opacity`, `Offline opacity`) plus sample-frame preview states so in-range, out-of-range, and offline fading is directly visible in `Sample frames`.
 - Group Frames (Incoming Heals): Added an optional incoming-heal prediction bar for group frames with configurable texture, color, opacity, and sample preview.
 - Group Frames (Healer Buff Placement): Added per-indicator border controls for `Icon`/`Square` styles: `Indicator Border`, `Border Texture` (SharedMedia), `Border Size`, `Border Offset`, and `Border Color`.
 - Unit Frames (Health / Absorb): Added `Don't overflow health bar` (available when `Reverse fill` is enabled). When active, overflow rendering is suppressed so only the missing-health portion is shown; at full health no reverse-overflow absorb segment is visible.
@@ -66,6 +67,7 @@
 - Minimap Button Bin: Fixed `GatherMatePin*` minimap pins being treated as minimap buttons, so they no longer appear in the Button Sink or its exclude list.
 - Item Upgrades: Fixed upgrade indicators and upgrade-only checks suggesting off-armor-type gear (for example Cloth on Leather classes). Bag, merchant, and loot-toast upgrade checks now respect the current spec's actual armor proficiency.
 - Sound: Fixed mute selections for direct sound groups so they are reapplied correctly after login or `/reload`.
+- Experience Bar: Fixed rested text values being capped to the XP remaining in the current level. Text modes now show the real banked rested XP from `GetXPExhaustion()`, while the overlay remains limited to the current level segment.
 
 ---
 

@@ -6101,9 +6101,25 @@ function GF:UpdateRange(self, inRange)
 	local cfg = self._eqolCfg or getCfg(self._eqolGroupKind or "party")
 	local scfg = cfg and cfg.status or {}
 	local rcfg = scfg.rangeFade or {}
+	local fadeAlpha = rcfg.alpha
+	if fadeAlpha == nil then fadeAlpha = 0.55 end
 	if rcfg.enabled == false then
 		if st.frame and st.frame.SetAlpha then st.frame:SetAlpha(1) end
 		return
+	end
+	if isEditModeActive() and self._eqolPreview then
+		local previewIndex = st._previewIndex or self._eqolPreviewIndex or 0
+		if previewIndex > 0 then
+			local sampleMode = (previewIndex - 1) % 3
+			if sampleMode == 2 then
+				local offA = rcfg.offlineAlpha
+				if offA == nil then offA = fadeAlpha end
+				if st.frame and st.frame.SetAlpha then st.frame:SetAlpha(offA) end
+			elseif st.frame and st.frame.SetAlphaFromBoolean then
+				st.frame:SetAlphaFromBoolean(sampleMode == 0, 1, fadeAlpha)
+			end
+			return
+		end
 	end
 	if IsInGroup and IsInRaid then
 		local inGroup = IsInGroup()
@@ -6116,13 +6132,14 @@ function GF:UpdateRange(self, inRange)
 	local unit = getUnit(self)
 	local connected = unit and UnitIsConnected and GFH.UnsecretBool(UnitIsConnected(unit)) or nil
 	if connected == false then
-		local offA = rcfg.offlineAlpha or rcfg.alpha or 0.55
+		local offA = rcfg.offlineAlpha
+		if offA == nil then offA = fadeAlpha end
 		if st.frame and st.frame.SetAlpha then st.frame:SetAlpha(offA) end
 		return
 	end
 	if inRange == nil and unit and UnitInRange then inRange = UnitInRange(unit) end
 	if type(inRange) ~= "nil" then
-		if st.frame and st.frame.SetAlphaFromBoolean then st.frame:SetAlphaFromBoolean(inRange, 1, rcfg.alpha or 0.55) end
+		if st.frame and st.frame.SetAlphaFromBoolean then st.frame:SetAlphaFromBoolean(inRange, 1, fadeAlpha) end
 	end
 end
 
@@ -8068,6 +8085,22 @@ function GF:RefreshConnectionState(unit)
 	return refreshed
 end
 
+function GF:RefreshRangeFade()
+	if not isFeatureEnabled() then return end
+	for _, header in pairs(GF.headers or {}) do
+		forEachChild(header, function(child)
+			if child then GF:UpdateRange(child) end
+		end)
+	end
+	if GF._previewFrames then
+		for _, frames in pairs(GF._previewFrames) do
+			for _, btn in ipairs(frames) do
+				if btn then GF:UpdateRange(btn) end
+			end
+		end
+	end
+end
+
 function GF:RefreshGroupIndicators()
 	if not isFeatureEnabled() then return end
 	local cfg = getCfg("raid")
@@ -9191,6 +9224,7 @@ GF._groupCopySectionOrder = {
 	"healabsorb",
 	"level",
 	"statustext",
+	"rangefade",
 	"dispeltint",
 	"groupicons",
 	"raidmarker",
@@ -9220,6 +9254,7 @@ GF._groupCopySectionLabels = {
 	healabsorb = L["Heal absorb"] or "Heal absorb",
 	level = L["Level"] or "Level",
 	statustext = L["Status text"] or "Status text",
+	rangefade = L["UFRangeFade"] or "Range fade",
 	dispeltint = L["UFDispelIndicator"] or "Dispel indicator",
 	groupicons = L["Group icons"] or "Group icons",
 	raidmarker = L["Raid marker"] or "Raid marker",
@@ -9315,6 +9350,9 @@ GF._groupCopySectionRules = {
 	statustext = {
 		{ "status", "unitStatus" },
 		{ "status", "groupNumber" },
+	},
+	rangefade = {
+		{ "status", "rangeFade" },
 	},
 	dispeltint = {
 		{ "status", "dispelTint" },
@@ -9506,6 +9544,7 @@ function GF._buildGroupCopySectionSetForGroupKind(kind)
 		healabsorb = true,
 		level = true,
 		statustext = true,
+		rangefade = true,
 		dispeltint = true,
 		groupicons = true,
 		raidmarker = true,
@@ -10666,6 +10705,19 @@ local function buildEditModeSettings(kind, editModeId)
 		return groupNumberFormatLabelByValue[fmt] or tostring(fmt)
 	end
 	local function isGroupIndicatorSettingsEnabled() return isGroupIndicatorShown() and getGroupIndicatorEnabledValue() end
+	local function getRangeFadeConfig()
+		local cfg = getCfg(kind)
+		local sc = cfg and cfg.status or {}
+		local rf = sc.rangeFade or {}
+		local def = (DEFAULTS[kind] and DEFAULTS[kind].status and DEFAULTS[kind].status.rangeFade) or {}
+		return rf, def
+	end
+	local function isRangeFadeEnabled()
+		local rf, def = getRangeFadeConfig()
+		if rf.enabled == nil then return def.enabled ~= false end
+		return rf.enabled == true
+	end
+	local rangeFadeOfflineOpacityLabel = (PLAYER_OFFLINE or "Offline") .. " " .. (OPACITY or "Opacity")
 	local function getHealthTextMode(key, fallback)
 		local cfg = getCfg(kind)
 		local hc = cfg and cfg.health or {}
@@ -14859,6 +14911,103 @@ local function buildEditModeSettings(kind, editModeId)
 			end,
 			isEnabled = function() return isGroupNumberSettingsEnabled() end,
 			isShown = function() return kind == "raid" end,
+		},
+		{
+			name = L["UFRangeFade"] or "Range fade",
+			kind = SettingType.Collapsible,
+			id = "rangeFade",
+			defaultCollapsed = true,
+		},
+		{
+			name = L["UFRangeFadeEnable"] or "Enable range fade",
+			kind = SettingType.Checkbox,
+			field = "rangeFadeEnabled",
+			parentId = "rangeFade",
+			get = function() return isRangeFadeEnabled() end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.status = cfg.status or {}
+				cfg.status.rangeFade = cfg.status.rangeFade or {}
+				cfg.status.rangeFade.enabled = value and true or false
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "rangeFadeEnabled", cfg.status.rangeFade.enabled, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+				GF:RefreshRangeFade()
+			end,
+		},
+		{
+			name = L["UFRangeFadeAlpha"] or "Out of range opacity",
+			kind = SettingType.Slider,
+			allowInput = true,
+			field = "rangeFadeAlpha",
+			parentId = "rangeFade",
+			minValue = 0,
+			maxValue = 1,
+			valueStep = 0.01,
+			formatter = formatSliderDecimal,
+			get = function()
+				local rf, def = getRangeFadeConfig()
+				local value = rf.alpha
+				if value == nil then value = def.alpha end
+				if value == nil then value = 0.55 end
+				return value
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.status = cfg.status or {}
+				cfg.status.rangeFade = cfg.status.rangeFade or {}
+				local current = cfg.status.rangeFade.alpha
+				if current == nil then
+					local _, def = getRangeFadeConfig()
+					current = def.alpha
+				end
+				if current == nil then current = 0.55 end
+				cfg.status.rangeFade.alpha = clampNumber(value, 0, 1, current)
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "rangeFadeAlpha", cfg.status.rangeFade.alpha, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+				GF:RefreshRangeFade()
+			end,
+			isEnabled = function() return isRangeFadeEnabled() end,
+		},
+		{
+			name = rangeFadeOfflineOpacityLabel,
+			kind = SettingType.Slider,
+			allowInput = true,
+			field = "rangeFadeOfflineAlpha",
+			parentId = "rangeFade",
+			minValue = 0,
+			maxValue = 1,
+			valueStep = 0.01,
+			formatter = formatSliderDecimal,
+			get = function()
+				local rf, def = getRangeFadeConfig()
+				local value = rf.offlineAlpha
+				if value == nil then value = def.offlineAlpha end
+				if value == nil then value = rf.alpha end
+				if value == nil then value = def.alpha end
+				if value == nil then value = 0.4 end
+				return value
+			end,
+			set = function(_, value)
+				local cfg = getCfg(kind)
+				if not cfg then return end
+				cfg.status = cfg.status or {}
+				cfg.status.rangeFade = cfg.status.rangeFade or {}
+				local current = cfg.status.rangeFade.offlineAlpha
+				if current == nil then
+					local rf, def = getRangeFadeConfig()
+					current = rf.alpha
+					if current == nil then current = def.offlineAlpha end
+					if current == nil then current = def.alpha end
+				end
+				if current == nil then current = 0.4 end
+				cfg.status.rangeFade.offlineAlpha = clampNumber(value, 0, 1, current)
+				if EditMode and EditMode.SetValue then EditMode:SetValue(editModeId, "rangeFadeOfflineAlpha", cfg.status.rangeFade.offlineAlpha, nil, true) end
+				GF:ApplyHeaderAttributes(kind)
+				GF:RefreshRangeFade()
+			end,
+			isEnabled = function() return isRangeFadeEnabled() end,
 		},
 		{
 			name = L["UFDispelIndicator"] or "Dispel indicator",
@@ -20245,6 +20394,9 @@ local function applyEditModeData(kind, data)
 		or data.groupNumberAnchor ~= nil
 		or data.groupNumberOffsetX ~= nil
 		or data.groupNumberOffsetY ~= nil
+		or data.rangeFadeEnabled ~= nil
+		or data.rangeFadeAlpha ~= nil
+		or data.rangeFadeOfflineAlpha ~= nil
 		or data.dispelTintEnabled ~= nil
 		or data.dispelTintAlpha ~= nil
 		or data.dispelTintFillEnabled ~= nil
@@ -20342,6 +20494,13 @@ local function applyEditModeData(kind, data)
 			if data.groupNumberOffsetX ~= nil then cfg.status.groupNumber.offset.x = data.groupNumberOffsetX end
 			if data.groupNumberOffsetY ~= nil then cfg.status.groupNumber.offset.y = data.groupNumberOffsetY end
 		end
+	end
+	if data.rangeFadeEnabled ~= nil or data.rangeFadeAlpha ~= nil or data.rangeFadeOfflineAlpha ~= nil then
+		cfg.status = cfg.status or {}
+		cfg.status.rangeFade = cfg.status.rangeFade or {}
+		if data.rangeFadeEnabled ~= nil then cfg.status.rangeFade.enabled = data.rangeFadeEnabled and true or false end
+		if data.rangeFadeAlpha ~= nil then cfg.status.rangeFade.alpha = clampNumber(data.rangeFadeAlpha, 0, 1, cfg.status.rangeFade.alpha or 0.55) end
+		if data.rangeFadeOfflineAlpha ~= nil then cfg.status.rangeFade.offlineAlpha = clampNumber(data.rangeFadeOfflineAlpha, 0, 1, cfg.status.rangeFade.offlineAlpha or 0.4) end
 	end
 	if
 		data.groupIndicatorEnabled ~= nil
@@ -20818,11 +20977,13 @@ local function applyEditModeData(kind, data)
 		or data.nameFontOutline ~= nil
 		or data.nameClassColor ~= nil
 		or data.nameColor ~= nil
+	local refreshRangeFade = data.rangeFadeEnabled ~= nil or data.rangeFadeAlpha ~= nil or data.rangeFadeOfflineAlpha ~= nil
 
 	GF:ApplyHeaderAttributes(kind)
 	if data.hideInClientScene ~= nil then GF:RefreshClientSceneVisibility() end
 	if refreshNames then GF:RefreshNames() end
 	if refreshAuras then refreshAllAuras() end
+	if refreshRangeFade then GF:RefreshRangeFade() end
 	if positionChanged and addon.EditModeLib and addon.EditModeLib.internal and addon.EditModeLib.internal.RefreshSettingValues then addon.EditModeLib.internal:RefreshSettingValues() end
 	if positionChanged and EditMode and EditMode.RefreshFrame and not GF._syncingGroupFrameEditModePosition then
 		local editModeId = EDITMODE_IDS and EDITMODE_IDS[kind]
@@ -20876,6 +21037,7 @@ function GF:EnsureEditMode()
 			local defPrivateIcon = defPrivate.icon or {}
 			local defPrivateParent = defPrivate.parent or {}
 			local defPrivateDuration = defPrivate.duration or {}
+			local defRangeFade = def.status and def.status.rangeFade or {}
 			local defDispel = def.status and def.status.dispelTint or {}
 			local hcBackdrop = hc.backdrop or {}
 			local defHBackdrop = defH.backdrop or {}
@@ -21099,6 +21261,22 @@ function GF:EnsureEditMode()
 				statusTextHideHealthTextOffline = (sc.unitStatus and sc.unitStatus.hideHealthTextWhenOffline)
 					or (def.status and def.status.unitStatus and def.status.unitStatus.hideHealthTextWhenOffline)
 					or false,
+				rangeFadeEnabled = (sc.rangeFade and sc.rangeFade.enabled ~= nil) and (sc.rangeFade.enabled ~= false)
+					or ((sc.rangeFade == nil or sc.rangeFade.enabled == nil) and defRangeFade.enabled ~= false),
+				rangeFadeAlpha = (function()
+					local value = sc.rangeFade and sc.rangeFade.alpha
+					if value == nil then value = defRangeFade.alpha end
+					if value == nil then value = 0.55 end
+					return value
+				end)(),
+				rangeFadeOfflineAlpha = (function()
+					local value = sc.rangeFade and sc.rangeFade.offlineAlpha
+					if value == nil then value = defRangeFade.offlineAlpha end
+					if value == nil then value = sc.rangeFade and sc.rangeFade.alpha end
+					if value == nil then value = defRangeFade.alpha end
+					if value == nil then value = 0.4 end
+					return value
+				end)(),
 				dispelTintEnabled = (sc.dispelTint and sc.dispelTint.enabled ~= nil) and (sc.dispelTint.enabled ~= false)
 					or ((sc.dispelTint == nil or sc.dispelTint.enabled == nil) and defDispel.enabled ~= false),
 				dispelTintAlpha = (sc.dispelTint and sc.dispelTint.alpha) or defDispel.alpha or 0.25,

@@ -561,21 +561,23 @@ local function buildXPContext(level, current, maximum, rested)
 	local curXP = normalizeXPValue(current)
 	if maxXP > 0 and curXP > maxXP then curXP = maxXP end
 	local remaining = maxXP > curXP and (maxXP - curXP) or 0
-	local restedEffective = math.min(normalizeXPValue(rested), remaining)
+	local restedRaw = normalizeXPValue(rested)
+	local restedVisual = math.min(restedRaw, remaining)
 	local currentPercent = 0
 	local withRestPercent = 0
 	local restedPercent = 0
 	if maxXP > 0 then
 		currentPercent = (curXP / maxXP) * 100
-		withRestPercent = (math.min(maxXP, curXP + restedEffective) / maxXP) * 100
-		restedPercent = withRestPercent - currentPercent
+		restedPercent = (restedRaw / maxXP) * 100
+		withRestPercent = ((curXP + restedRaw) / maxXP) * 100
 		if restedPercent < 0 then restedPercent = 0 end
 	end
 	return {
 		level = math.max(0, tonumber(level) or 0),
 		current = curXP,
 		max = maxXP,
-		rested = restedEffective,
+		rested = restedRaw,
+		restedVisual = restedVisual,
 		remaining = remaining,
 		currentPercent = currentPercent,
 		restedPercent = restedPercent,
@@ -983,7 +985,7 @@ function ExperienceBar:UpdateRestedOverlay(ctx)
 	if not ctx or (ctx.max or 0) <= 0 then return end
 
 	local startFraction = clamp((ctx.current or 0) / (ctx.max or 1), 0, 1)
-	local endFraction = clamp(((ctx.current or 0) + (ctx.rested or 0)) / (ctx.max or 1), 0, 1)
+	local endFraction = clamp(((ctx.current or 0) + (ctx.restedVisual or 0)) / (ctx.max or 1), 0, 1)
 	if endFraction <= startFraction then return end
 
 	local fillDirection = self:GetFillDirection()

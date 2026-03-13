@@ -1012,6 +1012,8 @@ function Helper.NormalizePanel(panel, defaults)
 		layoutDefaults.radialArcDegrees or Helper.PANEL_LAYOUT_DEFAULTS.radialArcDegrees or 360
 	)
 	panel.layout.procGlowEnabled = panel.layout.procGlowEnabled ~= false
+	if panel.layout.procGlowStyle ~= nil then panel.layout.procGlowStyle = Helper.NormalizeGlowStyle(panel.layout.procGlowStyle, nil) end
+	if panel.layout.procGlowInset ~= nil then panel.layout.procGlowInset = Helper.NormalizeGlowInset(panel.layout.procGlowInset, nil) end
 	panel.layout.readyGlowStyle = Helper.NormalizeGlowStyle(panel.layout.readyGlowStyle, layoutDefaults.readyGlowStyle or Helper.PANEL_LAYOUT_DEFAULTS.readyGlowStyle)
 	panel.layout.pandemicGlowStyle =
 		Helper.NormalizeGlowStyle(panel.layout.pandemicGlowStyle, layoutDefaults.pandemicGlowStyle or panel.layout.readyGlowStyle or Helper.PANEL_LAYOUT_DEFAULTS.readyGlowStyle)
@@ -1104,10 +1106,17 @@ function Helper.NormalizeEntry(entry, defaults)
 	if duration < 0 then duration = 0 end
 	if duration > 30 then duration = 30 end
 	entry.glowDuration = math.floor(duration + 0.5)
+	local hasLegacySharedProcGlowVisual = entry.type == "SPELL" and (entry.glowStyle ~= nil or entry.glowInset ~= nil)
+	if hasLegacySharedProcGlowVisual then
+		if entry.procGlowStyle == nil then entry.procGlowStyle = entry.glowStyle end
+		if entry.procGlowInset == nil then entry.procGlowInset = entry.glowInset end
+	end
 	if entry.glowStyle ~= nil then entry.glowStyle = Helper.NormalizeGlowStyle(entry.glowStyle, nil) end
 	if entry.pandemicGlowStyle ~= nil then entry.pandemicGlowStyle = Helper.NormalizeGlowStyle(entry.pandemicGlowStyle, nil) end
+	if entry.procGlowStyle ~= nil then entry.procGlowStyle = Helper.NormalizeGlowStyle(entry.procGlowStyle, nil) end
 	if entry.glowInset ~= nil then entry.glowInset = Helper.NormalizeGlowInset(entry.glowInset, nil) end
 	if entry.pandemicGlowInset ~= nil then entry.pandemicGlowInset = Helper.NormalizeGlowInset(entry.pandemicGlowInset, nil) end
+	if entry.procGlowInset ~= nil then entry.procGlowInset = Helper.NormalizeGlowInset(entry.procGlowInset, nil) end
 	if type(entry.pandemicGlow) ~= "boolean" then entry.pandemicGlow = Helper.ENTRY_DEFAULTS.pandemicGlow end
 	if type(entry.hideIcon) ~= "boolean" then entry.hideIcon = Helper.ENTRY_DEFAULTS.hideIcon end
 	if type(entry.iconSizeUseGlobal) ~= "boolean" then entry.iconSizeUseGlobal = true end
@@ -1146,7 +1155,11 @@ function Helper.NormalizeEntry(entry, defaults)
 	if type(entry.checkPower) ~= "boolean" then entry.checkPower = Helper.ENTRY_DEFAULTS.checkPower end
 	if type(entry.readyGlowCheckPower) ~= "boolean" then entry.readyGlowCheckPower = Helper.ENTRY_DEFAULTS.readyGlowCheckPower end
 	if type(entry.procGlowEnabled) ~= "boolean" then entry.procGlowEnabled = Helper.ENTRY_DEFAULTS.procGlowEnabled end
-	if type(entry.procGlowUseGlobal) ~= "boolean" then entry.procGlowUseGlobal = Helper.ENTRY_DEFAULTS.procGlowUseGlobal end
+	if type(entry.procGlowUseGlobal) ~= "boolean" then
+		entry.procGlowUseGlobal = (hasLegacySharedProcGlowVisual or entry.procGlowStyle ~= nil or entry.procGlowInset ~= nil or entry.procGlowEnabled ~= Helper.ENTRY_DEFAULTS.procGlowEnabled)
+				and false
+			or Helper.ENTRY_DEFAULTS.procGlowUseGlobal
+	end
 	if type(entry.glowUseGlobal) ~= "boolean" then
 		entry.glowUseGlobal = entry.glowDuration == (Helper.ENTRY_DEFAULTS.glowDuration or 0)
 			and entry.glowColor == nil
