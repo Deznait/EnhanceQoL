@@ -2735,11 +2735,7 @@ function CooldownPanels:ApplyEntryCooldownTextStyle(icon, layout, entry)
 	if fontNeedsApply then fontString:SetFont(fontPath, fontSize, fontStyle) end
 	local point, _, relPoint, currentX, currentY = fontString:GetPoint()
 	local pointNeedsApply = true
-	if
-		point
-		and relPoint
-		and not (issecretvalue and (issecretvalue(point) or issecretvalue(relPoint) or issecretvalue(currentX) or issecretvalue(currentY)))
-	then
+	if point and relPoint and not (issecretvalue and (issecretvalue(point) or issecretvalue(relPoint) or issecretvalue(currentX) or issecretvalue(currentY))) then
 		pointNeedsApply = point ~= "CENTER" or relPoint ~= "CENTER" or currentX ~= fontX or currentY ~= fontY
 	end
 	if pointNeedsApply then
@@ -3222,7 +3218,8 @@ end
 
 function CooldownPanels:ShouldShowEditorGhostIcon(entry, showIconTexture, editorContext)
 	if editorContext ~= true or not entry then return false end
-	return showIconTexture == false
+	if showIconTexture == false then return true end
+	return Helper.ClampInt(entry.iconOffsetX, -Helper.OFFSET_RANGE, Helper.OFFSET_RANGE, 0) ~= 0 or Helper.ClampInt(entry.iconOffsetY, -Helper.OFFSET_RANGE, Helper.OFFSET_RANGE, 0) ~= 0
 end
 
 function CooldownPanels:ResolveEntryCooldownVisuals(layout, entry)
@@ -3276,12 +3273,23 @@ function CooldownPanels:ApplyEntryIconVisualLayout(icon, entry)
 	local slotAnchor = icon.slotAnchor
 	local baseSize = Helper.ClampInt(icon._eqolBaseSlotSize, 12, 128, Helper.PANEL_LAYOUT_DEFAULTS.iconSize)
 	local size, offsetX, offsetY = self:ResolveEntryIconVisualLayout(entry, baseSize)
-	if icon._eqolVisualSize ~= size then
+	local currentWidth, currentHeight = icon:GetSize()
+	if icon._eqolVisualSize ~= size or currentWidth ~= size or currentHeight ~= size then
 		icon:SetSize(size, size)
 		icon._eqolVisualSize = size
 	end
 	if slotAnchor then
-		if icon._eqolVisualAnchor ~= slotAnchor or icon._eqolVisualOffsetX ~= offsetX or icon._eqolVisualOffsetY ~= offsetY then
+		local point, relativeTo, relativePoint, currentX, currentY = icon:GetPoint(1)
+		local needsAnchorUpdate = icon:GetNumPoints() ~= 1
+			or icon._eqolVisualAnchor ~= slotAnchor
+			or icon._eqolVisualOffsetX ~= offsetX
+			or icon._eqolVisualOffsetY ~= offsetY
+			or point ~= "CENTER"
+			or relativeTo ~= slotAnchor
+			or relativePoint ~= "CENTER"
+			or currentX ~= offsetX
+			or currentY ~= offsetY
+		if needsAnchorUpdate then
 			icon:ClearAllPoints()
 			icon:SetPoint("CENTER", slotAnchor, "CENTER", offsetX, offsetY)
 			icon._eqolVisualAnchor = slotAnchor
@@ -3305,11 +3313,21 @@ function CooldownPanels:ApplyEntryIconVisualLayout(icon, entry)
 end
 
 function CooldownPanels:ApplyEditorGhostIcon(icon)
-	local texture = icon and icon.texture or nil
-	if not texture then return end
+	local texture = icon and icon.editorGhostTexture or nil
+	local source = icon and icon.texture or nil
+	if not texture or not source then return end
+	texture:SetTexture(source:GetTexture())
+	texture:SetTexCoord(source:GetTexCoord())
 	texture:SetShown(true)
 	texture:SetDesaturated(true)
 	texture:SetAlpha(0.32)
+end
+
+function CooldownPanels:HideEditorGhostIcon(icon)
+	local texture = icon and icon.editorGhostTexture or nil
+	if not texture then return end
+	texture:SetTexture(nil)
+	texture:Hide()
 end
 
 local function applyStaticText(icon, layout, entry, defaultFontPath, defaultFontSize, defaultFontStyle, cooldownActive)
@@ -3421,6 +3439,10 @@ local function createIconFrame(parent)
 
 	icon.slotAnchor = CreateFrame("Frame", nil, parent)
 	icon.slotAnchor:EnableMouse(false)
+
+	icon.editorGhostTexture = icon.slotAnchor:CreateTexture(nil, "ARTWORK")
+	icon.editorGhostTexture:SetAllPoints(icon.slotAnchor)
+	icon.editorGhostTexture:Hide()
 
 	icon.texture = icon:CreateTexture(nil, "ARTWORK")
 	icon.texture:SetAllPoints(icon)
@@ -4424,6 +4446,10 @@ local function applyIconLayout(frame, count, layout)
 			icon:ClearAllPoints()
 			icon:SetPoint("CENTER", slotAnchor, "CENTER", 0, 0)
 		end
+		icon._eqolVisualSize = nil
+		icon._eqolVisualAnchor = nil
+		icon._eqolVisualOffsetX = nil
+		icon._eqolVisualOffsetY = nil
 		if icon._eqolMasqueNeedsReskin then
 			local group = getMasqueGroup()
 			if group and group.ReSkin then group:ReSkin(icon) end
@@ -4449,16 +4475,16 @@ local function applyIconLayout(frame, count, layout)
 		end
 		setCooldownDrawState(icon.cooldown, drawEdge, drawBling, drawSwipe)
 		if icon.cooldown and icon.cooldown.GetCountdownFontString then
-				local fontString = icon.cooldown:GetCountdownFontString()
-				if fontString then
-					if not icon.cooldown._eqolCooldownTextDefaults then
-						local fontPath, fontSize, fontStyle = fontString:GetFont()
-						icon.cooldown._eqolCooldownTextDefaults = {
-							font = fontPath,
-							size = fontSize,
-							style = fontStyle,
-						}
-					end
+			local fontString = icon.cooldown:GetCountdownFontString()
+			if fontString then
+				if not icon.cooldown._eqolCooldownTextDefaults then
+					local fontPath, fontSize, fontStyle = fontString:GetFont()
+					icon.cooldown._eqolCooldownTextDefaults = {
+						font = fontPath,
+						size = fontSize,
+						style = fontStyle,
+					}
+				end
 				local defaults = icon.cooldown._eqolCooldownTextDefaults
 				local fontPath = Helper.ResolveFontPath(cooldownTextFont, defaults and defaults.font)
 				local fontSize = Helper.ClampInt(cooldownTextSize, 6, 64, defaults and defaults.size or 12)
@@ -10064,8 +10090,9 @@ local function refreshPreview(editor, panel)
 		icon._eqolPreviewCellRow = 1
 		icon._eqolTooltipEntry = entry
 		icon._eqolTooltipEnabled = entry ~= nil
+		CooldownPanels:HideEditorGhostIcon(icon)
 		icon.texture:SetTexture(entry and getEntryIcon(entry) or Helper.PREVIEW_ICON)
-		icon.texture:SetShown(showEntryIconTexture or showGhostIcon)
+		icon.texture:SetShown(showEntryIconTexture)
 		icon.texture:SetVertexColor(1, 1, 1)
 		icon.texture:SetDesaturated(false)
 		icon.texture:SetAlpha(1)
@@ -10123,7 +10150,7 @@ local function refreshPreview(editor, panel)
 			CooldownPanels:ApplyEntryStackTextStyle(icon, layout, entry, defaultCountFontPath, defaultCountFontSize, defaultCountFontStyle)
 			CooldownPanels:ApplyEntryChargesTextStyle(icon, layout, entry, defaultChargesFontPath, defaultChargesFontSize, defaultChargesFontStyle)
 			applyStaticText(icon, layout, entry, staticFontPath, staticFontSize, staticFontStyle, staticCooldown)
-			icon.texture:SetShown(showEntryIconTexture or showGhostIcon)
+			icon.texture:SetShown(showEntryIconTexture)
 			if showGhostIcon then CooldownPanels:ApplyEditorGhostIcon(icon) end
 			preview.entryByIndex[i] = entryId
 		end
@@ -10182,8 +10209,11 @@ local function refreshPreview(editor, panel)
 			icon.entryId = nil
 			icon._eqolTooltipEntry = nil
 			icon._eqolTooltipEnabled = nil
+			CooldownPanels:HideEditorGhostIcon(icon)
 			if icon.staticText then icon.staticText:Hide() end
 			if icon.cooldown and icon.cooldown.Clear then icon.cooldown:Clear() end
+			if icon.stateTexture then icon.stateTexture:Hide() end
+			if icon.stateTextureSecond then icon.stateTextureSecond:Hide() end
 		end
 	end
 
@@ -10750,6 +10780,8 @@ function CooldownPanels:ConfigureEditModePanelIcon(panelId, icon, entryId, slotC
 		handle:Show()
 		handle:EnableMouse(true)
 		handle:RegisterForDrag("LeftButton")
+		handle:ClearAllPoints()
+		handle:SetAllPoints(icon.slotAnchor or icon)
 		handle._eqolLayoutSlotColumn = slotColumn
 		handle._eqolLayoutSlotRow = slotRow
 		return
@@ -10757,6 +10789,8 @@ function CooldownPanels:ConfigureEditModePanelIcon(panelId, icon, entryId, slotC
 	handle:Show()
 	handle:EnableMouse(true)
 	handle:RegisterForDrag("LeftButton")
+	handle:ClearAllPoints()
+	handle:SetAllPoints(icon.slotAnchor or icon)
 	handle._eqolLayoutSlotColumn = slotColumn
 	handle._eqolLayoutSlotRow = slotRow
 	handle._eqolLayoutConfigured = true
@@ -10913,9 +10947,10 @@ function CooldownPanels:UpdatePreviewIcons(panelId, countOverride)
 		icon._eqolPreviewCellColumn = slotColumn
 		icon._eqolPreviewCellRow = slotRow
 		CooldownPanels:ApplyEntryIconVisualLayout(icon, entry)
+		CooldownPanels:HideEditorGhostIcon(icon)
 		icon.texture:SetTexture(entry and getEntryIcon(entry) or Helper.PREVIEW_ICON)
 		icon.texture:SetVertexColor(1, 1, 1)
-		icon.texture:SetShown(showEntryIconTexture or showGhostIcon or not entry)
+		icon.texture:SetShown(showEntryIconTexture or not entry)
 		if icon.cooldown.SetReverse then icon.cooldown:SetReverse(resolvedType == "CDM_AURA") end
 		if icon.cooldown.SetUseAuraDisplayTime then icon.cooldown:SetUseAuraDisplayTime(resolvedType == "CDM_AURA") end
 		icon.cooldown:SetHideCountdownNumbers(not showCooldownText)
@@ -10953,10 +10988,11 @@ function CooldownPanels:UpdatePreviewIcons(panelId, countOverride)
 			icon.texture:SetDesaturated(false)
 			icon.texture:SetAlpha(0)
 			icon.texture:SetShown(false)
+			CooldownPanels:HideEditorGhostIcon(icon)
 			CooldownPanels.ApplyIconTooltip(icon, nil, false)
 		else
 			applyStaticText(icon, layout, entry, staticFontPath, staticFontSize, staticFontStyle, staticCooldown)
-			icon.texture:SetShown(showEntryIconTexture or showGhostIcon)
+			icon.texture:SetShown(showEntryIconTexture)
 			icon.texture:SetDesaturated(false)
 			icon.texture:SetAlpha(1)
 			if showGhostIcon then CooldownPanels:ApplyEditorGhostIcon(icon) end
@@ -10991,6 +11027,9 @@ function CooldownPanels:UpdatePreviewIcons(panelId, countOverride)
 		local icon = frame.icons[i]
 		if icon then
 			icon:Hide()
+			CooldownPanels:HideEditorGhostIcon(icon)
+			if icon.stateTexture then icon.stateTexture:Hide() end
+			if icon.stateTextureSecond then icon.stateTextureSecond:Hide() end
 			setAssistedHighlight(icon, false)
 		end
 	end
@@ -11073,6 +11112,9 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 		end
 		if frame.icons then
 			for i = 1, #frame.icons do
+				CooldownPanels:HideEditorGhostIcon(frame.icons[i])
+				if frame.icons[i].stateTexture then frame.icons[i].stateTexture:Hide() end
+				if frame.icons[i].stateTextureSecond then frame.icons[i].stateTextureSecond:Hide() end
 				setAssistedHighlight(frame.icons[i], false)
 			end
 		end
@@ -11589,6 +11631,7 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 		if not data then
 			icon.entryId = nil
 			CooldownPanels:ApplyEntryIconVisualLayout(icon, nil)
+			CooldownPanels:HideEditorGhostIcon(icon)
 			clearPreviewCooldown(icon.cooldown)
 			icon.cooldown:Clear()
 			icon.cooldown._eqolPanelId = nil
@@ -11605,6 +11648,8 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 			if icon.rangeOverlay then icon.rangeOverlay:Hide() end
 			if icon.keybind then icon.keybind:Hide() end
 			if icon.staticText then icon.staticText:Hide() end
+			if icon.stateTexture then icon.stateTexture:Hide() end
+			if icon.stateTextureSecond then icon.stateTextureSecond:Hide() end
 			CooldownPanels.HidePreviewGlowBorder(icon)
 			if icon.previewBling then icon.previewBling:Hide() end
 			if icon.previewSoundBorder then icon.previewSoundBorder:Hide() end
@@ -11638,6 +11683,7 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 			local hideOnCooldown = data.hideOnCooldown == true
 			local showOnCooldown = data.showOnCooldown == true
 			CooldownPanels:ApplyEntryIconVisualLayout(icon, data.entry)
+			CooldownPanels:HideEditorGhostIcon(icon)
 			if showOnCooldown then
 				icon:SetAlpha(0)
 			elseif not hideOnCooldown then
@@ -11647,7 +11693,7 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 			entryToIcon[data.entryId] = icon
 			icon.texture:SetTexture(data.icon or Helper.PREVIEW_ICON)
 			icon.texture:SetAlpha(1)
-			icon.texture:SetShown(data.showIconTexture ~= false or showGhostIcon)
+			icon.texture:SetShown(data.showIconTexture ~= false)
 			CooldownPanels.ApplyIconTooltip(icon, data.entry, showTooltips)
 			icon.cooldown:SetHideCountdownNumbers(not data.showCooldownText)
 			CooldownPanels:ApplyEntryStackTextStyle(icon, layout, data.entry, defaultCountFontPath, defaultCountFontSize, defaultCountFontStyle)
@@ -12086,6 +12132,7 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 			if icon.staticText then icon.staticText:Hide() end
 			if icon.stateTexture then icon.stateTexture:Hide() end
 			if icon.stateTextureSecond then icon.stateTextureSecond:Hide() end
+			CooldownPanels:HideEditorGhostIcon(icon)
 			CooldownPanels.HidePreviewGlowBorder(icon)
 			if icon.previewBling then icon.previewBling:Hide() end
 			if icon.previewSoundBorder then icon.previewSoundBorder:Hide() end
