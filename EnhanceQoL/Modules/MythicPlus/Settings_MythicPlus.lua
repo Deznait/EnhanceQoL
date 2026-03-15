@@ -86,35 +86,24 @@ local function buildSettings()
 	end
 	addon.functions.SettingsCreateCheckboxes(cGameplay, data)
 
-	local hearthstoneOrder = {}
-	addon.functions.SettingsCreateDropdown(cGameplay, {
+	addon.functions.SettingsCreateMultiDropdown(cGameplay, {
 		var = "teleportsPreferredHearthstone",
 		text = L["teleportsPreferredHearthstone"],
 		desc = L["teleportsPreferredHearthstoneDesc"],
-		type = Settings.VarType.String,
-		default = "random",
 		listFunc = function()
-			local list = { random = L["teleportsPreferredHearthstoneRandom"] or "Random (owned Hearthstones)" }
-			local order = { "random" }
-			if addon.MythicPlus and addon.MythicPlus.functions and addon.MythicPlus.functions.GetHearthstoneDropdownOptions then
-				list, order = addon.MythicPlus.functions.GetHearthstoneDropdownOptions(true)
+			if addon.MythicPlus and addon.MythicPlus.functions and addon.MythicPlus.functions.GetHearthstoneSelectionOptions then
+				return addon.MythicPlus.functions.GetHearthstoneSelectionOptions(true)
 			end
-			wipe(hearthstoneOrder)
-			for i, key in ipairs(order or {}) do
-				hearthstoneOrder[i] = key
-			end
-			return list
+			return {}
 		end,
-		order = hearthstoneOrder,
-		get = function()
-			local value = addon.db["teleportsPreferredHearthstone"]
-			if value == nil or value == "" then return "random" end
-			return tostring(value)
+		customDefaultText = L["teleportsPreferredHearthstoneRandom"] or "All owned Hearthstones",
+		hideSummary = false,
+		summary = function(selection, texts)
+			if type(selection) ~= "table" or next(selection) == nil or not texts or #texts == 0 then return L["teleportsPreferredHearthstoneRandom"] or "All owned Hearthstones" end
+			return nil
 		end,
-		set = function(value)
-			local selected = value and tostring(value) or "random"
-			if selected == "" then selected = "random" end
-			addon.db["teleportsPreferredHearthstone"] = selected
+		set = function(selection)
+			addon.db["teleportsPreferredHearthstone"] = selection or {}
 			if addon.MythicPlus and addon.MythicPlus.functions and addon.MythicPlus.functions.setRandomHearthstone then addon.MythicPlus.functions.setRandomHearthstone(true) end
 			if addon.MythicPlus and addon.MythicPlus.functions and addon.MythicPlus.functions.RefreshWorldMapTeleportPanel then addon.MythicPlus.functions.RefreshWorldMapTeleportPanel() end
 		end,
@@ -285,8 +274,7 @@ local function buildSettings()
 		end,
 		set = function(value) addon.db["talentReminderCustomSoundFile"] = value end,
 		callback = function(value)
-			local soundTable = (addon.ChatIM and addon.ChatIM.availableSounds)
-				or (addon.functions and addon.functions.GetLSMMediaHash and addon.functions.GetLSMMediaHash("sound"))
+			local soundTable = (addon.ChatIM and addon.ChatIM.availableSounds) or (addon.functions and addon.functions.GetLSMMediaHash and addon.functions.GetLSMMediaHash("sound"))
 			local file = soundTable and soundTable[value]
 			if file then PlaySoundFile(file, "Master") end
 		end,

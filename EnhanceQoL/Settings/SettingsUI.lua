@@ -234,8 +234,12 @@ function addon.functions.SettingsCreateMultiDropdown(cat, cbData)
 		name = cbData.text,
 		values = cbData.options or cbData.list,
 		optionfunc = cbData.optionfunc or cbData.listFunc,
+		desc = cbData.desc,
+		tooltip = cbData.tooltip,
 		height = cbData.menuHeight or 200,
 		order = cbData.order,
+		customText = cbData.customText,
+		customDefaultText = cbData.customDefaultText,
 		isSelected = cbData.isSelectedFunc,
 		setSelected = cbData.setSelectedFunc,
 		getSelection = cbData.getSelection or cbData.get or getSelection,
@@ -248,7 +252,7 @@ function addon.functions.SettingsCreateMultiDropdown(cat, cbData)
 		parentSection = cbData.parentSection,
 		isEnabled = cbData.isEnabled,
 		prefix = prefix,
-		hideSummary = true,
+		hideSummary = cbData.hideSummary == nil and true or cbData.hideSummary,
 	})
 
 	addon.SettingsLayout.elements = addon.SettingsLayout.elements or {}

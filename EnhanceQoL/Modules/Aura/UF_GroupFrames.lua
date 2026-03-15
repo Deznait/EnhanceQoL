@@ -2951,19 +2951,6 @@ local function shouldShowTooltip(self)
 	return false
 end
 
-function GF:UpdateAbsorbCache(self, which, unit, st)
-	unit = unit or getUnit(self)
-	st = st or getState(self)
-	if not (unit and st) then return end
-	if UnitExists and not UnitExists(unit) then
-		st._absorbAmount = 0
-		st._healAbsorbAmount = 0
-		return
-	end
-	if which == nil or which == "absorb" then st._absorbAmount = UnitGetTotalAbsorbs and UnitGetTotalAbsorbs(unit) or 0 end
-	if which == nil or which == "heal" then st._healAbsorbAmount = UnitGetTotalHealAbsorbs and UnitGetTotalHealAbsorbs(unit) or 0 end
-end
-
 function GF.EnsureHealPredictionCalculator(st)
 	if not st or st._healPredictionCalcUnsupported then return nil end
 	if st._healPredictionCalc then return st._healPredictionCalc end
@@ -6189,9 +6176,13 @@ function GF:UpdateHealthValue(self, unit, st)
 		if st.healAbsorb then st.healAbsorb:Hide() end
 		return
 	end
-	local cur = UnitHealth and UnitHealth(unit)
+
+	local calc = GF.EnsureHealPredictionCalculator(st)
+	if calc and UnitGetDetailedHealPrediction then UnitGetDetailedHealPrediction(unit, "player", calc) end
+
+	local cur = calc and calc.GetCurrentHealth and calc:GetCurrentHealth() or (UnitHealth and UnitHealth(unit))
 	if cur == nil then cur = 0 end
-	local maxv = UnitHealthMax and UnitHealthMax(unit)
+	local maxv = calc and calc.GetMaximumHealth and calc:GetMaximumHealth() or (UnitHealthMax and UnitHealthMax(unit))
 	if maxv == nil then maxv = 1 end
 	local maxForValue = 1
 	if issecretvalue and issecretvalue(maxv) then
@@ -6200,31 +6191,13 @@ function GF:UpdateHealthValue(self, unit, st)
 		maxForValue = maxv
 	end
 	local secretHealth = issecretvalue and (issecretvalue(cur) or issecretvalue(maxv))
-	if secretHealth then
-		st.health:SetMinMaxValues(0, maxForValue)
+	st.health:SetMinMaxValues(0, maxForValue)
+	if UnitIsConnected and UnitIsConnected(unit) == false then
+		st.health:SetValue(maxForValue)
+	elseif secretHealth then
 		st.health:SetValue(cur or 0)
 	else
-		if st._lastHealthMax ~= maxForValue then
-			st.health:SetMinMaxValues(0, maxForValue)
-			st._lastHealthMax = maxForValue
-			st._lastHealthPx = nil
-			st._lastHealthBarW = nil
-		end
-		local w = st.health:GetWidth()
-		if w and w > 0 and maxForValue > 0 then
-			local px = floor((cur * w) / maxForValue + 0.5)
-			if st._lastHealthPx ~= px or st._lastHealthBarW ~= w then
-				st._lastHealthPx = px
-				st._lastHealthBarW = w
-				st.health:SetValue((px / w) * maxForValue)
-				st._lastHealthCur = cur
-			end
-		else
-			if st._lastHealthCur ~= cur then
-				st.health:SetValue(cur)
-				st._lastHealthCur = cur
-			end
-		end
+		st.health:SetValue(cur or 0)
 	end
 
 	local cfg = self._eqolCfg or getCfg(self._eqolGroupKind or "party")
@@ -6244,10 +6217,8 @@ function GF:UpdateHealthValue(self, unit, st)
 	if (sampleIncomingHeal or sampleAbsorb or sampleHealAbsorb) and maxIsSecret then sampleMax = EDIT_MODE_SAMPLE_MAX end
 	if incomingHealEnabled and st.incomingHeal then
 		local incomingHeal = 0
-		local calc = GF.EnsureHealPredictionCalculator(st)
-		if calc and UnitGetDetailedHealPrediction then
-			UnitGetDetailedHealPrediction(unit, "player", calc)
-			incomingHeal = calc.GetIncomingHeals and calc:GetIncomingHeals() or 0
+		if calc and calc.GetIncomingHeals then
+			incomingHeal = calc:GetIncomingHeals() or 0
 		elseif UnitGetIncomingHeals then
 			incomingHeal = UnitGetIncomingHeals(unit) or 0
 		end
@@ -6292,8 +6263,12 @@ function GF:UpdateHealthValue(self, unit, st)
 		st.incomingHeal:Hide()
 	end
 	if absorbEnabled and st.absorb then
-		local abs = st._absorbAmount
-		if abs == nil then abs = 0 end
+		local abs = 0
+		if calc and calc.GetDamageAbsorbs then
+			abs = calc:GetDamageAbsorbs() or 0
+		elseif UnitGetTotalAbsorbs then
+			abs = UnitGetTotalAbsorbs(unit) or 0
+		end
 		local absSecret = issecretvalue and issecretvalue(abs)
 		local absValue = abs
 		if sampleAbsorb then
@@ -6351,8 +6326,12 @@ function GF:UpdateHealthValue(self, unit, st)
 	end
 
 	if healAbsorbEnabled and st.healAbsorb then
-		local healAbs = st._healAbsorbAmount
-		if healAbs == nil then healAbs = 0 end
+		local healAbs = 0
+		if calc and calc.GetHealAbsorbs then
+			healAbs = calc:GetHealAbsorbs() or 0
+		elseif UnitGetTotalHealAbsorbs then
+			healAbs = UnitGetTotalHealAbsorbs(unit) or 0
+		end
 		local healSecret = issecretvalue and issecretvalue(healAbs)
 		local healValue = healAbs
 		if sampleHealAbsorb then
@@ -6898,7 +6877,6 @@ function GF:UnitButton_SetUnit(self, unit)
 	GF:CacheUnitStatic(self)
 
 	GF:UnitButton_RegisterUnitEvents(self, unit)
-	if self._eqolUFState and self._eqolUFState._wantsAbsorb then GF:UpdateAbsorbCache(self) end
 	GF:UpdatePrivateAuras(self)
 
 	GF:UpdateAll(self)
@@ -6924,8 +6902,6 @@ function GF:UnitButton_ClearUnit(self)
 		st._powerType = nil
 		st._powerToken = nil
 		st._classR, st._classG, st._classB, st._classA = nil, nil, nil, nil
-		st._absorbAmount = nil
-		st._healAbsorbAmount = nil
 		if st._healPredictionCalc and st._healPredictionCalc.ResetPredictedValues then st._healPredictionCalc:ResetPredictedValues() end
 		st._auraCache = nil
 		st._auraCacheByKey = nil
@@ -7029,18 +7005,15 @@ end
 
 local function dispatchUnitHealth(btn, unit)
 	local st = getState(btn)
-	if st and st._wantsAbsorb then GF:UpdateAbsorbCache(btn, nil, unit, st) end
 	GF:UpdateHealthValue(btn, unit, st)
 	GF:UpdateStatusText(btn, unit, st)
 end
 local function dispatchUnitAbsorb(btn, unit)
 	local st = getState(btn)
-	GF:UpdateAbsorbCache(btn, "absorb", unit, st)
 	GF:UpdateHealthValue(btn, unit, st)
 end
 local function dispatchUnitHealAbsorb(btn, unit)
 	local st = getState(btn)
-	GF:UpdateAbsorbCache(btn, "heal", unit, st)
 	GF:UpdateHealthValue(btn, unit, st)
 end
 local function dispatchUnitPower(btn, unit)
@@ -7305,6 +7278,14 @@ local function applyVisibility(header, kind, cfg)
 	local def = DEFAULTS[kind]
 	local hideInClientScene = GFH and GFH.ShouldHideInClientScene and GFH.ShouldHideInClientScene(cfg, def)
 	local inEdit = isEditModeActive and isEditModeActive()
+	local arenaPartyActive = false
+	if not inEdit then
+		if type(ShouldShowArenaParty) == "function" then
+			arenaPartyActive = ShouldShowArenaParty() == true
+		else
+			arenaPartyActive = (IsActiveBattlefieldArena and IsActiveBattlefieldArena()) and not (C_PvP and C_PvP.IsInBrawl and C_PvP.IsInBrawl())
+		end
+	end
 	local forceClientSceneHide = not inEdit and hideInClientScene and GF._clientSceneActive == true
 	if GFH and GFH.ApplyClientSceneAlphaToFrame then GFH.ApplyClientSceneAlphaToFrame(header, forceClientSceneHide) end
 	if not RegisterStateDriver then return end
@@ -7323,6 +7304,12 @@ local function applyVisibility(header, kind, cfg)
 		cond = "hide"
 	elseif header._eqolForceShow then
 		cond = "show"
+	elseif arenaPartyActive then
+		if kind == "party" then
+			cond = "show"
+		else
+			cond = "hide"
+		end
 	elseif kind == "party" then
 		if cfg.showSolo then
 			cond = "[group:raid] hide; show"
@@ -9152,7 +9139,6 @@ function GF:RefreshChangedUnitButtons()
 		clearDispelAuraState(st)
 		GF:CacheUnitStatic(child)
 		GF:UnitButton_RegisterUnitEvents(child, unit)
-		if st._wantsAbsorb then GF:UpdateAbsorbCache(child, nil, unit, st) end
 		GF:UpdatePrivateAuras(child)
 		GF:UpdateAll(child)
 		updated = updated + 1

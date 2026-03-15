@@ -44,6 +44,7 @@
 - Cooldown Panels (Glow): Reworked panel glow handling to use the new internal glow system for Ready/Active/Pandemic visuals, including selectable glow styles, panel/entry glow-style overrides, and configurable glow insets.
 - Cooldown Panels (Glow): Separated `Proc glow` visuals from `Glow when ready`, so panel defaults and per-entry overrides for proc glows can now be configured independently from ready glows.
 - Cooldown Panels (Layout Edit): Moved the missing per-entry `Show stack count` and `Show charges` toggles into the existing `Stacks / Item Count` and `Charges` expandable sections instead of duplicating entry basics in a separate block.
+- Mythic+ (Random Hearthstones): Changed the preferred Hearthstone selector from single-choice to multi-select. Random Hearthstone can now pick from a custom 1:N subset of owned Hearthstones instead of either one fixed Hearthstone or the full pool.
 
 ### ❌ Removed
 
@@ -69,6 +70,7 @@
 - Mythic+ (Party Keystone): Fixed an issue where opening the party keystone panel could trigger an error instead of showing the entries correctly.
 - Class Buff Reminder: Fixed reminders showing while your character is dead or a ghost.
 - Food Reminder: Fixed the mage-food leave button appearing in non-follower LFG dungeons. It now only shows inside follower dungeons.
+- Drink Macro: Rebuilt the drink list from current Wowhead tooltip data, removed dead `Well Fed` entries that were always ignored at runtime, corrected squished flat-mana values and current `%`-based drinks, kept `Managi Roll` health-only, and added missing Midnight drinks such as `Magister's Mead`, `Darkwell Draft`, `Dawnmosa`, `Sunwell Shot`, and `Dragonhawk Flight`.
 - Resource Bars: Newly auto-enabled bars for fresh characters/specs no longer spawn on top of each other on first initialization; default anchors now stack vertically from the start.
 - Resource Bars (Essence): Fixed Evoker Essence `Separated offset` behavior so the option no longer only inserts spacing into the legacy essence layout and instead uses the proper segmented renderer.
 - Resource Bars (Gradient / Edit Mode): Fixed a Retail Lua error when switching from specs without resource bars to specs with them, especially on fresh characters. Gradient refreshes now skip protected/invalid bar colors instead of crashing when opening, moving, or configuring the bar.
@@ -79,5 +81,6 @@
 - Minimap Button Bin: Fixed `GatherMatePin*` minimap pins being treated as minimap buttons, so they no longer appear in the Button Sink or its exclude list.
 - Minimap Button Bin: Fixed `PlumberLandingPageMinimapButton` being collected into the Button Sink. The Plumber landing-page minimap button is now permanently excluded.
 - Item Upgrades: Fixed upgrade indicators and upgrade-only checks suggesting off-armor-type gear (for example Cloth on Leather classes). Bag, merchant, and loot-toast upgrade checks now respect the current spec's actual armor proficiency.
+- Items / Inventory (Bag Indicators): Fixed bag upgrade arrows not showing unless `Item level` was also enabled. Upgrade arrows on Blizzard bag frames now refresh independently from the bag item-level text.
 - Sound: Fixed mute selections for direct sound groups so they are reapplied correctly after login or `/reload`.
 - Experience Bar: Fixed rested text values being capped to the XP remaining in the current level. Text modes now show the real banked rested XP from `GetXPExhaustion()`, while the overlay remains limited to the current level segment.

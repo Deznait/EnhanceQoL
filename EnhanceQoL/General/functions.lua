@@ -983,6 +983,48 @@ local function updateBagRarityGlow(itemButton, itemQuality, dimmed)
 	glow:Show()
 end
 
+local function clearBagButtonInfo(itemButton)
+	if not itemButton then return end
+	itemButton:SetAlpha(1)
+	if itemButton.EQOLFilterOverlay then
+		itemButton.EQOLFilterOverlay:SetAlpha(1)
+		itemButton.EQOLFilterOverlay:Hide()
+	end
+	if itemButton.ItemLevelText then
+		itemButton.ItemLevelText:SetAlpha(1)
+		itemButton.ItemLevelText:Hide()
+	end
+	if itemButton.ItemBoundType then
+		itemButton.ItemBoundType:SetAlpha(1)
+		itemButton.ItemBoundType:Hide()
+	end
+	if itemButton.ItemUpgradeArrow then
+		itemButton.ItemUpgradeArrow:SetAlpha(1)
+		itemButton.ItemUpgradeArrow:Hide()
+	end
+	if itemButton.ItemUpgradeIcon then
+		itemButton.ItemUpgradeIcon:SetAlpha(1)
+		itemButton.ItemUpgradeIcon:Hide()
+	end
+	if itemButton.ItemUpgradeIconGlow then
+		itemButton.ItemUpgradeIconGlow:SetAlpha(1)
+		itemButton.ItemUpgradeIconGlow:Hide()
+	end
+	if itemButton.ProfessionQualityOverlay and addon.db and addon.db["fadeBagQualityIcons"] then
+		itemButton.ProfessionQualityOverlay:SetAlpha(1)
+	end
+	updateBagRarityGlow(itemButton, nil, false)
+end
+
+local function shouldUpdateBagButtonInfo()
+	if addon.filterFrame then return true end
+	if not addon.db then return false end
+	return addon.db["showIlvlOnBagItems"]
+		or addon.db["showBindOnBagItems"]
+		or addon.db["showUpgradeArrowOnBagItems"]
+		or addon.db["enhancedRarityGlow"]
+end
+
 local function updateButtonInfo(itemButton, bag, slot, frameName)
 	itemButton:SetAlpha(1)
 	if itemButton.EQOLFilterOverlay then
@@ -1011,6 +1053,8 @@ local function updateButtonInfo(itemButton, bag, slot, frameName)
 		itemButton.ItemUpgradeIconGlow:SetAlpha(1)
 		itemButton.ItemUpgradeIconGlow:Hide()
 	end
+	local isBankFrame = frameName == "BankPanel" or frameName == "BankFrame"
+	local showItemLevel = isBankFrame and addon.db["showIlvlOnBankFrame"] or addon.db["showIlvlOnBagItems"]
 	local itemLink = C_Container.GetContainerItemLink(bag, slot)
 	if itemLink then
 		local _, _, itemQuality, _, _, _, _, _, itemEquipLoc, _, sellPrice, classID, subclassID, tBindType, expId = GetItemInfoFn(itemLink)
@@ -1108,7 +1152,11 @@ local function updateButtonInfo(itemButton, bag, slot, frameName)
 				itemButton.ItemLevelText:SetFormattedText(itemLevelText)
 				addon.functions.ApplyItemLevelTextColor(itemButton.ItemLevelText, itemQuality)
 
-				itemButton.ItemLevelText:Show()
+				if showItemLevel then
+					itemButton.ItemLevelText:Show()
+				else
+					itemButton.ItemLevelText:Hide()
+				end
 
 				-- Upgrade arrow (bag): indicate if this item is higher ilvl than equipped
 				if addon.db["showUpgradeArrowOnBagItems"] then
@@ -1185,7 +1233,7 @@ local function updateButtonInfo(itemButton, bag, slot, frameName)
 	end
 end
 
-function addon.functions.updateBank(itemButton, bag, slot) updateButtonInfo(itemButton, bag, slot) end
+function addon.functions.updateBank(itemButton, bag, slot) updateButtonInfo(itemButton, bag, slot, "BankFrame") end
 
 local filterData = {
 	{
@@ -1581,10 +1629,10 @@ function addon.functions.updateBags(frame)
 	else
 		for _, itemButton in frame:EnumerateValidItems() do
 			if itemButton then
-				if addon.db["showIlvlOnBagItems"] then
+				if shouldUpdateBagButtonInfo() then
 					updateButtonInfo(itemButton, itemButton:GetBagID(), itemButton:GetID(), frame:GetName())
-				elseif itemButton.ItemLevelText then
-					itemButton.ItemLevelText:Hide()
+				else
+					clearBagButtonInfo(itemButton)
 				end
 			end
 		end

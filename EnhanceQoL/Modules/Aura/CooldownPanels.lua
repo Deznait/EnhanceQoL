@@ -11204,7 +11204,7 @@ function CooldownPanels:UpdatePreviewIcons(panelId, countOverride)
 			end
 			CooldownPanels.ApplyIconTooltip(icon, entry, showTooltips)
 		end
-		if layoutEditActive or (icon.layoutHandle and icon.layoutHandle._eqolLayoutConfigured == true) then self:ConfigureEditModePanelIcon(panelId, icon, entryId, slotColumn, slotRow) end
+		self:ConfigureEditModePanelIcon(panelId, icon, entryId, slotColumn, slotRow)
 	end
 	for i = count + 1, #(frame.icons or {}) do
 		local icon = frame.icons[i]
@@ -11817,9 +11817,7 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 		local icon = frame.icons[i]
 		local slotColumn = fixedLayout and fixedGridColumns > 0 and (((i - 1) % fixedGridColumns) + 1) or (editGridColumns and (((i - 1) % editGridColumns) + 1) or nil)
 		local slotRow = fixedLayout and fixedGridColumns > 0 and (math.floor((i - 1) / fixedGridColumns) + 1) or (editGridColumns and (math.floor((i - 1) / editGridColumns) + 1) or nil)
-		if layoutEditActive or (icon.layoutHandle and icon.layoutHandle._eqolLayoutConfigured == true) then
-			self:ConfigureEditModePanelIcon(panelId, icon, data and data.entryId or nil, slotColumn, slotRow)
-		end
+		self:ConfigureEditModePanelIcon(panelId, icon, data and data.entryId or nil, slotColumn, slotRow)
 		if not data then
 			icon.entryId = nil
 			CooldownPanels:ApplyEntryIconVisualLayout(icon, nil)
@@ -12309,7 +12307,7 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 	for i = count + 1, #frame.icons do
 		local icon = frame.icons[i]
 		if icon then
-			if layoutEditActive or (icon.layoutHandle and icon.layoutHandle._eqolLayoutConfigured == true) then self:ConfigureEditModePanelIcon(panelId, icon, nil, nil, nil) end
+			self:ConfigureEditModePanelIcon(panelId, icon, nil, nil, nil)
 			icon.entryId = nil
 			clearPreviewCooldown(icon.cooldown)
 			icon.cooldown:Clear()

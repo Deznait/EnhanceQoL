@@ -1163,6 +1163,7 @@ function lib:CreateMultiDropdown(cat, data)
 	)
 	local initializer = Settings.CreateElementInitializer("LibEQOL@project-abbreviated-hash@_MultiDropdownTemplate", {
 		label = data.name or data.text or data.key,
+		tooltip = data.desc or data.cbDesc or data.tooltip,
 		options = data.values,
 		optionfunc = data.optionfunc,
 		order = data.order,
