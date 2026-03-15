@@ -6,6 +6,8 @@
 
 - Unit Frames (Edit Mode): Fixed single-frame `Offset X` / `Offset Y` position changes not updating live while Edit Mode was open.
 
+---
+
 ## [9.0.0] - 2026-03-15
 
 ### ✨ Added
