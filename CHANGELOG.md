@@ -1,6 +1,6 @@
 # Changelog
 
-## [9.0.0] - 2026-03-15 (planned release)
+## [9.0.0] - 2026-03-15
 
 ### ✨ Added
 
