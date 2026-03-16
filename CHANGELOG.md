@@ -7,6 +7,10 @@
 - Character Panel (Gem Tracker): Reworked the socketed gem tracker for Midnight. It now tracks `Eversong Diamond`, `Amethyst`, `Peridot`, `Garnet`, and `Lapis` by item ID, replacing the old `Blasphemite` / `Amber` / `Onyx` / `Sapphire` / `Emerald` / `Ruby` setup.
 - Settings (Root Category): Added a slash-command overview to the main EnhanceQoL settings page. Feature-specific entries such as `/eim`, `/eil`, `/way`, `/cdm`, `/pull`, `/em`, `/kb`, and `/rl` now only appear when their corresponding setting is enabled.
 
+### 🐛 Fixed
+
+- Minimap Buttons & Cluster (Tracking icon): Fixed `Minimap elements to hide` not hiding the Blizzard tracking icon unless the separate Square Minimap Stats tracking-button feature was enabled. The tracking icon hide option now works again on its own.
+
 ---
 
 ## [9.0.3] - 2026-03-16

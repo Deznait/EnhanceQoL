@@ -904,10 +904,10 @@ local function EvaluateFrameVisibility(state)
 		or cfg.PLAYER_IN_GROUP
 		or cfg.PLAYER_IN_PARTY
 		or cfg.PLAYER_IN_RAID
-	) and true or false
-	if not hasShowRule and HasFrameVisibilityRuleBesidesGroupHide(cfg) then
-		return true, "HIDE_RULES_INACTIVE"
-	end
+	)
+			and true
+		or false
+	if not hasShowRule and HasFrameVisibilityRuleBesidesGroupHide(cfg) then return true, "HIDE_RULES_INACTIVE" end
 
 	if cfg.ALWAYS_IN_COMBAT and context.inCombat then return true, "ALWAYS_IN_COMBAT" end
 	if cfg.ALWAYS_OUT_OF_COMBAT and not context.inCombat then return true, "ALWAYS_OUT_OF_COMBAT" end
@@ -998,8 +998,7 @@ ApplyFrameVisibilityState = function(state)
 
 	EnsureFrameVisibilityWatcher()
 	local shouldShow, activeRule = EvaluateFrameVisibility(state)
-	local forcedHidden = activeRule == "ALWAYS_HIDDEN" or activeRule == "ALWAYS_HIDE_IN_GROUP" or activeRule == "ALWAYS_HIDE_IN_PARTY"
-		or activeRule == "ALWAYS_HIDE_IN_RAID"
+	local forcedHidden = activeRule == "ALWAYS_HIDDEN" or activeRule == "ALWAYS_HIDE_IN_GROUP" or activeRule == "ALWAYS_HIDE_IN_PARTY" or activeRule == "ALWAYS_HIDE_IN_RAID"
 	local fadeAlpha = getVisibilityFadeAlpha(state)
 	if fadeAlpha == nil and addon.functions and addon.functions.GetFrameFadedAlpha then fadeAlpha = addon.functions.GetFrameFadedAlpha() end
 	if fadeAlpha == nil then fadeAlpha = 0 end
@@ -4535,7 +4534,7 @@ local function initUI()
 			and not trackingDisabled
 		for key, frames in pairs(elems) do
 			local shouldHide = cfg and cfg[key]
-			if key == "Tracking" then shouldHide = customTrackingButtonEnabled end
+			if key == "Tracking" then shouldHide = shouldHide or customTrackingButtonEnabled end
 			for _, f in ipairs(frames) do
 				if shouldHide then
 					f:Hide()
@@ -4549,7 +4548,7 @@ local function initUI()
 					local hookKey = key
 					f:HookScript("OnShow", function(self)
 						local c = addon.db and addon.db.hiddenMinimapElements
-						local hideForConfig = hookKey ~= "Tracking" and c and c[hookKey]
+						local hideForConfig = c and c[hookKey]
 						local hideForCustomTracking = hookKey == "Tracking"
 							and addon.db
 							and addon.db.enableSquareMinimap
