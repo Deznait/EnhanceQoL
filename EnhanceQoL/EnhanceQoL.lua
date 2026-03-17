@@ -5784,6 +5784,7 @@ local function setAllHooks()
 				if panel and panel.ApplyTextStyle then panel:ApplyTextStyle() end
 			end
 		end
+		if addon.InstanceDifficulty and addon.InstanceDifficulty.Update then addon.InstanceDifficulty:Update() end
 		if addon.Aura then
 			local xpBar = addon.Aura.ExperienceBar
 			if xpBar and xpBar.ApplyAppearance then

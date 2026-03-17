@@ -31,8 +31,21 @@ end
 
 indicator:HookScript("OnShow", function() InstanceDifficulty:Update() end)
 
+local function defaultFontFace()
+	if addon.functions and addon.functions.GetGlobalDefaultFontFace then return addon.functions.GetGlobalDefaultFontFace() end
+	return (addon.variables and addon.variables.defaultFont) or STANDARD_TEXT_FONT
+end
+
+function InstanceDifficulty:ApplyTextStyle()
+	if not self.text then return end
+	local fontSize = (addon.db and addon.db["instanceDifficultyFontSize"]) or 14
+	local font = defaultFontFace()
+	local ok = self.text:SetFont(font, fontSize, "OUTLINE")
+	if ok == false then self.text:SetFont((addon.variables and addon.variables.defaultFont) or STANDARD_TEXT_FONT, fontSize, "OUTLINE") end
+end
+
 InstanceDifficulty.text = InstanceDifficulty.text or indicator:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-InstanceDifficulty.text:SetFont(addon.variables.defaultFont, 14, "OUTLINE")
+InstanceDifficulty:ApplyTextStyle()
 InstanceDifficulty.text:Hide()
 
 local nmNames = {
@@ -109,9 +122,7 @@ function InstanceDifficulty:Update()
 	self.text:SetPoint(anchor, indicator, anchor, offX, offY)
 
 	self.text:SetText(text)
-	-- Apply font size
-	local fontSize = (addon.db and addon.db["instanceDifficultyFontSize"]) or 14
-	self.text:SetFont(addon.variables.defaultFont, fontSize, "OUTLINE")
+	self:ApplyTextStyle()
 	-- Apply optional difficulty colors
 	if addon.db and addon.db["instanceDifficultyUseColors"] then
 		local colors = addon.db["instanceDifficultyColors"] or {}

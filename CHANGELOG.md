@@ -14,6 +14,7 @@
 
 - Cooldown Panels (Items / Trinkets): Fixed GCD-only item cooldowns being treated as real cooldowns, so trinkets and other usable items no longer briefly react to the global cooldown.
 - Cooldown Panels (Stance): Fixed `Static text` being unavailable for stance entries in the editor and standalone entry settings.
+- Minimap (Instance Difficulty Indicator): Fixed the difficulty label not using the configured Global Font.
 
 ---
 
