@@ -66,6 +66,24 @@ local function refreshReminder()
 	if Reminder and Reminder.OnSettingChanged then Reminder:OnSettingChanged() end
 end
 
+local function openFlaskSettings()
+	if addon.functions and addon.functions.OpenFlaskMacroSettings then
+		addon.functions.OpenFlaskMacroSettings()
+		return
+	end
+
+	if not (Settings and Settings.OpenToCategory) then return end
+	local gameplayCategory = addon.SettingsLayout and addon.SettingsLayout.rootGAMEPLAY
+	if not gameplayCategory then return end
+
+	if InCombatLockdown and InCombatLockdown() then
+		if UIErrorsFrame and ERR_NOT_IN_COMBAT then UIErrorsFrame:AddMessage(ERR_NOT_IN_COMBAT, 1, 0, 0) end
+		return
+	end
+
+	Settings.OpenToCategory(gameplayCategory:GetID(), L["Flask Macro"] or "Flask Macro")
+end
+
 local expandable = addon.functions.SettingsCreateExpandableSection(cat, {
 	name = L["Class Buff Reminder"] or "Class Buff Reminder",
 	newTagID = "ClassBuffReminder",
@@ -88,6 +106,18 @@ addon.functions.SettingsCreateCheckbox(cat, {
 		addon.db[DB_ENABLED] = value == true
 		refreshReminder()
 	end,
+	parentSection = expandable,
+})
+
+addon.functions.SettingsCreateText(cat, L["ClassBuffReminderFlaskSharedHint"] or "Flask preferences are shared with Flask Macro (Gameplay -> Macros & Consumables).", {
+	parentSection = expandable,
+})
+
+addon.functions.SettingsCreateButton(cat, {
+	var = "classBuffReminderOpenFlaskSettings",
+	text = L["ClassBuffReminderOpenFlaskSettings"] or "Open Flask settings",
+	desc = L["ClassBuffReminderOpenFlaskSettingsDesc"] or "Jumps to Gameplay -> Macros & Consumables and focuses Flask Macro settings.",
+	func = openFlaskSettings,
 	parentSection = expandable,
 })
 

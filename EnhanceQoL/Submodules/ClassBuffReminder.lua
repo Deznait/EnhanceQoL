@@ -118,6 +118,10 @@ local EVOKER_SOURCE_OF_MAGIC_IDS = {
 	369459, -- Source of Magic
 }
 
+local EVOKER_BLISTERING_SCALES_IDS = {
+	360827, -- Blistering Scales
+}
+
 -- Shared flask auras (TWW + Midnight). Used for reminder presence checks.
 local SHARED_FLASK_AURA_IDS = {
 	432021,
@@ -1168,7 +1172,33 @@ local function evokerSupportGetSelfStatus(provider, reminder)
 		end
 	end
 
-	setProviderDisplaySpellId(provider, missingEntries[1] and missingEntries[1].spellId or sourceDisplaySpellId or bronzeDisplaySpellId)
+	local blisteringDisplaySpellId = normalizeSpellId(provider.blisteringDisplaySpellId) or normalizeSpellId(provider.blisteringSpellIds and provider.blisteringSpellIds[1])
+	local shouldTrackBlistering = hasKnownSpellInList(provider.blisteringKnownSpellIds or provider.blisteringSpellIds)
+	if shouldTrackBlistering then
+		reminder.runtimeEligibleUnits = reminder.runtimeEligibleUnits or {}
+		local eligibleUnits = reminder:CollectEligibleUnits(reminder.runtimeEligibleUnits)
+		if #eligibleUnits > 0 then
+			totalRequirements = totalRequirements + 1
+			local hasBlisteringOnTarget = false
+			for i = 1, #eligibleUnits do
+				local unit = eligibleUnits[i]
+				if reminder:UnitHasAnyAuraSpellId(unit, provider.blisteringSpellIds) then
+					hasBlisteringOnTarget = true
+					break
+				end
+				if reminder:UnitHasAnyAuraName(unit, provider.blisteringAuraNames) then
+					hasBlisteringOnTarget = true
+					break
+				end
+			end
+
+			if not hasBlisteringOnTarget then
+				missingEntries[#missingEntries + 1] = makeSelfMissingEntry(blisteringDisplaySpellId, provider.blisteringLabel or "Blistering Scales")
+			end
+		end
+	end
+
+	setProviderDisplaySpellId(provider, missingEntries[1] and missingEntries[1].spellId or sourceDisplaySpellId or blisteringDisplaySpellId or bronzeDisplaySpellId)
 	return buildSelfStatus(totalRequirements, missingEntries)
 end
 
@@ -1184,6 +1214,7 @@ function Reminder:GetEvokerSupportProvider()
 			scope = PROVIDER_SCOPE_SELF,
 			spellIds = {
 				369459,
+				360827,
 				381732,
 				381741,
 				381746,
@@ -1203,6 +1234,11 @@ function Reminder:GetEvokerSupportProvider()
 			sourceAuraNames = { "Source of Magic" },
 			sourceLabel = "Source of Magic",
 			sourceDisplaySpellId = 369459,
+			blisteringSpellIds = EVOKER_BLISTERING_SCALES_IDS,
+			blisteringKnownSpellIds = EVOKER_BLISTERING_SCALES_IDS,
+			blisteringAuraNames = { "Blistering Scales" },
+			blisteringLabel = "Blistering Scales",
+			blisteringDisplaySpellId = 360827,
 			bronzeSpellIds = EVOKER_BLESSING_OF_BRONZE_IDS,
 			bronzeLabel = "Blessing of the Bronze",
 			bronzeDisplaySpellId = 381748,
@@ -2438,6 +2474,21 @@ function Reminder:CollectOtherHealerUnits(target)
 	for i = 1, #units do
 		local unit = units[i]
 		if unit ~= "player" and not isAIFollowerUnit(unit) and UnitExists(unit) and UnitIsConnected(unit) and not UnitIsDeadOrGhost(unit) and isUnitHealerRole(unit) then target[#target + 1] = unit end
+	end
+
+	return target
+end
+
+function Reminder:CollectEligibleUnits(target)
+	if not target then target = {} end
+	for i = #target, 1, -1 do
+		target[i] = nil
+	end
+
+	local units = self:GetRosterUnits()
+	for i = 1, #units do
+		local unit = units[i]
+		if not isAIFollowerUnit(unit) and UnitExists(unit) and UnitIsConnected(unit) and not UnitIsDeadOrGhost(unit) then target[#target + 1] = unit end
 	end
 
 	return target

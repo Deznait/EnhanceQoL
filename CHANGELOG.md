@@ -1,5 +1,13 @@
 # Changelog
 
+## [9.2.1] - 2026-03-17
+
+### 🐛 Fixed
+
+- Class Buff Reminder (Settings): Restored the missing Flask info text and `Open Flask settings` button in the Blizzard settings UI.
+
+---
+
 ## [9.2.0] - 2026-03-17
 
 ### ✨ Added

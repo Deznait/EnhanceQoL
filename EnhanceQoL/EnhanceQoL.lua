@@ -840,26 +840,9 @@ local function getVisibilityFadeAlpha(state)
 	return clampVisibilityAlpha(state.fadeAlpha)
 end
 
-local function HasFrameVisibilityRuleBesidesGroupHide(cfg)
+local function HasFrameVisibilityInactiveHideRule(cfg)
 	if type(cfg) ~= "table" then return false end
-	return (
-		cfg.MOUSEOVER
-		or cfg.ALWAYS_IN_COMBAT
-		or cfg.ALWAYS_OUT_OF_COMBAT
-		or cfg.SKYRIDING_ACTIVE
-		or cfg.SKYRIDING_INACTIVE
-		or cfg.FLYING_ACTIVE
-		or cfg.FLYING_INACTIVE
-		or cfg.PLAYER_HAS_TARGET
-		or cfg.PLAYER_CASTING
-		or cfg.PLAYER_MOUNTED
-		or cfg.PLAYER_NOT_MOUNTED
-		or cfg.PLAYER_IN_GROUP
-		or cfg.PLAYER_IN_PARTY
-		or cfg.PLAYER_IN_RAID
-	)
-			and true
-		or false
+	return (cfg.SKYRIDING_INACTIVE or cfg.FLYING_INACTIVE or cfg.ALWAYS_HIDE_IN_GROUP or cfg.ALWAYS_HIDE_IN_PARTY or cfg.ALWAYS_HIDE_IN_RAID) and true or false
 end
 
 local function EvaluateFrameVisibility(state)
@@ -907,7 +890,7 @@ local function EvaluateFrameVisibility(state)
 	)
 			and true
 		or false
-	if not hasShowRule and HasFrameVisibilityRuleBesidesGroupHide(cfg) then return true, "HIDE_RULES_INACTIVE" end
+	if not hasShowRule and HasFrameVisibilityInactiveHideRule(cfg) then return true, "HIDE_RULES_INACTIVE" end
 
 	if cfg.ALWAYS_IN_COMBAT and context.inCombat then return true, "ALWAYS_IN_COMBAT" end
 	if cfg.ALWAYS_OUT_OF_COMBAT and not context.inCombat then return true, "ALWAYS_OUT_OF_COMBAT" end
@@ -5875,6 +5858,7 @@ local function setAllHooks()
 	end
 	if addon.Health and addon.Health.functions and addon.Health.functions.InitHealthMacro then addon.Health.functions.InitHealthMacro() end
 	if addon.Flasks and addon.Flasks.functions and addon.Flasks.functions.InitFlaskMacro then addon.Flasks.functions.InitFlaskMacro() end
+	if addon.BuffFoods and addon.BuffFoods.functions and addon.BuffFoods.functions.InitBuffFoodMacro then addon.BuffFoods.functions.InitBuffFoodMacro() end
 	if addon.Mouse and addon.Mouse.functions then
 		if addon.Mouse.functions.InitDB then addon.Mouse.functions.InitDB() end
 		if addon.Mouse.functions.InitState then addon.Mouse.functions.InitState() end
