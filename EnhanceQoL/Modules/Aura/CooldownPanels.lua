@@ -12300,7 +12300,7 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 			local desaturate = false
 			local hidden = false
 			local chargeCooldownHasAvailableCharge = false
-			local entryNoDesaturation = data.noDesaturation == true
+			local entryNoDesaturation = data.noDesaturation == true and not (data.resolvedType == "ITEM" and data.emptyItem == true)
 			local entryDrawEdge = data.cooldownDrawEdge ~= false
 			local entryDrawBling = data.cooldownDrawBling ~= false
 			local entryDrawSwipe = data.cooldownDrawSwipe ~= false

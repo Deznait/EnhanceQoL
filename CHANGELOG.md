@@ -10,6 +10,7 @@
 
 ### 🐛 Fixed
 
+- Cooldown Panels (Items): Fixed item tracking so bank items are no longer counted, tracked `Healthstone` prefers `Demonic Healthstone` for Warlocks with `Pact of Gluttony`, and `No desaturation` no longer keeps empty items like potions fully colored.
 - Class Buff Reminder (Settings): Restored the missing Flask info text and `Open Flask settings` button in the Blizzard settings UI.
 - Unit Frames: Fixed `Always hide in party/raid` so it now only hides the frame while you are actually in a party or raid.
 
