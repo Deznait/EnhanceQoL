@@ -208,22 +208,35 @@ end
 ---------------------------------------------------------
 function addon.functions.SettingsCreateMultiDropdown(cat, cbData)
 	addon.db = addon.db or {}
-	local storageDB = cbData.db or addon.db
-	if type(storageDB) ~= "table" then storageDB = addon.db end
-	storageDB[cbData.var] = storageDB[cbData.var] or {}
+	local explicitStorageDB = type(cbData.db) == "table" and cbData.db or nil
+
+	-- Resolve addon.db lazily so profile-backed settings do not capture the pre-init placeholder table.
+	local function resolveStorageDB()
+		if explicitStorageDB then return explicitStorageDB end
+		addon.db = addon.db or {}
+		return addon.db
+	end
+
+	local function ensureRootContainer()
+		local storageDB = resolveStorageDB()
+		if type(storageDB[cbData.var]) ~= "table" then storageDB[cbData.var] = {} end
+		return storageDB
+	end
 
 	local function getSelection()
+		local storageDB = ensureRootContainer()
 		local container = storageDB[cbData.var]
 		if cbData.subvar then
+			if type(container[cbData.subvar]) ~= "table" then container[cbData.subvar] = {} end
 			container = container[cbData.subvar]
-			if type(container) ~= "table" then container = {} end
 		end
 		return container
 	end
 
 	local function setSelection(map)
+		local storageDB = ensureRootContainer()
+		if type(map) ~= "table" then map = {} end
 		if cbData.subvar then
-			storageDB[cbData.var] = storageDB[cbData.var] or {}
 			storageDB[cbData.var][cbData.subvar] = map
 		else
 			storageDB[cbData.var] = map
@@ -233,7 +246,7 @@ function addon.functions.SettingsCreateMultiDropdown(cat, cbData)
 
 	local initializer = SettingsLib:CreateMultiDropdown(cat, {
 		key = cbData.var,
-		db = storageDB,
+		db = explicitStorageDB or addon.db,
 		name = cbData.text,
 		values = cbData.options or cbData.list,
 		optionfunc = cbData.optionfunc or cbData.listFunc,
