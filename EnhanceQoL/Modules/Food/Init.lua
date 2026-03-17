@@ -87,7 +87,7 @@ function addon.functions.EnsureGlobalMacro(name, icon, body, warningKey, warning
 
 	local globalMacros = 0
 	if GetNumMacros then globalMacros = select(1, GetNumMacros()) or 0 end
-	local globalLimit = MAX_ACCOUNT_MACROS or 120
+	local globalLimit = _G.MAX_ACCOUNT_MACROS or 120
 	if globalMacros >= globalLimit then
 		addon.functions.WarnMacroLimitReachedOnce(warningKey or name, warningMessage)
 		return false

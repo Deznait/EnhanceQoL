@@ -1795,7 +1795,8 @@ end
 local function toggleClickCastBindings()
 	if InCombatLockdown and InCombatLockdown() then return end
 	if C_GameRules and C_GameRules.IsPlunderstorm and C_GameRules.IsPlunderstorm() then return end
-	if ToggleClickBindingFrame then ToggleClickBindingFrame() end
+	local toggleFrame = _G.ToggleClickBindingFrame
+	if toggleFrame then toggleFrame() end
 end
 
 function addon.functions.registerCooldownManagerSlashCommand()
