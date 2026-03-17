@@ -1877,7 +1877,28 @@ CooldownPanels.EnsureEditorGroupStorage = function(root)
 		end
 		group.id = normalizeId(group.id) or normalizeId(groupId) or groupId
 		group.name = CooldownPanels.NormalizePanelGroupName(group.name) or ("Group " .. tostring(group.id))
+		group.parentGroupId = normalizeId(group.parentGroupId)
 		groupsByName[group.name] = group.id
+	end
+
+	for groupId, group in pairs(groups) do
+		local parentGroupId = normalizeId(group.parentGroupId)
+		if parentGroupId == groupId or not groups[parentGroupId] then parentGroupId = nil end
+		group.parentGroupId = parentGroupId
+	end
+
+	for groupId, group in pairs(groups) do
+		local seen = { [groupId] = true }
+		local parentGroupId = normalizeId(group.parentGroupId)
+		while parentGroupId do
+			if seen[parentGroupId] then
+				group.parentGroupId = nil
+				break
+			end
+			seen[parentGroupId] = true
+			local parentGroup = groups[parentGroupId]
+			parentGroupId = parentGroup and normalizeId(parentGroup.parentGroupId) or nil
+		end
 	end
 
 	Helper.SyncOrder(order, groups)
@@ -1952,7 +1973,111 @@ function CooldownPanels:SortEditorGroupOrder(root)
 	return root.editorGroupOrder
 end
 
-function CooldownPanels:CreateEditorGroup(name)
+function CooldownPanels:CanSetEditorGroupParent(root, groupId, parentGroupId)
+	root = CooldownPanels.EnsureEditorGroupStorage(root)
+	groupId = normalizeId(groupId)
+	parentGroupId = normalizeId(parentGroupId)
+	if not (root and groupId and root.editorGroups and root.editorGroups[groupId]) then return false end
+	if parentGroupId == nil then return true end
+	if not root.editorGroups[parentGroupId] or parentGroupId == groupId then return false end
+	while parentGroupId do
+		if parentGroupId == groupId then return false end
+		local parentGroup = root.editorGroups[parentGroupId]
+		parentGroupId = parentGroup and normalizeId(parentGroup.parentGroupId) or nil
+	end
+	return true
+end
+
+function CooldownPanels:BuildEditorGroupHierarchy(root)
+	root = CooldownPanels.EnsureEditorGroupStorage(root)
+	local groups = root and root.editorGroups or {}
+	local order = root and root.editorGroupOrder or {}
+	local childrenByParent = { ["__root"] = {} }
+	local depthByGroup = {}
+
+	local function getParentKey(parentGroupId)
+		parentGroupId = normalizeId(parentGroupId)
+		if parentGroupId ~= nil then return tostring(parentGroupId) end
+		return "__root"
+	end
+
+	for _, groupId in ipairs(order) do
+		local group = groups[groupId]
+		if group then
+			local key = getParentKey(group.parentGroupId)
+			local bucket = childrenByParent[key]
+			if not bucket then
+				bucket = {}
+				childrenByParent[key] = bucket
+			end
+			bucket[#bucket + 1] = groupId
+		end
+	end
+
+	local function assignDepth(parentGroupId, depth)
+		local key = getParentKey(parentGroupId)
+		for _, childGroupId in ipairs(childrenByParent[key] or {}) do
+			if depthByGroup[childGroupId] == nil then
+				depthByGroup[childGroupId] = depth
+				assignDepth(childGroupId, depth + 1)
+			end
+		end
+	end
+
+	assignDepth(nil, 0)
+	return childrenByParent, depthByGroup
+end
+
+function CooldownPanels:GetEditorGroupDescendantIdSet(root, groupId)
+	local descendants = {}
+	groupId = normalizeId(groupId)
+	if not groupId then return descendants end
+	local childrenByParent = self:BuildEditorGroupHierarchy(root)
+
+	local function collect(parentGroupId)
+		local key = parentGroupId ~= nil and tostring(parentGroupId) or "__root"
+		for _, childGroupId in ipairs(childrenByParent[key] or {}) do
+			descendants[childGroupId] = true
+			collect(childGroupId)
+		end
+	end
+
+	collect(groupId)
+	return descendants
+end
+
+function CooldownPanels:PopulateEditorGroupRadioMenu(menu, root, selectedGroupId, onSelect, options)
+	if not (menu and onSelect) then return false end
+	root = CooldownPanels.EnsureEditorGroupStorage(root)
+	selectedGroupId = normalizeId(selectedGroupId)
+	local childrenByParent, depthByGroup = self:BuildEditorGroupHierarchy(root)
+	local skipGroupIds = options and options.skipGroupIds or nil
+	local hasGroups = false
+
+	local function appendChoices(parentGroupId)
+		local key = parentGroupId ~= nil and tostring(parentGroupId) or "__root"
+		for _, groupId in ipairs(childrenByParent[key] or {}) do
+			local group = root.editorGroups and root.editorGroups[groupId] or nil
+			if group then
+				local skip = skipGroupIds and skipGroupIds[groupId] == true
+				if not skip then
+					hasGroups = true
+					local depth = depthByGroup[groupId] or 0
+					local prefix = depth > 0 and string.rep("> ", depth) or ""
+					local label = prefix .. (group.name or ("Group " .. tostring(groupId)))
+					local targetGroupId = normalizeId(groupId)
+					menu:CreateRadio(label, function() return selectedGroupId == targetGroupId end, function() onSelect(targetGroupId) end)
+				end
+				appendChoices(groupId)
+			end
+		end
+	end
+
+	appendChoices(nil)
+	return hasGroups
+end
+
+function CooldownPanels:CreateEditorGroup(name, parentGroupId)
 	local root = ensureRoot()
 	if not root then return nil end
 	root = CooldownPanels.EnsureEditorGroupStorage(root)
@@ -1960,7 +2085,9 @@ function CooldownPanels:CreateEditorGroup(name)
 	local order = root.editorGroupOrder
 	local groupId = Helper.GetNextNumericId(groups)
 	local groupName = CooldownPanels.NormalizePanelGroupName(name) or (L["CooldownPanelNewGroup"] or "New Group")
-	groups[groupId] = { id = groupId, name = groupName }
+	parentGroupId = normalizeId(parentGroupId)
+	if parentGroupId and not groups[parentGroupId] then parentGroupId = nil end
+	groups[groupId] = { id = groupId, name = groupName, parentGroupId = parentGroupId }
 	order[#order + 1] = groupId
 	self:SortEditorGroupOrder(root)
 	return groupId
@@ -1982,11 +2109,31 @@ function CooldownPanels:DeleteEditorGroup(groupId)
 	root = CooldownPanels.EnsureEditorGroupStorage(root)
 	groupId = normalizeId(groupId)
 	if not (root and root.editorGroups and groupId and root.editorGroups[groupId]) then return false end
+	local parentGroupId = normalizeId(root.editorGroups[groupId].parentGroupId)
 	root.editorGroups[groupId] = nil
 	Helper.SyncOrder(root.editorGroupOrder, root.editorGroups)
-	for _, panel in pairs(root.panels or {}) do
-		if panel and normalizeId(panel.editorGroupId) == groupId then panel.editorGroupId = nil end
+	for _, group in pairs(root.editorGroups or {}) do
+		if group and normalizeId(group.parentGroupId) == groupId then group.parentGroupId = parentGroupId end
 	end
+	for _, panel in pairs(root.panels or {}) do
+		if panel and normalizeId(panel.editorGroupId) == groupId then panel.editorGroupId = parentGroupId end
+	end
+	return true
+end
+
+function CooldownPanels:SetEditorGroupParent(groupId, parentGroupId)
+	local root = ensureRoot()
+	root = CooldownPanels.EnsureEditorGroupStorage(root)
+	groupId = normalizeId(groupId)
+	parentGroupId = normalizeId(parentGroupId)
+	local group = root and root.editorGroups and groupId and root.editorGroups[groupId] or nil
+	if not group then return false end
+	if parentGroupId == nil then
+		group.parentGroupId = nil
+		return true
+	end
+	if not self:CanSetEditorGroupParent(root, groupId, parentGroupId) then return false end
+	group.parentGroupId = parentGroupId
 	return true
 end
 
@@ -4404,9 +4551,7 @@ local function hasItem(itemID)
 	return false
 end
 
-local function itemHasUseSpell(itemID)
-	return CooldownPanels.GetItemUseSpellID and CooldownPanels:GetItemUseSpellID(itemID) ~= nil or false
-end
+local function itemHasUseSpell(itemID) return CooldownPanels.GetItemUseSpellID and CooldownPanels:GetItemUseSpellID(itemID) ~= nil or false end
 
 local function clearItemUseSpellCache()
 	local runtime = CooldownPanels.runtime
@@ -9952,11 +10097,16 @@ function CooldownPanels:EnsureEditorGroupCreatePopup()
 				if editBox.HighlightText then editBox:HighlightText() end
 			end
 		end,
-		OnAccept = function(self)
+		OnAccept = function(self, data)
 			local editBox = self.editBox or self.GetEditBox and self:GetEditBox()
 			local text = editBox and editBox:GetText()
-			local groupId = CooldownPanels:CreateEditorGroup(text)
-			if groupId and CooldownPanels.IsEditorOpen and CooldownPanels:IsEditorOpen() then CooldownPanels:RefreshEditor() end
+			local parentGroupId = data and normalizeId(data.parentGroupId) or nil
+			local groupId = CooldownPanels:CreateEditorGroup(text, parentGroupId)
+			if groupId and CooldownPanels.IsEditorOpen and CooldownPanels:IsEditorOpen() then
+				local editor = getEditor()
+				if editor and parentGroupId ~= nil then CooldownPanels:GetEditorPanelGroupState(editor)[CooldownPanels:GetEditorPanelGroupStateKey(parentGroupId)] = nil end
+				CooldownPanels:RefreshEditor()
+			end
 		end,
 	}
 	StaticPopupDialogs["EQOL_COOLDOWN_PANEL_GROUP_CREATE"].EditBoxOnEnterPressed = function(editBox)
@@ -10018,9 +10168,10 @@ function CooldownPanels:EnsureEditorGroupDeletePopup()
 	}
 end
 
-function CooldownPanels:ShowEditorGroupCreatePopup()
+function CooldownPanels:ShowEditorGroupCreatePopup(parentGroupId)
+	parentGroupId = normalizeId(parentGroupId)
 	self:EnsureEditorGroupCreatePopup()
-	StaticPopup_Show("EQOL_COOLDOWN_PANEL_GROUP_CREATE")
+	StaticPopup_Show("EQOL_COOLDOWN_PANEL_GROUP_CREATE", nil, nil, { parentGroupId = parentGroupId })
 end
 
 function CooldownPanels:ShowEditorGroupRenamePopup(groupId)
@@ -10034,9 +10185,27 @@ function CooldownPanels:ShowEditorGroupMenu(owner, groupId)
 	groupId = normalizeId(groupId)
 	if not (owner and groupId and Api.MenuUtil and Api.MenuUtil.CreateContextMenu) then return end
 	local root = ensureRoot()
-	local groupName = CooldownPanels.GetEditorGroupName(root, groupId) or ("Group " .. tostring(groupId))
+	root = CooldownPanels.EnsureEditorGroupStorage(root)
+	local group = root and root.editorGroups and root.editorGroups[groupId] or nil
+	local groupName = group and group.name or ("Group " .. tostring(groupId))
+	local currentParentId = group and normalizeId(group.parentGroupId) or nil
+	local blockedGroupIds = CooldownPanels:GetEditorGroupDescendantIdSet(root, groupId)
+	blockedGroupIds[groupId] = true
 	Api.MenuUtil.CreateContextMenu(owner, function(_, rootDescription)
 		rootDescription:CreateTitle(groupName)
+		rootDescription:CreateDivider()
+		rootDescription:CreateButton(L["CooldownPanelAddSubgroup"] or "Add Subgroup", function() CooldownPanels:ShowEditorGroupCreatePopup(groupId) end)
+		local parentMenu = rootDescription:CreateButton(L["CooldownPanelMoveToGroup"] or "Move to group")
+		parentMenu:CreateRadio(L["CooldownPanelTopLevel"] or "Top level", function() return currentParentId == nil end, function()
+			if CooldownPanels:SetEditorGroupParent(groupId, nil) then CooldownPanels:RefreshEditor() end
+		end)
+		CooldownPanels:PopulateEditorGroupRadioMenu(parentMenu, root, currentParentId, function(targetGroupId)
+			if CooldownPanels:SetEditorGroupParent(groupId, targetGroupId) then
+				local editor = getEditor()
+				if editor then CooldownPanels:GetEditorPanelGroupState(editor)[CooldownPanels:GetEditorPanelGroupStateKey(targetGroupId)] = nil end
+				CooldownPanels:RefreshEditor()
+			end
+		end, { skipGroupIds = blockedGroupIds })
 		rootDescription:CreateDivider()
 		rootDescription:CreateButton(L["CooldownPanelRename"] or "Rename", function() CooldownPanels:ShowEditorGroupRenamePopup(groupId) end)
 		rootDescription:CreateButton(DELETE or "Delete", function()
@@ -10069,18 +10238,9 @@ function CooldownPanels:ShowPanelGroupAssignMenu(owner, panelId)
 			if CooldownPanels:SetPanelEditorGroup(panelId, nil) then CooldownPanels:RefreshEditor() end
 		end)
 
-		local hasGroups = false
-		for _, groupId in ipairs(root.editorGroupOrder or {}) do
-			local group = root.editorGroups and root.editorGroups[groupId] or nil
-			if group then
-				hasGroups = true
-				local targetGroupId = normalizeId(groupId)
-				local label = group.name or ("Group " .. tostring(targetGroupId))
-				groupMenu:CreateRadio(label, function() return currentGroupId == targetGroupId end, function()
-					if CooldownPanels:SetPanelEditorGroup(panelId, targetGroupId) then CooldownPanels:RefreshEditor() end
-				end)
-			end
-		end
+		local hasGroups = CooldownPanels:PopulateEditorGroupRadioMenu(groupMenu, root, currentGroupId, function(targetGroupId)
+			if CooldownPanels:SetPanelEditorGroup(panelId, targetGroupId) then CooldownPanels:RefreshEditor() end
+		end)
 
 		if not hasGroups then
 			groupMenu:CreateButton(L["CooldownPanelNoGroups"] or "No groups", function() end)
@@ -10138,15 +10298,15 @@ local function refreshPanelList(editor, root, classSpecs)
 	local filterByClass = addon.db and addon.db.cooldownPanelsFilterClass == true
 	local hideEmptyGroups = addon.db and addon.db.cooldownPanelsHideEmptyGroups == true
 	local groups = root.editorGroups or {}
-	local groupOrder = root.editorGroupOrder or {}
 	local groupedPanelIds = {}
 	local ungroupedPanelIds = {}
 	local entries = {}
 	local showUngroupedBucket = false
 
 	CooldownPanels:SortEditorGroupOrder(root)
+	local childrenByParent = CooldownPanels:BuildEditorGroupHierarchy(root)
 
-	for _, groupId in ipairs(groupOrder) do
+	for _, groupId in ipairs(root.editorGroupOrder or {}) do
 		if groups[groupId] then groupedPanelIds[groupId] = {} end
 	end
 
@@ -10169,31 +10329,70 @@ local function refreshPanelList(editor, root, classSpecs)
 
 	showUngroupedBucket = #ungroupedPanelIds > 0 or editor.draggingPanel == true
 
-	local function appendBucket(groupId, label, panelIds)
+	local function getHierarchyKey(groupId)
+		groupId = normalizeId(groupId)
+		if groupId ~= nil then return tostring(groupId) end
+		return "__root"
+	end
+
+	local visibleGroupCounts = {}
+
+	local function getVisibleGroupCount(groupId)
+		if visibleGroupCounts[groupId] ~= nil then return visibleGroupCounts[groupId] end
+		local count = #(groupedPanelIds[groupId] or {})
+		for _, childGroupId in ipairs(childrenByParent[getHierarchyKey(groupId)] or {}) do
+			count = count + getVisibleGroupCount(childGroupId)
+		end
+		visibleGroupCounts[groupId] = count
+		return count
+	end
+
+	local function appendBucket(groupId, label, count, depth)
 		local collapsed = CooldownPanels:IsEditorPanelGroupCollapsed(editor, groupId)
 		entries[#entries + 1] = {
 			kind = "bucket",
 			groupId = groupId,
 			label = label,
-			count = #panelIds,
+			count = count or 0,
 			collapsed = collapsed,
+			depth = depth or 0,
 		}
-		if collapsed then return end
-		for _, panelId in ipairs(panelIds) do
+		return collapsed ~= true
+	end
+
+	local function appendGroup(groupId, depth)
+		local group = groups[groupId]
+		if not group then return end
+		local count = getVisibleGroupCount(groupId)
+		if hideEmptyGroups and count <= 0 and editor.draggingPanel ~= true then return end
+		if not appendBucket(groupId, group.name or ("Group " .. tostring(groupId)), count, depth) then return end
+		for _, childGroupId in ipairs(childrenByParent[getHierarchyKey(groupId)] or {}) do
+			appendGroup(childGroupId, depth + 1)
+		end
+		for _, panelId in ipairs(groupedPanelIds[groupId] or {}) do
 			entries[#entries + 1] = {
 				kind = "panel",
 				groupId = groupId,
 				panelId = panelId,
 				panel = root.panels and root.panels[panelId] or nil,
+				depth = (depth or 0) + 1,
 			}
 		end
 	end
 
-	if showUngroupedBucket then appendBucket(nil, L["CooldownPanelUngrouped"] or "Ungrouped", ungroupedPanelIds) end
-	for _, groupId in ipairs(groupOrder) do
-		local group = groups[groupId]
-		local panelIds = groupedPanelIds[groupId] or {}
-		if group and (not hideEmptyGroups or #panelIds > 0 or editor.draggingPanel == true) then appendBucket(groupId, group.name or ("Group " .. tostring(groupId)), panelIds) end
+	if showUngroupedBucket and appendBucket(nil, L["CooldownPanelUngrouped"] or "Ungrouped", #ungroupedPanelIds, 0) then
+		for _, panelId in ipairs(ungroupedPanelIds) do
+			entries[#entries + 1] = {
+				kind = "panel",
+				groupId = nil,
+				panelId = panelId,
+				panel = root.panels and root.panels[panelId] or nil,
+				depth = 1,
+			}
+		end
+	end
+	for _, groupId in ipairs(childrenByParent["__root"] or {}) do
+		appendGroup(groupId, 0)
 	end
 
 	for _, entry in ipairs(entries) do
@@ -10333,22 +10532,26 @@ local function refreshPanelList(editor, root, classSpecs)
 		row:Show()
 
 		if entry.kind == "bucket" then
+			local depth = entry.depth or 0
 			row._eqolPanelListKind = "bucket"
 			row.panelId = nil
 			row.groupId = entry.groupId
 			row.toggle:Show()
 			row.toggleFrame:Show()
+			row.toggleFrame:ClearAllPoints()
+			row.toggleFrame:SetPoint("LEFT", row, "LEFT", 4 + (depth * 14), 0)
 			row.toggle:ClearAllPoints()
 			row.toggle:SetPoint("CENTER", row.toggleFrame, "CENTER", 0, 0)
 			row.toggle:SetAtlas(entry.collapsed and "NPE_ArrowRight" or "NPE_ArrowDown")
 			row.label:ClearAllPoints()
-			row.label:SetPoint("LEFT", row, "LEFT", 24, 0)
+			row.label:SetPoint("LEFT", row, "LEFT", 24 + (depth * 14), 0)
 			row.label:SetText(entry.label or (L["CooldownPanelUngrouped"] or "Ungrouped"))
 			row.label:SetTextColor(1, 0.9, 0.6, 1)
 			row.count:SetText(tostring(entry.count or 0))
 			row.count:SetTextColor(0.9, 0.9, 0.9, 1)
 			updateRowVisual(row, false)
 		else
+			local depth = entry.depth or 1
 			local panelId = entry.panelId
 			local panel = entry.panel
 			row._eqolPanelListKind = "panel"
@@ -10357,7 +10560,7 @@ local function refreshPanelList(editor, root, classSpecs)
 			row.toggle:Hide()
 			row.toggleFrame:Hide()
 			row.label:ClearAllPoints()
-			row.label:SetPoint("LEFT", row, "LEFT", 22, 0)
+			row.label:SetPoint("LEFT", row, "LEFT", 22 + (depth * 14), 0)
 			row.label:SetText((panel and panel.name) or ("Panel " .. tostring(panelId)))
 			row.label:SetTextColor(1, 1, 1, 1)
 			row.count:SetText(tostring(panel and panel.order and #panel.order or 0))
@@ -12037,59 +12240,80 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 					if not show and showCharges and chargesInfo and isSafeLessThan(chargesInfo.currentCharges, chargesInfo.maxCharges) then show = true end
 					if not show and showStacks and Helper.HasDisplayCount(stackCount) then show = true end
 				end
-				elseif resolvedType == "ITEM" and resolvedItemId then
-					local itemCache = shared and shared.itemCountCache
-					local cached = itemCache and itemCache[resolvedItemId]
-					local cachedCount = cached and cached.count
-					local cachedUses = cached and cached.uses
-					local ownsItem
-					if cachedCount ~= nil then
-						ownsItem = cachedCount > 0 or (Api.IsEquippedItem and Api.IsEquippedItem(resolvedItemId))
-					else
-						ownsItem = hasItem(resolvedItemId)
+			elseif resolvedType == "ITEM" and resolvedItemId then
+				local itemCache = shared and shared.itemCountCache
+				local cached = itemCache and itemCache[resolvedItemId]
+				local cachedCount = cached and cached.count
+				local cachedUses = cached and cached.uses
+				local ownsItem
+				if cachedCount ~= nil then
+					ownsItem = cachedCount > 0 or (Api.IsEquippedItem and Api.IsEquippedItem(resolvedItemId))
+				else
+					ownsItem = hasItem(resolvedItemId)
+				end
+				emptyItem = showWhenEmpty and not ownsItem
+				if (ownsItem or showWhenEmpty) and itemHasUseSpell(resolvedItemId) then
+					canTriggerReadyGlow = ownsItem == true
+					if trackCooldown and ownsItem then
+						cooldownStart, cooldownDuration, cooldownEnabled = getItemCooldownInfo(resolvedItemId)
+						if CooldownPanels:IsItemCooldownOnGCD(resolvedItemId, cooldownStart, cooldownDuration) then
+							cooldownStart, cooldownDuration, cooldownEnabled = 0, 0, true
+							cooldownGCD = true
+						end
 					end
-					emptyItem = showWhenEmpty and not ownsItem
-					if (ownsItem or showWhenEmpty) and itemHasUseSpell(resolvedItemId) then
-						canTriggerReadyGlow = ownsItem == true
-						if trackCooldown and ownsItem then
-							cooldownStart, cooldownDuration, cooldownEnabled = getItemCooldownInfo(resolvedItemId)
-							if CooldownPanels:IsItemCooldownOnGCD(resolvedItemId, cooldownStart, cooldownDuration) then
+					if showItemCount then
+						local count = cachedCount
+						if count == nil then
+							count = Api.GetItemCount(resolvedItemId, false, false) or 0
+							if itemCache then
+								local slot = itemCache[resolvedItemId] or {}
+								slot.count = count
+								if slot.uses == nil then slot.uses = cachedUses end
+								itemCache[resolvedItemId] = slot
+							end
+						end
+						if isSafeGreaterThan(count, 0) then
+							itemCount = count
+						elseif showWhenEmpty then
+							itemCount = 0
+						end
+					end
+					if showItemUses then
+						local uses = cachedUses
+						if uses == nil then
+							uses = Api.GetItemCount(resolvedItemId, false, true) or 0
+							if itemCache then
+								local slot = itemCache[resolvedItemId] or {}
+								slot.uses = uses
+								if slot.count == nil then slot.count = cachedCount end
+								itemCache[resolvedItemId] = slot
+							end
+						end
+						if isSafeGreaterThan(uses, 0) then
+							itemUses = uses
+						elseif showWhenEmpty then
+							itemUses = 0
+						end
+					end
+					cooldownEnabledOk = isSafeNotFalse(cooldownEnabled)
+					if showCooldown and isCooldownActive(cooldownStart, cooldownDuration) then
+						cooldownEnabledOk = true
+						cooldownEnabled = true
+					end
+					show = alwaysShow or showWhenEmpty
+					if not show and showCooldown and cooldownEnabledOk and isCooldownActive(cooldownStart, cooldownDuration) then show = true end
+				end
+			elseif resolvedType == "SLOT" and resolvedSlotId then
+				local itemId = Api.GetInventoryItemID and Api.GetInventoryItemID("player", resolvedSlotId) or nil
+				if itemId then
+					iconTexture = Api.GetItemIconByID and Api.GetItemIconByID(itemId) or iconTexture
+					if itemHasUseSpell(itemId) then
+						canTriggerReadyGlow = true
+						if trackCooldown then
+							cooldownStart, cooldownDuration, cooldownEnabled = getItemCooldownInfo(itemId, resolvedSlotId)
+							if CooldownPanels:IsItemCooldownOnGCD(itemId, cooldownStart, cooldownDuration) then
 								cooldownStart, cooldownDuration, cooldownEnabled = 0, 0, true
 								cooldownGCD = true
-							end
-						end
-						if showItemCount then
-							local count = cachedCount
-							if count == nil then
-								count = Api.GetItemCount(resolvedItemId, false, false) or 0
-								if itemCache then
-									local slot = itemCache[resolvedItemId] or {}
-									slot.count = count
-									if slot.uses == nil then slot.uses = cachedUses end
-									itemCache[resolvedItemId] = slot
-								end
-							end
-							if isSafeGreaterThan(count, 0) then
-								itemCount = count
-							elseif showWhenEmpty then
-								itemCount = 0
-							end
-						end
-						if showItemUses then
-							local uses = cachedUses
-							if uses == nil then
-								uses = Api.GetItemCount(resolvedItemId, false, true) or 0
-								if itemCache then
-									local slot = itemCache[resolvedItemId] or {}
-									slot.uses = uses
-									if slot.count == nil then slot.count = cachedCount end
-									itemCache[resolvedItemId] = slot
-								end
-							end
-							if isSafeGreaterThan(uses, 0) then
-								itemUses = uses
-							elseif showWhenEmpty then
-								itemUses = 0
 							end
 						end
 						cooldownEnabledOk = isSafeNotFalse(cooldownEnabled)
@@ -12097,34 +12321,13 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 							cooldownEnabledOk = true
 							cooldownEnabled = true
 						end
-						show = alwaysShow or showWhenEmpty
+						show = alwaysShow or showWhenNoCooldown
 						if not show and showCooldown and cooldownEnabledOk and isCooldownActive(cooldownStart, cooldownDuration) then show = true end
+					elseif showWhenNoCooldown then
+						show = true
 					end
-				elseif resolvedType == "SLOT" and resolvedSlotId then
-					local itemId = Api.GetInventoryItemID and Api.GetInventoryItemID("player", resolvedSlotId) or nil
-					if itemId then
-						iconTexture = Api.GetItemIconByID and Api.GetItemIconByID(itemId) or iconTexture
-						if itemHasUseSpell(itemId) then
-							canTriggerReadyGlow = true
-							if trackCooldown then
-								cooldownStart, cooldownDuration, cooldownEnabled = getItemCooldownInfo(itemId, resolvedSlotId)
-								if CooldownPanels:IsItemCooldownOnGCD(itemId, cooldownStart, cooldownDuration) then
-									cooldownStart, cooldownDuration, cooldownEnabled = 0, 0, true
-									cooldownGCD = true
-								end
-							end
-							cooldownEnabledOk = isSafeNotFalse(cooldownEnabled)
-							if showCooldown and isCooldownActive(cooldownStart, cooldownDuration) then
-								cooldownEnabledOk = true
-								cooldownEnabled = true
-							end
-							show = alwaysShow or showWhenNoCooldown
-							if not show and showCooldown and cooldownEnabledOk and isCooldownActive(cooldownStart, cooldownDuration) then show = true end
-						elseif showWhenNoCooldown then
-							show = true
-						end
-					end
-				elseif resolvedType == "STANCE" then
+				end
+			elseif resolvedType == "STANCE" then
 				if not stanceRelevant then
 					show = false
 				elseif showWhenMissing then

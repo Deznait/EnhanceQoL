@@ -5,6 +5,7 @@
 ### ✨ Added
 
 - Cooldown Panels (Editor): Added panel duplication from the panel-list right-click context menu. Duplicates keep their entries, layout, and group assignment.
+- Cooldown Panels (Editor): Added nested groups in the left panel list. Groups can now contain subgroups, and group context menus support creating subgroups and moving groups between parent groups.
 
 ### 🔄 Changed
 
