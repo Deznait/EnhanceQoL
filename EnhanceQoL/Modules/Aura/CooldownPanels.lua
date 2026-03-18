@@ -11356,11 +11356,7 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 							itemUses = 0
 						end
 					end
-					cooldownEnabledOk = isSafeNotFalse(cooldownEnabled)
-					if showCooldown and isCooldownActive(cooldownStart, cooldownDuration) then
-						cooldownEnabledOk = true
-						cooldownEnabled = true
-					end
+					cooldownEnabledOk = cooldownEnabled ~= false and cooldownEnabled ~= 0
 					show = alwaysShow or showWhenEmpty
 					if not show and showCooldown and cooldownEnabledOk and isCooldownActive(cooldownStart, cooldownDuration) then show = true end
 				end
@@ -11377,11 +11373,7 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 								cooldownGCD = true
 							end
 						end
-						cooldownEnabledOk = isSafeNotFalse(cooldownEnabled)
-						if showCooldown and isCooldownActive(cooldownStart, cooldownDuration) then
-							cooldownEnabledOk = true
-							cooldownEnabled = true
-						end
+						cooldownEnabledOk = cooldownEnabled ~= false and cooldownEnabled ~= 0
 						show = alwaysShow or showWhenNoCooldown
 						if not show and showCooldown and cooldownEnabledOk and isCooldownActive(cooldownStart, cooldownDuration) then show = true end
 					elseif showWhenNoCooldown then
@@ -11667,6 +11659,7 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 			local cooldownRate = data.cooldownRate or 1
 			local cooldownDurationObject = data.cooldownDurationObject
 			local cooldownEnabledOk = isSafeNotFalse(data.cooldownEnabled)
+			if data.resolvedType == "ITEM" or data.resolvedType == "SLOT" then cooldownEnabledOk = data.cooldownEnabled ~= false and data.cooldownEnabled ~= 0 end
 			local cooldownRemaining = data.cooldownRemaining
 			local durationActive = cooldownDurationObject ~= nil and (cooldownRemaining == nil or cooldownRemaining > 0)
 			local cdmAuraActive = data.cdmAuraActive == true
@@ -11937,6 +11930,8 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 				icon.texture:SetVertexColor(unusableTintR or 0.6, unusableTintG or 0.6, unusableTintB or 0.6)
 			elseif data.powerInsufficient then
 				icon.texture:SetVertexColor(powerTintR or 0.5, powerTintG or 0.5, powerTintB or 1)
+			elseif (data.resolvedType == "ITEM" or data.resolvedType == "SLOT") and not cooldownEnabledOk and isSafeGreaterThan(cooldownDuration, 0) then
+				icon.texture:SetVertexColor(0.4, 0.4, 0.4)
 			else
 				icon.texture:SetVertexColor(1, 1, 1)
 			end

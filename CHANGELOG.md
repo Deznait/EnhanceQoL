@@ -4,7 +4,8 @@
 
 ### 🐛 Fixed
 
-- Cooldown Panels (Static text): Wrongly showed static text when not on CD
+- Cooldown Panels (Static text): Wrongly showed static text when not on CD.
+- Cooldown Panels (Items/Slots): Item uses with delayed CD start (Healthstones) are not correctly shown.
 
 ---
 
