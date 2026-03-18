@@ -3213,15 +3213,11 @@ function AuraUtil.applyAuraToButton(btn, aura, ac, isDebuff, unitToken)
 	btn.cd:Clear()
 	local showCooldown = ac.showCooldown ~= false
 	local showCooldownText = ac.showCooldownText
-	if showCooldownText then
-		if issecretvalue and (issecretvalue(aura.duration) or issecretvalue(aura.expirationTime)) then
-			local durObj = C_UnitAuras.GetAuraDuration(unitToken, aura.auraInstanceID)
-			if durObj then btn.cd:SetCooldownFromDurationObject(durObj) end
-		elseif aura.duration and aura.duration > 0 and aura.expirationTime then
-			btn.cd:SetCooldown(aura.expirationTime - aura.duration, aura.duration, aura.timeMod)
-		end
-	end
 	if showCooldownText == nil then showCooldownText = showCooldown end
+	if showCooldownText and aura.auraInstanceID and aura.auraInstanceID > 0 then
+		local durObj = C_UnitAuras.GetAuraDuration(unitToken, aura.auraInstanceID)
+		if durObj then btn.cd:SetCooldownFromDurationObject(durObj) end
+	end
 	local cooldownFontSize = ac.cooldownFontSize
 	if cooldownFontSize ~= nil and cooldownFontSize < 1 then cooldownFontSize = nil end
 	local countFontSize = ac.countFontSize
