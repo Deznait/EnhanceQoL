@@ -5,6 +5,7 @@
 ### 🐛 Fixed
 
 - Castbars: Fixed a bug with ghost casts
+- Unit Frames (Boss): Fixed boss frames not always appearing correctly when boss units became targetable after the initial encounter engage event.
 
 ---
 
