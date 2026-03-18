@@ -305,7 +305,7 @@ end
 local function ApplyCooldownToButton(b)
 	if not b or not b.cooldownFrame or not b.entry then return end
 	local entry = b.entry
-	local startTime, duration, modRate, enabled
+	local startTime, duration, modRate, enabled, durationObj
 	if entry.isToy and entry.toyID then
 		local st, dur, en = C_Item.GetItemCooldown(entry.toyID)
 		startTime, duration, modRate, enabled = st, dur, 1, en
@@ -313,13 +313,12 @@ local function ApplyCooldownToButton(b)
 		local st, dur, en = C_Item.GetItemCooldown(entry.itemID)
 		startTime, duration, modRate, enabled = st, dur, 1, en
 	else
-		local cd = C_Spell.GetSpellCooldown(entry.spellID)
-		if cd then
-			startTime, duration, modRate, enabled = cd.startTime, cd.duration, cd.modRate, cd.isEnabled
-		end
+		durationObj = C_Spell.GetSpellCooldownDuration(entry.spellID)
 	end
 
-	if issecretvalue and issecretvalue(enabled) then
+	if nil ~= durationObj then
+		b.cooldownFrame:SetCooldownFromDurationObject(durationObj)
+	elseif issecretvalue and issecretvalue(enabled) then
 		b.cooldownFrame:SetCooldown(startTime or 0, duration or 0, modRate or 1)
 	elseif enabled and duration and duration > 0 then
 		b.cooldownFrame:SetCooldown(startTime or 0, duration or 0, modRate or 1)

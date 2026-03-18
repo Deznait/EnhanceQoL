@@ -4,7 +4,7 @@
 
 ### 🔄 Changed
 
-- Action Tracker: Changed some API to newer API
+- Action Tracker, World Map Teleport, Dungeon Teleport: Changed some API to newer API
 
 ### 🐛 Fixed
 

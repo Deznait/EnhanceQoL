@@ -83,7 +83,7 @@ end
 local function GetCooldownData(spellInfo)
 	if not spellInfo then return nil end
 
-	local startTime, duration, modRate, isEnabled
+	local startTime, duration, modRate, isEnabled, durObj
 	if spellInfo.isToy then
 		if spellInfo.toyID then
 			local st, dur, en = GetItemCooldownFn(spellInfo.toyID)
@@ -104,18 +104,16 @@ local function GetCooldownData(spellInfo)
 				spellInfo.spellID = spellID
 			end
 		end
-		local cd = C_Spell.GetSpellCooldown(spellID)
-		if cd then
-			startTime, duration, modRate, isEnabled = cd.startTime, cd.duration, cd.modRate, cd.isEnabled
-		end
+		durObj = C_Spell.GetSpellCooldownDuration(spellID)
 	end
 
-	if startTime == nil and duration == nil and modRate == nil and isEnabled == nil then return nil end
+	if startTime == nil and duration == nil and modRate == nil and isEnabled == nil and durObj == nil then return nil end
 	return {
 		startTime = startTime,
 		duration = duration,
 		modRate = modRate,
 		isEnabled = isEnabled,
+		durObj = durObj,
 	}
 end
 
@@ -128,7 +126,9 @@ local function ApplyCooldownToButton(button)
 	local modRate = cooldownData and cooldownData.modRate
 	local enabled = cooldownData and cooldownData.isEnabled
 
-	if issecretvalue and issecretvalue(enabled) then
+	if cooldownData.durObj then
+		button.cooldownFrame:SetCooldownFromDurationObject(cooldownData.durObj)
+	elseif issecretvalue and issecretvalue(enabled) then
 		button.cooldownFrame:SetCooldown(startTime or 0, duration or 0, modRate or 1)
 	elseif enabled and duration and duration > 0 then
 		button.cooldownFrame:SetCooldown(startTime or 0, duration or 0, modRate or 1)
