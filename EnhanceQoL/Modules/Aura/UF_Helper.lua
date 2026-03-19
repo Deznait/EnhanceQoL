@@ -809,12 +809,12 @@ function H.ApplyPrivateAuras(container, unit, cfg, parent, levelFrame, showSampl
 	local amount = floor(tonumber(iconCfg.amount) or 1)
 	if amount < 1 then amount = 1 end
 	local size = floor(tonumber(iconCfg.size) or 24)
-	if size > 30 then size = 30 end
+	if size > 60 then size = 60 end
 	if size < 4 then size = 4 end
 	local iconPoint = tostring(iconCfg.point or "RIGHT"):upper()
 	local iconOffset = tonumber(iconCfg.offset or iconCfg.spacing or 2) or 0
 	local borderScale = tonumber(iconCfg.borderScale)
-	if borderScale == nil then borderScale = 1 end
+	if borderScale == nil then borderScale = (size / 32) * 2 end
 
 	local showFrame = cfg.countdownFrame ~= false
 	local showNumbers = cfg.countdownNumbers ~= false

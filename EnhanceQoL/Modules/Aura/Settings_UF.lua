@@ -7085,11 +7085,11 @@ local function buildUnitSettings(unit)
 		list[#list + 1] = slider(
 			L["UFPrivateAurasSize"] or "Private aura size",
 			8,
-			30,
+			60,
 			1,
 			function() return getValue(unit, { "privateAuras", "icon", "size" }, (paDef.icon and paDef.icon.size) or 24) end,
 			function(val)
-				setValue(unit, { "privateAuras", "icon", "size" }, clampNumber(val or 24, 8, 30, 24))
+				setValue(unit, { "privateAuras", "icon", "size" }, clampNumber(val or 24, 8, 60, 24))
 				refresh()
 			end,
 			(paDef.icon and paDef.icon.size) or 24,

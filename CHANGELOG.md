@@ -1,11 +1,17 @@
 # Changelog
 
-## [9.6.2] - 2026-03-18
+## [9.7.0] - 2026-03-19
+
+### 🔄 Changed
+
+- Private Auras: Increased the supported private aura icon size limit to `60`.
+- Private Auras: Improved large private aura rendering so the Blizzard border now scales with the configured icon size instead of staying visually too small on oversized icons.
 
 ### 🐛 Fixed
 
 - Castbars: Fixed a bug with ghost casts
 - Unit Frames (Boss): Fixed boss frames not always appearing correctly when boss units became targetable after the initial encounter engage event.
+- Private Auras (Tooltip / Hover): Fixed private aura tooltips interfering with mouse hover and click-through behavior on unit and group frames.
 
 ---
 
