@@ -46,6 +46,18 @@ CooldownPanels.itemHighestRankByID = CooldownPanels.itemHighestRankByID
 		[241308] = { 241309, 241308 },
 	}
 
+CooldownPanels.spellVariantGroupByID = CooldownPanels.spellVariantGroupByID or {}
+
+CooldownPanels.staticSpellVariantGroups = CooldownPanels.staticSpellVariantGroups
+	or {
+		-- Blood Elf racial with class-specific spellIDs.
+		{ 202719, 50613, 80483, 28730, 129597, 155145, 232633, 25046, 69179 },
+		-- Orc racial with physical / hybrid / intellect variants.
+		{ 20572, 33697, 33702 },
+		-- Draenei racial with class-specific spellIDs.
+		{ 59545, 59543, 59548, 121093, 59542, 59544, 59547, 28880, 370626, 416250 },
+	}
+
 function CooldownPanels:RegisterItemRankGroup(rankList)
 	if type(rankList) ~= "table" then return false end
 	local ids = {}
@@ -61,6 +73,29 @@ function CooldownPanels:RegisterItemRankGroup(rankList)
 	end
 	for i = 1, #ids do
 		rankMap[ids[i]] = ids
+	end
+	return true
+end
+
+function CooldownPanels:RegisterSpellVariantGroup(variantList)
+	if type(variantList) ~= "table" then return false end
+	local ids = {}
+	local seen = {}
+	for i = 1, #variantList do
+		local spellID = tonumber(variantList[i])
+		if spellID and spellID > 0 and not seen[spellID] then
+			seen[spellID] = true
+			ids[#ids + 1] = spellID
+		end
+	end
+	if #ids < 2 then return false end
+	local groupMap = self.spellVariantGroupByID
+	if type(groupMap) ~= "table" then
+		groupMap = {}
+		self.spellVariantGroupByID = groupMap
+	end
+	for i = 1, #ids do
+		groupMap[ids[i]] = ids
 	end
 	return true
 end
@@ -390,6 +425,44 @@ local function getBaseSpellId(spellId)
 		if type(baseId) == "number" and baseId > 0 then return baseId end
 	end
 	return id
+end
+
+function CooldownPanels:EnsureStaticSpellVariantGroupsLoaded()
+	self.runtime = self.runtime or {}
+	if self.runtime.staticSpellVariantGroupsLoaded == true then return end
+	local groups = self.staticSpellVariantGroups
+	for i = 1, #(groups or {}) do
+		self:RegisterSpellVariantGroup(groups[i])
+	end
+	self.runtime.staticSpellVariantGroupsLoaded = true
+end
+
+function CooldownPanels:GetCanonicalSpellVariantID(spellId)
+	self:EnsureStaticSpellVariantGroupsLoaded()
+	local numericID = tonumber(spellId)
+	if not numericID then return nil, false, nil end
+	local baseSpellID = getBaseSpellId(numericID) or numericID
+	local groupMap = self.spellVariantGroupByID
+	local group = type(groupMap) == "table" and (groupMap[numericID] or groupMap[baseSpellID]) or nil
+	if not group or type(group) ~= "table" or #group == 0 then return baseSpellID, false, nil end
+	local canonicalID = tonumber(group[1]) or baseSpellID
+	return canonicalID, canonicalID ~= baseSpellID, group
+end
+
+function CooldownPanels:ResolveKnownSpellVariantID(spellId)
+	self:EnsureStaticSpellVariantGroupsLoaded()
+	local numericID = tonumber(spellId)
+	if not numericID then return nil, false, nil end
+	local baseSpellID = getBaseSpellId(numericID) or numericID
+	local groupMap = self.spellVariantGroupByID
+	local group = type(groupMap) == "table" and (groupMap[numericID] or groupMap[baseSpellID]) or nil
+	if not group or type(group) ~= "table" or #group == 0 then return baseSpellID, false, nil end
+	if Api.IsSpellKnown and Api.IsSpellKnown(baseSpellID, false) then return baseSpellID, false, group end
+	for i = 1, #group do
+		local candidateID = tonumber(group[i])
+		if candidateID and candidateID > 0 and Api.IsSpellKnown and Api.IsSpellKnown(candidateID, false) then return candidateID, candidateID ~= baseSpellID, group end
+	end
+	return baseSpellID, false, group
 end
 
 local function isSpellPassiveSafe(spellId, effectiveId)
@@ -2510,6 +2583,7 @@ function CooldownPanels:AddEntry(panelId, entryType, idValue, overrides)
 		if not numericValue then return nil end
 		if typeKey == "SPELL" then
 			numericValue = getBaseSpellId(numericValue) or numericValue
+			numericValue = self:ResolveKnownSpellVariantID(numericValue) or numericValue
 		elseif typeKey == "ITEM" then
 			local canonicalItemID, wasHigherRank = self:GetCanonicalItemRankID(numericValue)
 			numericValue = canonicalItemID
@@ -2577,6 +2651,8 @@ function CooldownPanels:FindEntryByValue(panelId, entryType, idValue)
 		return nil
 	end
 	local numericValue = tonumber(idValue)
+	local canonicalSpellValue = nil
+	if typeKey == "SPELL" and numericValue then canonicalSpellValue = self:GetCanonicalSpellVariantID(numericValue) or numericValue end
 	if typeKey == "ITEM" and numericValue then
 		local canonicalItemID = self:GetCanonicalItemRankID(numericValue)
 		numericValue = canonicalItemID or numericValue
@@ -2587,7 +2663,11 @@ function CooldownPanels:FindEntryByValue(panelId, entryType, idValue)
 	if typeKey ~= "SPELL" and typeKey ~= "ITEM" and typeKey ~= "SLOT" and typeKey ~= "STANCE" and typeKey ~= "MACRO" then return nil end
 	for entryId, entry in pairs(panel.entries or {}) do
 		if entry and entry.type == typeKey then
-			if typeKey == "SPELL" and entry.spellID == numericValue then return entryId, entry end
+			if typeKey == "SPELL" then
+				local entrySpellID = tonumber(entry.spellID)
+				local canonicalEntrySpellID = entrySpellID and (self:GetCanonicalSpellVariantID(entrySpellID) or entrySpellID) or nil
+				if canonicalEntrySpellID and canonicalSpellValue and canonicalEntrySpellID == canonicalSpellValue then return entryId, entry end
+			end
 			if typeKey == "ITEM" then
 				local entryItemID = tonumber(entry.itemID)
 				if entryItemID then
@@ -2817,12 +2897,33 @@ function CooldownPanels:NormalizeAll()
 		for entryId, entry in pairs(panel.entries) do
 			if entry and entry.id == nil then entry.id = entryId end
 			Helper.NormalizeEntry(entry, root.defaults)
+			if entry and entry.type == "SPELL" and entry.spellID then entry.spellID = self:ResolveKnownSpellVariantID(entry.spellID) or entry.spellID end
 			if entry and entry.type == "ITEM" then
 				local canonicalItemID, wasHigherRank = self:GetCanonicalItemRankID(entry.itemID)
 				if canonicalItemID then entry.itemID = canonicalItemID end
 				if wasHigherRank then entry.useHighestRank = true end
 			end
 		end
+		local seenSpellVariantEntries = nil
+		local removedDuplicateVariantEntry = false
+		for _, entryId in ipairs(panel.order or {}) do
+			local entry = panel.entries and panel.entries[entryId]
+			if entry and entry.type == "SPELL" and entry.spellID then
+				local canonicalSpellID, _, spellGroup = self:GetCanonicalSpellVariantID(entry.spellID)
+				if canonicalSpellID and spellGroup then
+					seenSpellVariantEntries = seenSpellVariantEntries or {}
+					if seenSpellVariantEntries[canonicalSpellID] then
+						panel.entries[entryId] = nil
+						local runtime = CooldownPanels.runtime
+						if runtime and runtime.actionDisplayCounts then runtime.actionDisplayCounts[Helper.GetEntryKey(panelId, entryId)] = nil end
+						removedDuplicateVariantEntry = true
+					else
+						seenSpellVariantEntries[canonicalSpellID] = entryId
+					end
+				end
+			end
+		end
+		if removedDuplicateVariantEntry then Helper.SyncOrder(panel.order, panel.entries) end
 	end
 	self:RebuildSpellIndex()
 	local cdmAuras = CooldownPanels.CDMAuras
@@ -2844,6 +2945,7 @@ function CooldownPanels:AddEntrySafe(panelId, entryType, idValue, overrides)
 			showErrorMessage(L["CooldownPanelSpellInvalid"] or "Spell does not exist.")
 			return nil
 		end
+		baseValue = self:ResolveKnownSpellVariantID(baseValue) or baseValue
 	end
 	if typeKey == "STANCE" then
 		local stanceDef = CooldownPanels.GetStanceDefinition and CooldownPanels:GetStanceDefinition(idValue) or nil
@@ -5610,7 +5712,10 @@ local function importCooldownManagerSpells(panelId, sourceKind)
 
 	local existingBySpellId = {}
 	for _, entry in pairs(panel.entries) do
-		if entry and entry.type == "SPELL" and entry.spellID then existingBySpellId[entry.spellID] = true end
+		if entry and entry.type == "SPELL" and entry.spellID then
+			local canonicalSpellID = CooldownPanels:GetCanonicalSpellVariantID(entry.spellID) or tonumber(entry.spellID)
+			if canonicalSpellID then existingBySpellId[canonicalSpellID] = true end
+		end
 	end
 
 	local function importChild(child, stats)
@@ -5624,16 +5729,18 @@ local function importCooldownManagerSpells(panelId, sourceKind)
 			stats.invalid = stats.invalid + 1
 			return
 		end
-		if existingBySpellId[baseSpellId] then
+		local resolvedSpellId = CooldownPanels:ResolveKnownSpellVariantID(baseSpellId) or baseSpellId
+		local canonicalSpellID = CooldownPanels:GetCanonicalSpellVariantID(resolvedSpellId) or resolvedSpellId
+		if existingBySpellId[canonicalSpellID] then
 			stats.duplicates = stats.duplicates + 1
 			return
 		end
 		local entryId = Helper.GetNextNumericId(panel.entries)
-		local entry = Helper.CreateEntry("SPELL", baseSpellId, root.defaults)
+		local entry = Helper.CreateEntry("SPELL", resolvedSpellId, root.defaults)
 		entry.id = entryId
 		panel.entries[entryId] = entry
 		panel.order[#panel.order + 1] = entryId
-		existingBySpellId[baseSpellId] = true
+		existingBySpellId[canonicalSpellID] = true
 		stats.added = stats.added + 1
 	end
 
@@ -8905,7 +9012,7 @@ local function ensureEditor()
 				CooldownPanels:RefreshEditor()
 				return
 			end
-			newValue = baseValue
+			newValue = CooldownPanels:ResolveKnownSpellVariantID(baseValue) or baseValue
 		elseif entry.type == "ITEM" then
 			local canonicalItemID, wasHigherRank = CooldownPanels:GetCanonicalItemRankID(newValue)
 			if canonicalItemID then newValue = canonicalItemID end

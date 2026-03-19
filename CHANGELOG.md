@@ -12,6 +12,10 @@
 - Character Panel (Enchant Display): Reworked the enchant display dropdown into combined applied/missing/icon modes. The old separate missing-enchant overlay checkbox was removed, and overlay behavior is now selected directly from the dropdown.
 - Character Panel / Inventory (Upgrade Tracks): Switched upgrade track detection from tooltip parsing to `C_Item.GetItemUpgradeInfo()`, so track IDs, labels, and upgrade progress now come directly from the API instead of tooltip scans.
 
+### 🐛 Fixed
+
+- Cooldown Panels (Racial spell variants): Fixed multi-ID racials like `Arcane Torrent`, `Blood Fury`, and `Gift of the Naaru` so dragged/imported entries now resolve to the correct known variant on the current character, duplicate variants are no longer added, and existing duplicate entries are cleaned up automatically on the next load/editor refresh.
+
 ---
 
 ## [9.7.0] - 2026-03-19
