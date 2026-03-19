@@ -238,11 +238,11 @@ local function applyCharTrackPosition(element, slot)
 	if pos == "OUTSIDE" then
 		local side = addon.variables.itemSlotSide and addon.variables.itemSlotSide[slot] or 0
 		if side == 1 then
-			element.trackLabel:SetPoint("RIGHT", element, "LEFT", -4, 0)
+			element.trackLabel:SetPoint("RIGHT", element, "LEFT", -3, -2)
 		elseif side == 2 then
 			element.trackLabel:SetPoint("BOTTOM", element, "TOPLEFT", -1, 5)
 		else
-			element.trackLabel:SetPoint("LEFT", element, "RIGHT", 4, 0)
+			element.trackLabel:SetPoint("LEFT", element, "RIGHT", 3, -2)
 		end
 		return
 	end
@@ -258,50 +258,29 @@ local function applyCharTrackPosition(element, slot)
 	end
 end
 
-local function getTrackGemPadding(element, slot, outsideWithIlvl)
-	if not element or not element.trackLabel or not element.trackLabel:IsShown() then return 0 end
-	local side = addon.variables.itemSlotSide and addon.variables.itemSlotSide[slot] or 0
-	local pos = addon.db["charTrackPosition"] or "LEFT"
-	local padding = math.ceil((element.trackLabel:GetStringWidth() or 0) + 6)
-	if padding <= 6 then return 0 end
-
-	if outsideWithIlvl then
-		if side == 0 and (pos == "RIGHT" or pos == "OUTSIDE") then return padding end
-		if side == 1 and (pos == "LEFT" or pos == "OUTSIDE") then return padding end
-		if side == 2 and (pos == "TOP" or pos == "OUTSIDE") then return padding end
-		return 0
-	end
-
-	if side == 0 and (pos == "RIGHT" or pos == "OUTSIDE") then return padding end
-	if side == 1 and (pos == "LEFT" or pos == "OUTSIDE") then return padding end
-	if side == 2 and (pos == "TOP" or pos == "OUTSIDE") then return padding end
-	return 0
-end
-
 local function positionGemFrame(element, slot, gemIndex, outsideWithIlvl)
 	if not element or not element.gems or not element.gems[gemIndex] then return end
 	local gemFrame = element.gems[gemIndex]
 	local side = addon.variables.itemSlotSide and addon.variables.itemSlotSide[slot] or 0
-	local trackPadding = getTrackGemPadding(element, slot, outsideWithIlvl)
 	gemFrame:ClearAllPoints()
 
 	if outsideWithIlvl and element.ilvlBackground then
 		if side == 1 then
-			gemFrame:SetPoint("TOPRIGHT", element.ilvlBackground, "TOPLEFT", -2 - trackPadding - (gemIndex - 1) * 16, -1)
+			gemFrame:SetPoint("TOPRIGHT", element.ilvlBackground, "TOPLEFT", -2 - (gemIndex - 1) * 16, 0)
 		elseif side == 2 then
-			gemFrame:SetPoint("BOTTOM", element.ilvlBackground, "TOP", 0, 2 + trackPadding + (gemIndex - 1) * 16)
+			gemFrame:SetPoint("BOTTOM", element.ilvlBackground, "TOP", 0, 3 + (gemIndex - 1) * 16)
 		else
-			gemFrame:SetPoint("TOPLEFT", element.ilvlBackground, "TOPRIGHT", 2 + trackPadding + (gemIndex - 1) * 16, -1)
+			gemFrame:SetPoint("TOPLEFT", element.ilvlBackground, "TOPRIGHT", 2 + (gemIndex - 1) * 16, 0)
 		end
 		return
 	end
 
 	if side == 0 then
-		gemFrame:SetPoint("TOPLEFT", element, "TOPRIGHT", 5 + trackPadding + (gemIndex - 1) * 16, -1)
+		gemFrame:SetPoint("TOPLEFT", element, "TOPRIGHT", 5 + (gemIndex - 1) * 16, 0)
 	elseif side == 1 then
-		gemFrame:SetPoint("TOPRIGHT", element, "TOPLEFT", -5 - trackPadding - (gemIndex - 1) * 16, -1)
+		gemFrame:SetPoint("TOPRIGHT", element, "TOPLEFT", -5 - (gemIndex - 1) * 16, 0)
 	else
-		gemFrame:SetPoint("BOTTOM", element, "TOPLEFT", -1, 5 + trackPadding + (gemIndex - 1) * 16)
+		gemFrame:SetPoint("BOTTOM", element, "TOPLEFT", -1, 6 + (gemIndex - 1) * 16)
 	end
 end
 
@@ -2036,21 +2015,22 @@ function addon.functions.initItemInventory()
 
 		value.enchant = value:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
 		if addon.variables.itemSlotSide[key] == 0 then
-			value.enchant:SetPoint("BOTTOMLEFT", value, "BOTTOMRIGHT", 2, 1)
+			value.enchant:SetPoint("BOTTOMLEFT", value, "BOTTOMRIGHT", 2, -2)
 		elseif addon.variables.itemSlotSide[key] == 2 then
-			value.enchant:SetPoint("BOTTOMLEFT", value, "BOTTOMRIGHT", 2, 1)
+			value.enchant:SetPoint("BOTTOMLEFT", value, "BOTTOMRIGHT", 2, -2)
 		else
-			value.enchant:SetPoint("BOTTOMRIGHT", value, "BOTTOMLEFT", -2, 1)
+			value.enchant:SetPoint("BOTTOMRIGHT", value, "BOTTOMLEFT", -2, -2)
 		end
 		applyEnchantTextStyle(value.enchant)
 
 		value.gems = {}
 		for i = 1, 3 do
-			value.gems[i] = CreateFrame("Frame", nil, PaperDollFrame)
+			value.gems[i] = CreateFrame("Frame", nil, value)
 			value.gems[i]:SetSize(16, 16) -- Setze die Größe des Icons
 			positionGemFrame(value, key, i, false)
 
-			value.gems[i]:SetFrameStrata("HIGH")
+			value.gems[i]:SetFrameStrata("DIALOG")
+			value.gems[i]:SetFrameLevel(value:GetFrameLevel() + 20)
 
 			value.gems[i]:SetScript("OnLeave", function(self) GameTooltip:Hide() end)
 
