@@ -6,6 +6,7 @@
 
 - Private Auras (Standalone): Added a new standalone private aura anchor that can be enabled independently from unit and group frames.
 - Character Panel / Inventory (Upgrade Tracks): Added upgrade track text for equipped items and equippable bag items, including localized track abbreviations, `current/max` progress display, configurable placement, and bag-filter support for `Explorer`, `Adventurer`, `Veteran`, `Champion`, `Hero`, and `Myth`.
+- Group Frames (Raid / Dynamic Scaling): Added a `Preserve content size` slider for dynamically scaled raid frames. Raid frame scaling stays unchanged, while text, indicators, buffs/debuffs, and Private Auras can now compensate their size independently. Default is `Off`.
 
 ### 🔄 Changed
 
