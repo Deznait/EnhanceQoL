@@ -79,6 +79,8 @@ local function getShortLabel(difficultyID, difficultyName)
 		return "LFR"
 	elseif difficultyID == 24 then
 		return "TW"
+	elseif difficultyID == 208 then
+		return "D"
 	end
 	return difficultyName
 end

@@ -41,6 +41,14 @@ local DB_ENABLED = "classBuffReminderEnabled"
 local DB_SHOW_PARTY = "classBuffReminderShowParty"
 local DB_SHOW_RAID = "classBuffReminderShowRaid"
 local DB_SHOW_SOLO = "classBuffReminderShowSolo"
+local DB_ONLY_OUT_OF_COMBAT = "classBuffReminderOnlyOutOfCombat"
+local DB_ROLE_FILTER_ENABLED = "classBuffReminderRoleFilterEnabled"
+local DB_ROLE_FILTER_CONTEXT = "classBuffReminderRoleFilterContext"
+local DB_HIDE_FOR_HEALER = "classBuffReminderHideForHealer"
+local DB_HIDE_FOR_TANK = "classBuffReminderHideForTank"
+local DB_HIDE_FOR_DAMAGER = "classBuffReminderHideForDamager"
+local DB_HIDE_FOR_NONE = "classBuffReminderHideForNoRole"
+local DB_SHOW_IF_ONLY_PROVIDER = "classBuffReminderShowIfOnlyProvider"
 local DB_GLOW = "classBuffReminderGlow"
 local DB_GLOW_STYLE = "classBuffReminderGlowStyle"
 local DB_GLOW_INSET = "classBuffReminderGlowInset"
@@ -67,6 +75,14 @@ Reminder.defaults = Reminder.defaults
 		showParty = true,
 		showRaid = true,
 		showSolo = false,
+		onlyOutOfCombat = false,
+		roleFilterEnabled = false,
+		roleFilterContext = "RAID_ONLY",
+		hideForHealer = false,
+		hideForTank = false,
+		hideForDamager = false,
+		hideForNoRole = false,
+		showIfOnlyProvider = true,
 		glow = true,
 		glowStyle = "MARCHING_ANTS",
 		glowInset = 0,
@@ -91,12 +107,26 @@ Reminder.defaults = Reminder.defaults
 local defaults = Reminder.defaults
 if defaults.glowStyle == nil then defaults.glowStyle = "MARCHING_ANTS" end
 if defaults.glowInset == nil then defaults.glowInset = 0 end
+if defaults.onlyOutOfCombat == nil then defaults.onlyOutOfCombat = false end
+if defaults.roleFilterEnabled == nil then defaults.roleFilterEnabled = false end
+if defaults.roleFilterContext == nil then defaults.roleFilterContext = "RAID_ONLY" end
+if defaults.hideForHealer == nil then defaults.hideForHealer = false end
+if defaults.hideForTank == nil then defaults.hideForTank = false end
+if defaults.hideForDamager == nil then defaults.hideForDamager = false end
+if defaults.hideForNoRole == nil then defaults.hideForNoRole = false end
+if defaults.showIfOnlyProvider == nil then defaults.showIfOnlyProvider = true end
 
 local PROVIDER_SCOPE_GROUP = "GROUP"
 local PROVIDER_SCOPE_SELF = "SELF"
 local GROUP_UNIT_STATUS_INELIGIBLE = -1
 local GROUP_UNIT_STATUS_PRESENT = 0
 local GROUP_UNIT_STATUS_MISSING = 1
+local GROUP_CONTEXT_SOLO = "SOLO"
+local GROUP_CONTEXT_PARTY = "PARTY"
+local GROUP_CONTEXT_RAID = "RAID"
+local ROLE_FILTER_CONTEXT_ANY_GROUP = "ANY_GROUP"
+local ROLE_FILTER_CONTEXT_PARTY_ONLY = "PARTY_ONLY"
+local ROLE_FILTER_CONTEXT_RAID_ONLY = "RAID_ONLY"
 
 local EVOKER_BLESSING_OF_BRONZE_IDS = {
 	381732,
@@ -337,6 +367,13 @@ local function isTrackedUnit(unit)
 	return false
 end
 
+local function isPlayerUnit(unit)
+	if type(unit) ~= "string" or unit == "" then return false end
+	if unit == "player" then return true end
+	if UnitIsUnit then return UnitIsUnit(unit, "player") == true end
+	return false
+end
+
 local function canEvaluateUnit(unit)
 	if type(unit) ~= "string" or unit == "" then return false end
 	if not (UnitExists and UnitExists(unit)) then return false end
@@ -445,6 +482,19 @@ local function normalizeTextOutline(value)
 	return TEXT_OUTLINE_OUTLINE
 end
 
+local function normalizeRoleFilterContext(value)
+	if value == ROLE_FILTER_CONTEXT_ANY_GROUP then return ROLE_FILTER_CONTEXT_ANY_GROUP end
+	if value == ROLE_FILTER_CONTEXT_PARTY_ONLY then return ROLE_FILTER_CONTEXT_PARTY_ONLY end
+	return ROLE_FILTER_CONTEXT_RAID_ONLY
+end
+
+local function normalizeGroupRole(value)
+	if value == "HEALER" then return "HEALER" end
+	if value == "TANK" then return "TANK" end
+	if value == "DAMAGER" then return "DAMAGER" end
+	return "NONE"
+end
+
 Reminder.GLOW_INSET_RANGE = Reminder.GLOW_INSET_RANGE or 100
 Reminder.GLOW_STYLE_OPTIONS = Reminder.GLOW_STYLE_OPTIONS
 	or {
@@ -470,6 +520,7 @@ end
 
 Reminder.NormalizeGlowStyle = normalizeGlowStyle
 Reminder.NormalizeGlowInset = normalizeGlowInset
+Reminder.NormalizeRoleFilterContext = normalizeRoleFilterContext
 
 local function textOutlineFlags(value)
 	local outline = normalizeTextOutline(value)
@@ -751,7 +802,14 @@ function Reminder:IsDungeonOrRaidInstance()
 	return instanceType == "party" or instanceType == "raid"
 end
 
+function Reminder:IsFlaskEnvironmentRestricted()
+	if InCombatLockdown and InCombatLockdown() then return true end
+	if addon.functions and addon.functions.isRestrictedContent and addon.functions.isRestrictedContent(true) == true then return true end
+	return false
+end
+
 function Reminder:CanCheckFlaskReminder()
+	if self:IsFlaskEnvironmentRestricted() then return false end
 	if not self:IsFlaskTrackingEnabled() then return false end
 	if not self:IsFlaskInstanceOnlyEnabled() then return true end
 	return self:IsDungeonOrRaidInstance()
@@ -759,9 +817,80 @@ end
 
 function Reminder:CanEvaluateFlaskReminderNow()
 	if not self:CanCheckFlaskReminder() then return false end
-	-- Flask auras are not combat-whitelisted, so suppress flask reminder checks while in combat.
-	if InCombatLockdown and InCombatLockdown() then return false end
 	return true
+end
+
+function Reminder:GetGroupContext()
+	if IsInRaid and IsInRaid() then return GROUP_CONTEXT_RAID end
+	if IsInGroup and IsInGroup() then return GROUP_CONTEXT_PARTY end
+	return GROUP_CONTEXT_SOLO
+end
+
+function Reminder:IsOnlyOutOfCombatEnabled()
+	return getValue(DB_ONLY_OUT_OF_COMBAT, defaults.onlyOutOfCombat) == true
+end
+
+function Reminder:IsRuntimeEvaluationBlockedByCombat()
+	if self:IsOnlyOutOfCombatEnabled() ~= true then return false end
+	if not InCombatLockdown then return false end
+	return InCombatLockdown() == true
+end
+
+function Reminder:IsRoleFilterEnabled()
+	return getValue(DB_ROLE_FILTER_ENABLED, defaults.roleFilterEnabled) == true
+end
+
+function Reminder:DoesRoleFilterApplyToCurrentContext()
+	if self:IsRoleFilterEnabled() ~= true then return false end
+
+	local context = self:GetGroupContext()
+	if context == GROUP_CONTEXT_SOLO then return false end
+
+	local filterContext = normalizeRoleFilterContext(getValue(DB_ROLE_FILTER_CONTEXT, defaults.roleFilterContext))
+	if filterContext == ROLE_FILTER_CONTEXT_PARTY_ONLY then return context == GROUP_CONTEXT_PARTY end
+	if filterContext == ROLE_FILTER_CONTEXT_RAID_ONLY then return context == GROUP_CONTEXT_RAID end
+	return context == GROUP_CONTEXT_PARTY or context == GROUP_CONTEXT_RAID
+end
+
+function Reminder:GetPlayerRoleToken()
+	if not UnitGroupRolesAssigned then return "NONE" end
+	local role = UnitGroupRolesAssigned("player")
+	if issecretvalue and issecretvalue(role) then return "NONE" end
+	return normalizeGroupRole(role)
+end
+
+function Reminder:IsPlayerRoleHiddenBySettings()
+	if self:DoesRoleFilterApplyToCurrentContext() ~= true then return false end
+
+	local role = self:GetPlayerRoleToken()
+	if role == "HEALER" then return getValue(DB_HIDE_FOR_HEALER, defaults.hideForHealer) == true end
+	if role == "TANK" then return getValue(DB_HIDE_FOR_TANK, defaults.hideForTank) == true end
+	if role == "DAMAGER" then return getValue(DB_HIDE_FOR_DAMAGER, defaults.hideForDamager) == true end
+	return getValue(DB_HIDE_FOR_NONE, defaults.hideForNoRole) == true
+end
+
+function Reminder:IsOnlyClassProvider()
+	local classToken = self:GetClassToken()
+	if type(classToken) ~= "string" or classToken == "" then return false end
+	if self:GetGroupContext() == GROUP_CONTEXT_SOLO then return true end
+
+	local units = self:GetRosterUnits()
+	for i = 1, #units do
+		local unit = units[i]
+		if not isPlayerUnit(unit) and not isAIFollowerUnit(unit) and UnitExists(unit) and UnitIsConnected(unit) and not UnitIsDeadOrGhost(unit) then
+			local _, unitClassToken = UnitClass(unit)
+			if not (issecretvalue and issecretvalue(unitClassToken)) and unitClassToken == classToken then return false end
+		end
+	end
+
+	return true
+end
+
+function Reminder:ShouldEvaluateGroupResponsibilities(provider)
+	if type(provider) ~= "table" then return true end
+	if self:IsPlayerRoleHiddenBySettings() ~= true then return true end
+	if getValue(DB_SHOW_IF_ONLY_PROVIDER, defaults.showIfOnlyProvider) == true and self:IsOnlyClassProvider() then return true end
+	return false
 end
 
 function Reminder:InvalidateFlaskCache()
@@ -1034,10 +1163,12 @@ local function shamanEnhancementGetSelfStatus(provider, reminder)
 
 	local totalRequirements = 2
 	local missingEntries = {}
+	local shouldEvaluateGroupResponsibilities = reminder:ShouldEvaluateGroupResponsibilities(provider)
 
 	local skyfuryDisplayId = normalizeSpellId(provider.skyfuryDisplaySpellId) or normalizeSpellId(provider.skyfurySpellIds and provider.skyfurySpellIds[1])
-	local skyfuryMissingCount, skyfuryTotal = reminder:GetGroupBuffMissingCountBySpellIds(provider.skyfurySpellIds)
-	if skyfuryTotal > 0 then
+	local skyfuryMissingCount, skyfuryTotal = 0, 0
+	if shouldEvaluateGroupResponsibilities then skyfuryMissingCount, skyfuryTotal = reminder:GetGroupBuffMissingCountBySpellIds(provider.skyfurySpellIds) end
+	if shouldEvaluateGroupResponsibilities and skyfuryTotal > 0 then
 		totalRequirements = totalRequirements + 1
 		if skyfuryMissingCount > 0 then missingEntries[#missingEntries + 1] = makeSelfMissingEntry(skyfuryDisplayId, provider.skyfuryLabel or "Skyfury", skyfuryMissingCount, skyfuryTotal) end
 	end
@@ -1076,10 +1207,12 @@ local function shamanRestorationGetSelfStatus(provider, reminder)
 
 	local totalRequirements = 1
 	local missingEntries = {}
+	local shouldEvaluateGroupResponsibilities = reminder:ShouldEvaluateGroupResponsibilities(provider)
 
 	local skyfuryDisplayId = normalizeSpellId(provider.skyfuryDisplaySpellId) or normalizeSpellId(provider.skyfurySpellIds and provider.skyfurySpellIds[1])
-	local skyfuryMissingCount, skyfuryTotal = reminder:GetGroupBuffMissingCountBySpellIds(provider.skyfurySpellIds)
-	if skyfuryTotal > 0 then
+	local skyfuryMissingCount, skyfuryTotal = 0, 0
+	if shouldEvaluateGroupResponsibilities then skyfuryMissingCount, skyfuryTotal = reminder:GetGroupBuffMissingCountBySpellIds(provider.skyfurySpellIds) end
+	if shouldEvaluateGroupResponsibilities and skyfuryTotal > 0 then
 		totalRequirements = totalRequirements + 1
 		if skyfuryMissingCount > 0 then missingEntries[#missingEntries + 1] = makeSelfMissingEntry(skyfuryDisplayId, provider.skyfuryLabel or "Skyfury", skyfuryMissingCount, skyfuryTotal) end
 	end
@@ -1135,6 +1268,7 @@ end
 
 local function evokerSupportGetSelfStatus(provider, reminder)
 	if type(provider) ~= "table" or type(reminder) ~= "table" then return buildSelfStatus(0, {}) end
+	if reminder:ShouldEvaluateGroupResponsibilities(provider) ~= true then return buildSelfStatus(0, {}) end
 
 	local totalRequirements = 0
 	local missingEntries = {}
@@ -2473,7 +2607,9 @@ function Reminder:CollectOtherHealerUnits(target)
 	local units = self:GetRosterUnits()
 	for i = 1, #units do
 		local unit = units[i]
-		if unit ~= "player" and not isAIFollowerUnit(unit) and UnitExists(unit) and UnitIsConnected(unit) and not UnitIsDeadOrGhost(unit) and isUnitHealerRole(unit) then target[#target + 1] = unit end
+		if not isPlayerUnit(unit) and not isAIFollowerUnit(unit) and UnitExists(unit) and UnitIsConnected(unit) and not UnitIsDeadOrGhost(unit) and isUnitHealerRole(unit) then
+			target[#target + 1] = unit
+		end
 	end
 
 	return target
@@ -2529,8 +2665,9 @@ function Reminder:ComputeMissing(provider)
 end
 
 function Reminder:IsGroupModeAllowed()
-	if IsInRaid and IsInRaid() then return getValue(DB_SHOW_RAID, defaults.showRaid) == true end
-	if IsInGroup and IsInGroup() then return getValue(DB_SHOW_PARTY, defaults.showParty) == true end
+	local context = self:GetGroupContext()
+	if context == GROUP_CONTEXT_RAID then return getValue(DB_SHOW_RAID, defaults.showRaid) == true end
+	if context == GROUP_CONTEXT_PARTY then return getValue(DB_SHOW_PARTY, defaults.showParty) == true end
 	return getValue(DB_SHOW_SOLO, defaults.showSolo) == true
 end
 
@@ -2666,19 +2803,6 @@ function Reminder:UpdateDisplay()
 		return
 	end
 
-	local provider = self:GetProvider()
-	local classProvider = provider
-	if not provider then
-		if self:IsFlaskTrackingEnabled() then
-			provider = self:GetFlaskOnlyProvider()
-		else
-			self:SetGlowShown(false)
-			self.missingActive = false
-			frame:Hide()
-			return
-		end
-	end
-
 	if not self:IsGroupModeAllowed() then
 		self:SetGlowShown(false)
 		self.missingActive = false
@@ -2693,18 +2817,39 @@ function Reminder:UpdateDisplay()
 		return
 	end
 
-	local missing, total = 0, 0
-	if classProvider then
-		missing, total = self:ComputeMissing(provider)
+	if self:IsRuntimeEvaluationBlockedByCombat() then
+		self:SetGlowShown(false)
+		self.missingActive = false
+		frame:Hide()
+		return
 	end
+
+	local classProvider = self:GetProvider()
+	if classProvider and classProvider.scope == PROVIDER_SCOPE_GROUP and self:ShouldEvaluateGroupResponsibilities(classProvider) ~= true then classProvider = nil end
+
+	local provider = classProvider
+	if not provider then
+		if self:CanCheckFlaskReminder() then
+			provider = self:GetFlaskOnlyProvider()
+		else
+			self:SetGlowShown(false)
+			self.missingActive = false
+			frame:Hide()
+			return
+		end
+	end
+
+	local missing, total = 0, 0
+	if classProvider then missing, total = self:ComputeMissing(classProvider) end
 	local supplementalEntries = self:GetSupplementalMissingEntries()
-	if not classProvider and type(supplementalEntries) == "table" and supplementalEntries[1] and supplementalEntries[1].spellId then
+	local supplementalMissing = type(supplementalEntries) == "table" and #supplementalEntries or 0
+	if total <= 0 and supplementalMissing > 0 and type(supplementalEntries) == "table" and supplementalEntries[1] and supplementalEntries[1].spellId then
+		provider = self:GetFlaskOnlyProvider() or provider
 		provider.displaySpellId = normalizeSpellId(supplementalEntries[1].spellId) or provider.displaySpellId
 		provider.cachedIcon = nil
 		provider.cachedName = provider.fallbackName or "Flask"
 		provider._presentationReady = false
 	end
-	local supplementalMissing = type(supplementalEntries) == "table" and #supplementalEntries or 0
 	if total <= 0 and supplementalMissing <= 0 then
 		self:SetGlowShown(false)
 		self.missingActive = false
@@ -2768,6 +2913,7 @@ function Reminder:HandleEvent(event, unit, updateInfo)
 	end
 
 	if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
+		if self:IsOnlyOutOfCombatEnabled() == true then self:MarkAuraStatesDirty() end
 		self:RequestUpdate(true)
 		return
 	end
@@ -2814,9 +2960,14 @@ function Reminder:HandleEvent(event, unit, updateInfo)
 
 	if event == "UNIT_AURA" then
 		if not isTrackedUnit(unit) then return end
+		if self:IsRuntimeEvaluationBlockedByCombat() then return end
 		local provider = self:GetProvider()
+		if provider and provider.scope == PROVIDER_SCOPE_GROUP and self:ShouldEvaluateGroupResponsibilities(provider) ~= true then
+			if isPlayerUnit(unit) and self:CanCheckFlaskReminder() then self:RequestUpdate(false) end
+			return
+		end
 		if provider and provider.scope == PROVIDER_SCOPE_SELF then
-			if unit == "player" or provider.tracksExternalUnitAuras == true then self:RequestUpdate(false) end
+			if isPlayerUnit(unit) or provider.tracksExternalUnitAuras == true then self:RequestUpdate(false) end
 			return
 		end
 		if isAIFollowerUnit(unit) then
@@ -2943,6 +3094,11 @@ function Reminder:RegisterEditMode()
 		Reminder:RequestUpdate(true)
 	end
 
+	local function setRoleFilterContext(value)
+		if addon.db then addon.db[DB_ROLE_FILTER_CONTEXT] = normalizeRoleFilterContext(value) end
+		Reminder:RequestUpdate(true)
+	end
+
 	local function setTextOutline(value)
 		if addon.db then addon.db[DB_XY_TEXT_OUTLINE] = normalizeTextOutline(value) end
 		Reminder:ApplyVisualSettings()
@@ -3039,6 +3195,100 @@ function Reminder:RegisterEditMode()
 				set = function(_, value) setGlowInset(value) end,
 				formatter = function(value) return tostring(math.floor((tonumber(value) or defaults.glowInset or 0) + 0.5)) end,
 				isEnabled = function() return getValue(DB_GLOW, defaults.glow) == true end,
+			},
+			{
+				name = L["ClassBuffReminderSectionFilters"] or "Tracking Filters",
+				kind = SettingType.Collapsible,
+				id = "filters",
+				defaultCollapsed = false,
+			},
+			{
+				name = L["ClassBuffReminderOnlyOutOfCombat"] or "Only show out of combat",
+				kind = SettingType.Checkbox,
+				parentId = "filters",
+				default = defaults.onlyOutOfCombat == true,
+				get = function() return getValue(DB_ONLY_OUT_OF_COMBAT, defaults.onlyOutOfCombat) == true end,
+				set = function(_, value) setBool(DB_ONLY_OUT_OF_COMBAT, value) end,
+			},
+			{
+				name = L["ClassBuffReminderRoleFilterEnabled"] or "Enable role responsibility filter",
+				kind = SettingType.Checkbox,
+				parentId = "filters",
+				default = defaults.roleFilterEnabled == true,
+				get = function() return getValue(DB_ROLE_FILTER_ENABLED, defaults.roleFilterEnabled) == true end,
+				set = function(_, value) setBool(DB_ROLE_FILTER_ENABLED, value) end,
+			},
+			{
+				name = L["ClassBuffReminderRoleFilterContext"] or "Apply role filter in",
+				kind = SettingType.Dropdown,
+				parentId = "filters",
+				height = 120,
+				default = defaults.roleFilterContext,
+				get = function() return normalizeRoleFilterContext(getValue(DB_ROLE_FILTER_CONTEXT, defaults.roleFilterContext)) end,
+				set = function(_, value) setRoleFilterContext(value) end,
+				generator = function(_, root)
+					root:CreateRadio(
+						L["ClassBuffReminderRoleFilterContextAnyGroup"] or "Any group",
+						function() return normalizeRoleFilterContext(getValue(DB_ROLE_FILTER_CONTEXT, defaults.roleFilterContext)) == ROLE_FILTER_CONTEXT_ANY_GROUP end,
+						function() setRoleFilterContext(ROLE_FILTER_CONTEXT_ANY_GROUP) end
+					)
+					root:CreateRadio(
+						L["ClassBuffReminderRoleFilterContextRaidOnly"] or "Raid only",
+						function() return normalizeRoleFilterContext(getValue(DB_ROLE_FILTER_CONTEXT, defaults.roleFilterContext)) == ROLE_FILTER_CONTEXT_RAID_ONLY end,
+						function() setRoleFilterContext(ROLE_FILTER_CONTEXT_RAID_ONLY) end
+					)
+					root:CreateRadio(
+						L["ClassBuffReminderRoleFilterContextPartyOnly"] or "Party only",
+						function() return normalizeRoleFilterContext(getValue(DB_ROLE_FILTER_CONTEXT, defaults.roleFilterContext)) == ROLE_FILTER_CONTEXT_PARTY_ONLY end,
+						function() setRoleFilterContext(ROLE_FILTER_CONTEXT_PARTY_ONLY) end
+					)
+				end,
+				isShown = function() return getValue(DB_ROLE_FILTER_ENABLED, defaults.roleFilterEnabled) == true end,
+			},
+			{
+				name = L["ClassBuffReminderHideForHealer"] or "Hide reminder for healers",
+				kind = SettingType.Checkbox,
+				parentId = "filters",
+				default = defaults.hideForHealer == true,
+				get = function() return getValue(DB_HIDE_FOR_HEALER, defaults.hideForHealer) == true end,
+				set = function(_, value) setBool(DB_HIDE_FOR_HEALER, value) end,
+				isShown = function() return getValue(DB_ROLE_FILTER_ENABLED, defaults.roleFilterEnabled) == true end,
+			},
+			{
+				name = L["ClassBuffReminderHideForTank"] or "Hide reminder for tanks",
+				kind = SettingType.Checkbox,
+				parentId = "filters",
+				default = defaults.hideForTank == true,
+				get = function() return getValue(DB_HIDE_FOR_TANK, defaults.hideForTank) == true end,
+				set = function(_, value) setBool(DB_HIDE_FOR_TANK, value) end,
+				isShown = function() return getValue(DB_ROLE_FILTER_ENABLED, defaults.roleFilterEnabled) == true end,
+			},
+			{
+				name = L["ClassBuffReminderHideForDamager"] or "Hide reminder for damage dealers",
+				kind = SettingType.Checkbox,
+				parentId = "filters",
+				default = defaults.hideForDamager == true,
+				get = function() return getValue(DB_HIDE_FOR_DAMAGER, defaults.hideForDamager) == true end,
+				set = function(_, value) setBool(DB_HIDE_FOR_DAMAGER, value) end,
+				isShown = function() return getValue(DB_ROLE_FILTER_ENABLED, defaults.roleFilterEnabled) == true end,
+			},
+			{
+				name = L["ClassBuffReminderHideForNoRole"] or "Hide reminder for unassigned roles",
+				kind = SettingType.Checkbox,
+				parentId = "filters",
+				default = defaults.hideForNoRole == true,
+				get = function() return getValue(DB_HIDE_FOR_NONE, defaults.hideForNoRole) == true end,
+				set = function(_, value) setBool(DB_HIDE_FOR_NONE, value) end,
+				isShown = function() return getValue(DB_ROLE_FILTER_ENABLED, defaults.roleFilterEnabled) == true end,
+			},
+			{
+				name = L["ClassBuffReminderShowIfOnlyProvider"] or "Show when I am the only class provider",
+				kind = SettingType.Checkbox,
+				parentId = "filters",
+				default = defaults.showIfOnlyProvider ~= false,
+				get = function() return getValue(DB_SHOW_IF_ONLY_PROVIDER, defaults.showIfOnlyProvider) == true end,
+				set = function(_, value) setBool(DB_SHOW_IF_ONLY_PROVIDER, value) end,
+				isShown = function() return getValue(DB_ROLE_FILTER_ENABLED, defaults.roleFilterEnabled) == true end,
 			},
 			{
 				name = L["ClassBuffReminderSectionFlasks"] or "Flasks",
@@ -3363,6 +3613,7 @@ function Reminder:OnSettingChanged()
 	self:InvalidateProviderAvailabilityCache()
 	self:InvalidateRosterCache()
 	self:InvalidateFlaskCache()
+	self:MarkAuraStatesDirty()
 
 	if runtimeActive then
 		self:RegisterEvents()

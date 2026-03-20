@@ -10,6 +10,14 @@ local DB_ENABLED = "classBuffReminderEnabled"
 local DB_SHOW_PARTY = "classBuffReminderShowParty"
 local DB_SHOW_RAID = "classBuffReminderShowRaid"
 local DB_SHOW_SOLO = "classBuffReminderShowSolo"
+local DB_ONLY_OUT_OF_COMBAT = "classBuffReminderOnlyOutOfCombat"
+local DB_ROLE_FILTER_ENABLED = "classBuffReminderRoleFilterEnabled"
+local DB_ROLE_FILTER_CONTEXT = "classBuffReminderRoleFilterContext"
+local DB_HIDE_FOR_HEALER = "classBuffReminderHideForHealer"
+local DB_HIDE_FOR_TANK = "classBuffReminderHideForTank"
+local DB_HIDE_FOR_DAMAGER = "classBuffReminderHideForDamager"
+local DB_HIDE_FOR_NONE = "classBuffReminderHideForNoRole"
+local DB_SHOW_IF_ONLY_PROVIDER = "classBuffReminderShowIfOnlyProvider"
 local DB_GLOW = "classBuffReminderGlow"
 local DB_GLOW_STYLE = "classBuffReminderGlowStyle"
 local DB_GLOW_INSET = "classBuffReminderGlowInset"
@@ -39,6 +47,14 @@ local defaults = (Reminder and Reminder.defaults)
 		showParty = true,
 		showRaid = true,
 		showSolo = false,
+		onlyOutOfCombat = false,
+		roleFilterEnabled = false,
+		roleFilterContext = "RAID_ONLY",
+		hideForHealer = false,
+		hideForTank = false,
+		hideForDamager = false,
+		hideForNoRole = false,
+		showIfOnlyProvider = true,
 		glow = true,
 		glowStyle = "MARCHING_ANTS",
 		glowInset = 0,
@@ -61,9 +77,24 @@ local defaults = (Reminder and Reminder.defaults)
 	}
 if defaults.glowStyle == nil then defaults.glowStyle = "MARCHING_ANTS" end
 if defaults.glowInset == nil then defaults.glowInset = 0 end
+if defaults.onlyOutOfCombat == nil then defaults.onlyOutOfCombat = false end
+if defaults.roleFilterEnabled == nil then defaults.roleFilterEnabled = false end
+if defaults.roleFilterContext == nil then defaults.roleFilterContext = "RAID_ONLY" end
+if defaults.hideForHealer == nil then defaults.hideForHealer = false end
+if defaults.hideForTank == nil then defaults.hideForTank = false end
+if defaults.hideForDamager == nil then defaults.hideForDamager = false end
+if defaults.hideForNoRole == nil then defaults.hideForNoRole = false end
+if defaults.showIfOnlyProvider == nil then defaults.showIfOnlyProvider = true end
 
 local function refreshReminder()
 	if Reminder and Reminder.OnSettingChanged then Reminder:OnSettingChanged() end
+end
+
+local function normalizeRoleFilterContext(value)
+	if Reminder and Reminder.NormalizeRoleFilterContext then return Reminder.NormalizeRoleFilterContext(value) end
+	if value == "ANY_GROUP" then return "ANY_GROUP" end
+	if value == "PARTY_ONLY" then return "PARTY_ONLY" end
+	return "RAID_ONLY"
 end
 
 local function openFlaskSettings()
@@ -129,6 +160,14 @@ function addon.functions.initClassBuffReminder()
 	init(DB_SHOW_PARTY, defaults.showParty)
 	init(DB_SHOW_RAID, defaults.showRaid)
 	init(DB_SHOW_SOLO, defaults.showSolo)
+	init(DB_ONLY_OUT_OF_COMBAT, defaults.onlyOutOfCombat)
+	init(DB_ROLE_FILTER_ENABLED, defaults.roleFilterEnabled)
+	init(DB_ROLE_FILTER_CONTEXT, normalizeRoleFilterContext(defaults.roleFilterContext))
+	init(DB_HIDE_FOR_HEALER, defaults.hideForHealer)
+	init(DB_HIDE_FOR_TANK, defaults.hideForTank)
+	init(DB_HIDE_FOR_DAMAGER, defaults.hideForDamager)
+	init(DB_HIDE_FOR_NONE, defaults.hideForNoRole)
+	init(DB_SHOW_IF_ONLY_PROVIDER, defaults.showIfOnlyProvider)
 	init(DB_GLOW, defaults.glow)
 	init(DB_GLOW_STYLE, defaults.glowStyle)
 	init(DB_GLOW_INSET, defaults.glowInset)
