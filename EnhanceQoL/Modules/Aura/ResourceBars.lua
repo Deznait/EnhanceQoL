@@ -374,6 +374,10 @@ local function formatSoulShardValue(value)
 	return text:gsub("%.0$", "")
 end
 
+function ResourceBars.ShouldUseRawPowerValues(pType)
+	return pType == "SOUL_SHARDS" and addon.variables and addon.variables.unitClass == "WARLOCK" and addon.variables.unitSpec == 3
+end
+
 local function formatNumber(value, useShort)
 	if value == nil then return "0" end
 	if useShort then return AbbreviateNumbers(value) end
@@ -2439,7 +2443,7 @@ local function applyBarFillColor(bar, cfg, pType)
 		if pType == "RUNES" then return false end
 		local powerEnum = POWER_ENUM and POWER_ENUM[pType]
 		if not powerEnum then return false end
-		local useRaw = pType == "SOUL_SHARDS" and addon.variables and addon.variables.unitClass == "WARLOCK" and addon.variables.unitSpec == 3
+		local useRaw = ResourceBars.ShouldUseRawPowerValues(pType)
 		local curPower = UnitPower("player", powerEnum, useRaw)
 		local maxPower = UnitPowerMax("player", powerEnum, useRaw)
 		if issecretvalue and (issecretvalue(curPower) or issecretvalue(maxPower)) then return nil end
@@ -2483,7 +2487,7 @@ local function applyBarFillColor(bar, cfg, pType)
 	elseif capState == nil and pType ~= "RUNES" then
 		-- Midnight secret values must use curves instead of direct comparisons.
 		local powerEnum = POWER_ENUM and POWER_ENUM[pType]
-		local useRawPower = pType == "SOUL_SHARDS" and addon.variables and addon.variables.unitClass == "WARLOCK" and addon.variables.unitSpec == 3
+		local useRawPower = ResourceBars.ShouldUseRawPowerValues(pType)
 		if powerEnum and ResourceBars.ResolveAbsoluteThresholdColorForSecretPower and thresholdMode == "PERCENT" then
 			local tr, tg, tb, ta = ResourceBars.ResolveAbsoluteThresholdColorForSecretPower(
 				cfg,
@@ -3997,7 +4001,7 @@ function updatePowerBar(type, runeSlot)
 	local cfgDef = (RB.POWER_CONFIG and RB.POWER_CONFIG[type]) or {}
 	local thresholdModeForBar = ResourceBars.GetThresholdColorModeAndCap(type)
 	local isSoulShards = type == "SOUL_SHARDS"
-	local useRaw = isSoulShards and addon.variables and addon.variables.unitClass == "WARLOCK" and addon.variables.unitSpec == 3
+	local useRaw = ResourceBars.ShouldUseRawPowerValues(type)
 	local maxPower = bar._lastMax
 	if not maxPower or bar._lastMaxRaw ~= useRaw then
 		maxPower = UnitPowerMax("player", pType, useRaw)
@@ -4549,7 +4553,7 @@ local function getSafeThresholdMaxValue(bar, pType)
 		if last ~= nil and not isSecret(last) then maxValue = last end
 	end
 	if not maxValue and pType and POWER_ENUM and UnitPowerMax then
-		local useRaw = pType == "SOUL_SHARDS" and addon.variables and addon.variables.unitClass == "WARLOCK" and addon.variables.unitSpec == 3
+		local useRaw = ResourceBars.ShouldUseRawPowerValues(pType)
 		local tmp = UnitPowerMax("player", POWER_ENUM[pType], useRaw)
 		if tmp ~= nil and not isSecret(tmp) then maxValue = tmp end
 	end
@@ -6064,8 +6068,10 @@ local function eventHandler(self, event, unit, arg1)
 		local enum = POWER_ENUM[arg1]
 		local bar = powerbar[arg1]
 		if enum and bar then
-			local max = UnitPowerMax("player", enum)
+			local useRaw = ResourceBars.ShouldUseRawPowerValues(arg1)
+			local max = UnitPowerMax("player", enum, useRaw)
 			bar._lastMax = max
+			bar._lastMaxRaw = useRaw
 			bar:SetMinMaxValues(0, max)
 		end
 		updatePowerBar(arg1)

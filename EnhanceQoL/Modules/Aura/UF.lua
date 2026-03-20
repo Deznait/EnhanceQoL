@@ -970,6 +970,9 @@ local defaults = {
 			showSampleAbsorb = false,
 			absorbTexture = "SOLID",
 			absorbReverseFill = false,
+			incomingHealEnabled = false,
+			incomingHealColor = { 0.2, 0.85, 0.35, 0.45 },
+			showSampleIncomingHeal = false,
 			absorbDontOverflowHealthBar = false,
 			useAbsorbGlow = true,
 			healAbsorbColor = { 1.0, 0.3, 0.3, 0.7 },
@@ -1883,6 +1886,12 @@ local function copySettings(fromUnit, toUnit, opts)
 		health = {
 			{ "healthHeight" },
 			{ "health" },
+		},
+		incomingHeal = {
+			{ "health", "incomingHealEnabled" },
+			{ "health", "showSampleIncomingHeal" },
+			{ "health", "incomingHealTexture" },
+			{ "health", "incomingHealColor" },
 		},
 		absorb = {
 			{ "health", "absorbColor" },
@@ -4829,12 +4838,124 @@ local function applyOverlayHeight(bar, anchor, height, maxHeight)
 	bar:SetHeight(desired)
 end
 
+local function ensureHealPredictionCalculator(st)
+	if not st or st._healPredictionCalcUnsupported then return nil end
+	if st._healPredictionCalc then return st._healPredictionCalc end
+	if not (CreateUnitHealPredictionCalculator and UnitGetDetailedHealPrediction) then
+		st._healPredictionCalcUnsupported = true
+		return nil
+	end
+
+	local calc = CreateUnitHealPredictionCalculator()
+	if not calc then
+		st._healPredictionCalcUnsupported = true
+		return nil
+	end
+	if calc.SetIncomingHealOverflowPercent then calc:SetIncomingHealOverflowPercent(1) end
+	st._healPredictionCalc = calc
+	return calc
+end
+
+local setFrameLevelAbove
+
 local function shouldShowSampleAbsorb(unit)
 	local samples = addon.variables.ufSampleAbsorb
 	if not samples then return false end
 	if samples[unit] == true then return true end
 	if unit and unit:match("^boss%d+$") then return samples.boss == true end
 	return false
+end
+
+local function applyIncomingHealBar(st, hc, healthHeight, reverseHealth, interpolation)
+	if not (st and st.health and st.incomingHeal) then return end
+	local incomingHealTextureKey = hc.incomingHealTexture or hc.texture
+	st.incomingHeal:SetStatusBarTexture(UFHelper.resolveTexture(incomingHealTextureKey))
+	if st.incomingHeal.SetStatusBarDesaturated then st.incomingHeal:SetStatusBarDesaturated(false) end
+	UFHelper.configureSpecialTexture(st.incomingHeal, "HEALTH", incomingHealTextureKey, hc)
+	if UFHelper and UFHelper.setupAbsorbClampReverseAware then
+		UFHelper.setupAbsorbClampReverseAware(st.health, st.incomingHeal)
+	elseif UFHelper and UFHelper.setupAbsorbClamp then
+		UFHelper.setupAbsorbClamp(st.health, st.incomingHeal)
+		if UFHelper.applyStatusBarReverseFill then UFHelper.applyStatusBarReverseFill(st.incomingHeal, reverseHealth) end
+	end
+	if UFHelper and UFHelper.applyAbsorbClampLayout then
+		UFHelper.applyAbsorbClampLayout(st.incomingHeal, st.health, healthHeight, healthHeight, reverseHealth)
+	else
+		applyOverlayHeight(st.incomingHeal, st.health, healthHeight, healthHeight)
+	end
+	setFrameLevelAbove(st.incomingHeal, st.health, 1)
+	st.incomingHeal:SetMinMaxValues(0, 1)
+	st.incomingHeal:SetValue(0, interpolation)
+	st.incomingHeal:Hide()
+end
+
+local function updateIncomingHeal(st, unit, hc, defH, cur, maxv, interpolation)
+	local bar = st and st.incomingHeal
+	if not bar then return end
+	if hc.incomingHealEnabled ~= true then
+		bar:Hide()
+		return
+	end
+
+	local calc = ensureHealPredictionCalculator(st)
+	if calc and UnitGetDetailedHealPrediction then UnitGetDetailedHealPrediction(unit, "player", calc) end
+
+	local incomingHeal = 0
+	if calc and calc.GetIncomingHeals then
+		incomingHeal = calc:GetIncomingHeals() or 0
+	elseif UnitGetIncomingHeals then
+		incomingHeal = UnitGetIncomingHeals(unit) or 0
+	end
+	if incomingHeal == nil then incomingHeal = 0 end
+
+	local maxForValue
+	if issecretvalue and issecretvalue(maxv) then
+		maxForValue = maxv or 1
+	else
+		maxForValue = (maxv and maxv > 0) and maxv or 1
+	end
+
+	local incomingHealSecret = issecretvalue and issecretvalue(incomingHeal)
+	local incomingHealValue = incomingHeal
+	if hc.showSampleIncomingHeal == true then
+		local useSample = false
+		if incomingHealSecret then
+			useSample = true
+		else
+			incomingHealValue = tonumber(incomingHeal) or 0
+			if incomingHealValue <= 0 then useSample = true end
+		end
+		if useSample and not (issecretvalue and issecretvalue(maxForValue)) then
+			incomingHealValue = (maxForValue or 1) * 0.25
+			incomingHealSecret = false
+		end
+	elseif not incomingHealSecret then
+		incomingHealValue = tonumber(incomingHeal) or 0
+	end
+
+	local curSecret = issecretvalue and issecretvalue(cur)
+	if not incomingHealSecret and not curSecret then
+		local missingHealth = (tonumber(maxForValue) or 0) - (tonumber(cur) or 0)
+		if missingHealth < 0 then missingHealth = 0 end
+		if incomingHealValue > missingHealth then incomingHealValue = missingHealth end
+	end
+
+	bar:SetMinMaxValues(0, maxForValue or 1)
+	bar:SetValue(incomingHealValue or 0, interpolation)
+
+	local color = hc.incomingHealColor or defH.incomingHealColor or { 0.2, 0.85, 0.35, 0.45 }
+	bar:SetStatusBarColor(
+		color.r or color[1] or 0.2,
+		color.g or color[2] or 0.85,
+		color.b or color[3] or 0.35,
+		color.a or color[4] or 0.45
+	)
+
+	if incomingHealSecret or (incomingHealValue and incomingHealValue > 0) then
+		bar:Show()
+	else
+		bar:Hide()
+	end
 end
 
 local function shouldShowSampleHealAbsorb(unit)
@@ -5910,6 +6031,7 @@ local function updateHealth(cfg, unit)
 	end
 
 	st.health:SetStatusBarColor(finalR or 0, finalG or 0.8, finalB or 0, finalA or 1)
+	updateIncomingHeal(st, unit, hc, defH, cur, maxv, interpolation)
 	if allowAbsorb and (st.absorb or st.healAbsorb) then
 		local cacheGuid = UnitGUID and UnitGUID(unit) or unit
 		local guidComparable = not (issecretvalue and issecretvalue(cacheGuid))
@@ -6176,7 +6298,7 @@ local function layoutTexts(bar, leftFS, centerFS, rightFS, cfg, width)
 	end
 end
 
-local function setFrameLevelAbove(child, parent, offset)
+setFrameLevelAbove = function(child, parent, offset)
 	if not child or not parent then return end
 	child:SetFrameStrata(parent:GetFrameStrata())
 	local level = (parent:GetFrameLevel() or 0) + (offset or 1)
@@ -6202,6 +6324,7 @@ function UF.syncAbsorbFrameLevels(st)
 	end
 	apply(health.absorbClip)
 	apply(health._healthFillClip)
+	apply(st.incomingHeal)
 	apply(st.absorb)
 	apply(st.absorb2)
 	apply(st.healAbsorb)
@@ -7214,6 +7337,8 @@ local function ensureFrames(unit)
 
 	local allowAbsorb = not (info and info.disableAbsorb)
 	if allowAbsorb then
+		st.incomingHeal = st.incomingHeal or CreateFrame("StatusBar", info.healthName .. "IncomingHeal", st.health, "BackdropTemplate")
+		if st.incomingHeal.SetStatusBarDesaturated then st.incomingHeal:SetStatusBarDesaturated(false) end
 		st.absorb = st.absorb or CreateFrame("StatusBar", info.healthName .. "Absorb", st.health, "BackdropTemplate")
 		if st.absorb.SetStatusBarDesaturated then st.absorb:SetStatusBarDesaturated(false) end
 		st.overAbsorbGlow = st.overAbsorbGlow or st.health:CreateTexture(nil, "ARTWORK", "OverAbsorbGlowTemplate")
@@ -7229,6 +7354,8 @@ local function ensureFrames(unit)
 		st.healAbsorb = st.healAbsorb or CreateFrame("StatusBar", info.healthName .. "HealAbsorb", st.health, "BackdropTemplate")
 		if st.healAbsorb.SetStatusBarDesaturated then st.healAbsorb:SetStatusBarDesaturated(false) end
 	else
+		if st.incomingHeal then st.incomingHeal:Hide() end
+		st.incomingHeal = nil
 		if st.absorb then st.absorb:Hide() end
 		st.absorb = nil
 		if st.absorb2 then st.absorb2:Hide() end
@@ -7393,6 +7520,7 @@ local function applyBars(cfg, unit)
 		clampToFill = healthBackdropClampToFill == true,
 		reverseFill = reverseHealth,
 	})
+	if allowAbsorb and st.incomingHeal then applyIncomingHealBar(st, hc, healthHeight, reverseHealth, interpolation) end
 	if powerEnabled then
 		st.power:SetStatusBarTexture(UFHelper.resolveTexture(pcfg.texture))
 		if not powerEnum then
@@ -7485,7 +7613,7 @@ local function applyBars(cfg, unit)
 			st.absorb2:Hide()
 		end
 		local borderFrame = st.barGroup and st.barGroup._ufBorder
-		setFrameLevelAbove(st.absorb, st.health, 1)
+		setFrameLevelAbove(st.absorb, st.incomingHeal or st.health, 1)
 		st.absorb:SetMinMaxValues(0, 1)
 		st.absorb:SetValue(0, interpolation)
 		if st.overAbsorbGlow then
@@ -7515,7 +7643,7 @@ local function applyBars(cfg, unit)
 		local healAbsorbHeight = hc.healAbsorbOverlayHeight
 		if healAbsorbHeight == nil then healAbsorbHeight = defH.healAbsorbOverlayHeight end
 		applyOverlayHeight(st.healAbsorb, st.health, healAbsorbHeight, healthHeight)
-		local anchorBar = st.absorb or st.health
+		local anchorBar = st.absorb or st.incomingHeal or st.health
 		setFrameLevelAbove(st.healAbsorb, anchorBar, 1)
 		st.healAbsorb:SetMinMaxValues(0, 1)
 		st.healAbsorb:SetValue(0, interpolation)
@@ -8093,6 +8221,7 @@ end
 local unitEvents = {
 	"UNIT_HEALTH",
 	"UNIT_MAXHEALTH",
+	"UNIT_HEAL_PREDICTION",
 	"UNIT_ABSORB_AMOUNT_CHANGED",
 	"UNIT_HEAL_ABSORB_AMOUNT_CHANGED",
 	"UNIT_POWER_UPDATE",
@@ -8249,6 +8378,14 @@ function UF._buildRegisteredUnitTokens()
 	return tokens
 end
 
+local function wantsUnitHealPredictionEvent(token)
+	local info = UNITS[token]
+	if info and info.disableAbsorb then return false end
+	local cfg = ensureDB(token)
+	if not cfg or cfg.enabled == false then return false end
+	return cfg.health and cfg.health.incomingHealEnabled == true
+end
+
 function UF._registerUnitScopedEvents(includePortraitEvents)
 	UF._clearUnitEventFrames()
 
@@ -8263,8 +8400,9 @@ function UF._registerUnitScopedEvents(includePortraitEvents)
 			frame = CreateFrame("Frame")
 			unitEventFrames[i] = frame
 		end
+		local wantsHealPrediction = wantsUnitHealPredictionEvent(token)
 		for _, evt in ipairs(unitEvents) do
-			frame:RegisterUnitEvent(evt, token)
+			if evt ~= "UNIT_HEAL_PREDICTION" or wantsHealPrediction then frame:RegisterUnitEvent(evt, token) end
 		end
 		if includePortraitEvents then
 			for _, evt in ipairs(portraitEvents) do
@@ -9184,7 +9322,7 @@ onEvent = function(self, event, unit, ...)
 		else
 			AuraUtil.UpdateSingleDispelIndicator(unit, false)
 		end
-	elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_ABSORB_AMOUNT_CHANGED" or event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" then
+	elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" or event == "UNIT_HEAL_PREDICTION" or event == "UNIT_ABSORB_AMOUNT_CHANGED" or event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" then
 		if event == "UNIT_ABSORB_AMOUNT_CHANGED" and unit then
 			local st = states[unit]
 			if st then
@@ -9230,7 +9368,7 @@ onEvent = function(self, event, unit, ...)
 			local bossCfg = getCfg(unit)
 			if bossCfg.enabled then updateHealth(bossCfg, unit) end
 		end
-		if unit and allowedEventUnit[unit] then updateUnitStatusIndicator(getCfg(unit), unit) end
+		if event ~= "UNIT_HEAL_PREDICTION" and unit and allowedEventUnit[unit] then updateUnitStatusIndicator(getCfg(unit), unit) end
 	elseif event == "UNIT_MAXPOWER" then
 		if unit == UNIT.PLAYER then updatePower(getCfg(UNIT.PLAYER), UNIT.PLAYER) end
 		if unit == UNIT.TARGET then updatePower(getCfg(UNIT.TARGET), UNIT.TARGET) end

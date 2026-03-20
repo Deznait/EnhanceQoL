@@ -44,6 +44,9 @@ CooldownPanels.itemHighestRankByID = CooldownPanels.itemHighestRankByID
 		-- Light's Potential (rank1 -> rank2)
 		[241309] = { 241309, 241308 },
 		[241308] = { 241309, 241308 },
+		-- Lightfused Mana Potion (rank1 -> rank2)
+		[241301] = { 241301, 241300 },
+		[241300] = { 241301, 241300 },
 	}
 
 CooldownPanels.spellVariantGroupByID = CooldownPanels.spellVariantGroupByID or {}

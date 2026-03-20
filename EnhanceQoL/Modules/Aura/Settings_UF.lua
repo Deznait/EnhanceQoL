@@ -1160,6 +1160,7 @@ local copySectionOrder = {
 	"portrait",
 	"name",
 	"health",
+	"incomingHeal",
 	"absorb",
 	"healAbsorb",
 	"level",
@@ -1186,6 +1187,7 @@ local copySectionLabels = {
 	rangeFade = L["UFRangeFade"] or "Range fade",
 	name = NAME or "Name",
 	health = L["Health"] or HEALTH or "Health",
+	incomingHeal = L["Incoming heals"] or "Incoming heals",
 	absorb = L["Absorb"] or "Absorb",
 	healAbsorb = L["Heal absorb"] or "Heal absorb",
 	level = LEVEL or "Level",
@@ -1220,6 +1222,7 @@ local function getCopySectionSetForUnit(unit)
 	local bossUnit = isBossUnit(unit)
 	if bossUnit then set.layout = true end
 	if unit == "target" then set.rangeFade = true end
+	if unit == "player" or unit == "target" or unit == "focus" then set.incomingHeal = true end
 	if unit ~= "pet" then
 		set.absorb = true
 		set.healAbsorb = true
@@ -2604,6 +2607,83 @@ addon.Aura.GetUFPrimaryPowerTokenOptions = getPrimaryPowerTokenOptions
 addon.Aura.GetUFMainPowerTokens = getMainPowerTokens
 addon.Aura.GetUFPowerLabel = getPowerLabel
 
+local function appendIncomingHealSettings(list, unit, healthDef, textureOpts, refresh, refreshSettingsUI)
+	local incomingHealColorDef = healthDef.incomingHealColor or { 0.2, 0.85, 0.35, 0.45 }
+	local function isIncomingHealEnabled()
+		return getValue(unit, { "health", "incomingHealEnabled" }, healthDef.incomingHealEnabled == true) == true
+	end
+	local function refreshIncomingHealRegistration()
+		if UF and UF.Refresh then
+			UF.Refresh()
+		else
+			refresh()
+		end
+	end
+
+	list[#list + 1] = { name = L["Incoming heals"] or "Incoming heals", kind = settingType.Collapsible, id = "incomingHeal", defaultCollapsed = true }
+	list[#list + 1] = checkbox(
+		L["Show incoming heal bar"] or "Show incoming heal bar",
+		isIncomingHealEnabled,
+		function(val)
+			setValue(unit, { "health", "incomingHealEnabled" }, val and true or false)
+			refreshIncomingHealRegistration()
+			refreshSettingsUI()
+		end,
+		healthDef.incomingHealEnabled == true,
+		"incomingHeal"
+	)
+
+	list[#list + 1] = checkbox(
+		L["Show sample incoming heals"] or "Show sample incoming heals",
+		function() return getValue(unit, { "health", "showSampleIncomingHeal" }, healthDef.showSampleIncomingHeal == true) == true end,
+		function(val)
+			setValue(unit, { "health", "showSampleIncomingHeal" }, val and true or false)
+			refresh()
+		end,
+		healthDef.showSampleIncomingHeal == true,
+		"incomingHeal",
+		isIncomingHealEnabled
+	)
+
+	local incomingHealTextureSetting = checkboxDropdown(
+		L["Incoming heal texture"] or "Incoming heal texture",
+		textureOpts,
+		function() return getValue(unit, { "health", "incomingHealTexture" }, healthDef.incomingHealTexture or healthDef.texture or "DEFAULT") end,
+		function(val)
+			setValue(unit, { "health", "incomingHealTexture" }, val)
+			refresh()
+		end,
+		healthDef.incomingHealTexture or healthDef.texture or "DEFAULT",
+		"incomingHeal"
+	)
+	incomingHealTextureSetting.isEnabled = isIncomingHealEnabled
+	list[#list + 1] = incomingHealTextureSetting
+
+	list[#list + 1] = {
+		name = L["Incoming heal color"] or "Incoming heal color",
+		kind = settingType.Color,
+		parentId = "incomingHeal",
+		isEnabled = isIncomingHealEnabled,
+		get = function() return getValue(unit, { "health", "incomingHealColor" }, incomingHealColorDef) end,
+		set = function(_, color)
+			setColor(unit, { "health", "incomingHealColor" }, color.r, color.g, color.b, color.a)
+			refresh()
+		end,
+		colorGet = function() return getValue(unit, { "health", "incomingHealColor" }, incomingHealColorDef) end,
+		colorSet = function(_, color)
+			setColor(unit, { "health", "incomingHealColor" }, color.r, color.g, color.b, color.a)
+			refresh()
+		end,
+		colorDefault = {
+			r = incomingHealColorDef[1] or 0.2,
+			g = incomingHealColorDef[2] or 0.85,
+			b = incomingHealColorDef[3] or 0.35,
+			a = incomingHealColorDef[4] or 0.45,
+		},
+		hasOpacity = true,
+	}
+end
+
 local function buildUnitSettings(unit)
 	local def = defaultsFor(unit)
 	local list = {}
@@ -3794,6 +3874,8 @@ local function buildUnitSettings(unit)
 	end
 
 	if unit ~= "pet" then
+		if unit == "player" or unit == "target" or unit == "focus" then appendIncomingHealSettings(list, unit, healthDef, textureOpts, refresh, refreshSettingsUI) end
+
 		local function getOverlayHeightFallback()
 			local height = getValue(unit, { "healthHeight" }, def.healthHeight or 24)
 			if not height or height <= 0 then height = def.healthHeight or 24 end
@@ -7274,6 +7356,7 @@ local function buildUnitSettings(unit)
 		"portrait",
 		"name",
 		"health",
+		"incomingHeal",
 		"absorb",
 		"healAbsorb",
 		"level",
