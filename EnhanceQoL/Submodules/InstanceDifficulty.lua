@@ -186,8 +186,9 @@ function InstanceDifficulty:SetEnabled(value)
 		local indicator = getIndicator()
 		if indicator then
 			indicator:Show()
-			if MiniMapInstanceDifficulty_Update then
-				pcall(MiniMapInstanceDifficulty_Update)
+			local miniMapInstanceDifficultyUpdate = _G.MiniMapInstanceDifficulty_Update
+			if miniMapInstanceDifficultyUpdate then
+				pcall(miniMapInstanceDifficultyUpdate)
 			elseif indicator.Default then
 				indicator.Default:Show()
 			elseif indicator.ChallengeMode then
