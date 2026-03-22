@@ -833,6 +833,12 @@ local function refreshEditModeSettings()
 	if lib.internal.RefreshSettingValues then lib.internal:RefreshSettingValues() end
 end
 
+CooldownPanels.MarkRelativeFrameEntriesDirty = function()
+	CooldownPanels.runtime = CooldownPanels.runtime or {}
+	local runtime = CooldownPanels.runtime
+	runtime._eqolRelativeFrameEntriesVersion = (runtime._eqolRelativeFrameEntriesVersion or 0) + 1
+end
+
 local FAKE_CURSOR_FRAME_NAME = "EQOL_CooldownPanelsFakeCursor"
 local FAKE_CURSOR_ATLAS = "Cursor_Point_32"
 local FAKE_CURSOR_SIZE = 32
@@ -1460,6 +1466,104 @@ local function frameNameToPanelId(frameName)
 	if type(frameName) ~= "string" then return nil end
 	local id = frameName:match("^EQOL_CooldownPanel(%d+)$")
 	return id and tonumber(id) or nil
+end
+
+CooldownPanels.WouldCauseRelativeFrameLoop = function(panelKey, candidateName, root)
+	local targetId = frameNameToPanelId(candidateName)
+	if not targetId then return false end
+	if targetId == panelKey then return true end
+	local panels = root and root.panels or nil
+	local seen = {}
+	local currentId = targetId
+	local limit = 20
+	while currentId and limit > 0 do
+		if seen[currentId] then break end
+		seen[currentId] = true
+		if currentId == panelKey then return true end
+		local other = panels and panels[currentId] or nil
+		if other and root and not normalizedPanels[other] then
+			Helper.NormalizePanel(other, root.defaults)
+			normalizedPanels[other] = true
+		end
+		local otherAnchor = other and ensurePanelAnchor(other)
+		currentId = frameNameToPanelId(otherAnchor and otherAnchor.relativeFrame)
+		limit = limit - 1
+	end
+	return false
+end
+
+CooldownPanels.GetRelativeFrameCache = function(runtimePanel, panel, panelKey)
+	CooldownPanels.runtime = CooldownPanels.runtime or {}
+	local shared = CooldownPanels.runtime
+	local version = shared._eqolRelativeFrameEntriesVersion or 0
+	local anchor = ensurePanelAnchor(panel)
+	local cur = Helper.NormalizeRelativeFrameName(anchor and anchor.relativeFrame)
+	local root = ensureRoot()
+	local cache = runtimePanel and runtimePanel._eqolRelativeFrameCache or nil
+	if cache and cache.version == version and cache.root == root and cache.current == cur then return cache end
+	local entries = {}
+	local valid = {}
+	local seen = {}
+	local function add(key, label)
+		if not key or key == "" or seen[key] then return end
+		if CooldownPanels.WouldCauseRelativeFrameLoop(panelKey, key, root) then return end
+		seen[key] = true
+		valid[key] = true
+		entries[#entries + 1] = { key = key, label = label or key }
+	end
+
+	add("UIParent", "UIParent")
+	add(FAKE_CURSOR_FRAME_NAME, _G.CURSOR or "Cursor")
+	for _, key in ipairs(Helper.GENERIC_ANCHOR_ORDER) do
+		local info = Helper.GENERIC_ANCHORS[key]
+		if info then add(key, info.label) end
+	end
+	if _G and _G.EssentialCooldownViewer then add("EssentialCooldownViewer", COOLDOWN_VIEWER_SETTINGS_CATEGORY_ESSENTIAL) end
+	if _G and _G.UtilityCooldownViewer then add("UtilityCooldownViewer", COOLDOWN_VIEWER_SETTINGS_CATEGORY_UTILITY) end
+
+	local anchorHelper = CooldownPanels.AnchorHelper
+	if anchorHelper and anchorHelper.CollectAnchorEntries then
+		anchorHelper:CollectAnchorEntries(entries, seen)
+		for i = 1, #entries do
+			local entry = entries[i]
+			if entry and entry.key and entry.key ~= "" then
+				seen[entry.key] = true
+				valid[entry.key] = true
+			end
+		end
+	end
+
+	if root and root.panels then
+		for id, other in pairs(root.panels) do
+			local otherId = normalizeId(id)
+			if otherId ~= panelKey then
+				local label = string.format("Panel %s: %s", tostring(otherId), other and other.name or "Cooldown Panel")
+				add(panelFrameName(otherId), label)
+			end
+		end
+	end
+
+	if cur and not seen[cur] then
+		local label = anchorHelper and anchorHelper.GetAnchorLabel and anchorHelper:GetAnchorLabel(cur)
+		add(cur, label or cur)
+	end
+
+	cache = { version = version, root = root, current = cur, entries = entries, valid = valid }
+	if runtimePanel then runtimePanel._eqolRelativeFrameCache = cache end
+	return cache
+end
+
+CooldownPanels.ValidateRelativeFrameChoice = function(panel, panelKey, runtimePanel)
+	local anchor = ensurePanelAnchor(panel)
+	if not anchor then return "UIParent" end
+	local cur = Helper.NormalizeRelativeFrameName(anchor.relativeFrame)
+	local cache = CooldownPanels.GetRelativeFrameCache(runtimePanel, panel, panelKey)
+	if cache.valid and cache.valid[cur] then return cur end
+	if anchor.relativeFrame ~= "UIParent" then
+		anchor.relativeFrame = "UIParent"
+		CooldownPanels.MarkRelativeFrameEntriesDirty()
+	end
+	return "UIParent"
 end
 
 local function normalizeSoundName(value)
@@ -2390,6 +2494,7 @@ end
 local function markRootOrderDirty(root)
 	if root then
 		root._orderDirty = true
+		CooldownPanels.MarkRelativeFrameEntriesDirty()
 		local runtime = CooldownPanels.runtime
 		if runtime and runtime._eqolPanelIdCacheRoot == root then
 			runtime._eqolPanelIdCache = nil
@@ -8667,6 +8772,7 @@ local function copyPanelSettings(targetPanelId, sourcePanelId)
 	target.y = source.y
 
 	Helper.NormalizePanel(target, root.defaults)
+	CooldownPanels.MarkRelativeFrameEntriesDirty()
 	CooldownPanels:RebuildSpellIndex()
 	CooldownPanels:ApplyPanelPosition(targetPanelId)
 	local runtime = CooldownPanels.runtime and CooldownPanels.runtime[targetPanelId]
@@ -9167,6 +9273,7 @@ local function ensureEditor()
 		local text = self:GetText()
 		if panel and text and text ~= "" and text ~= panel.name then
 			panel.name = text
+			CooldownPanels.MarkRelativeFrameEntriesDirty()
 			local runtimePanel = CooldownPanels.runtime and CooldownPanels.runtime[panelId]
 			if runtimePanel and runtimePanel.frame then runtimePanel.frame.editModeName = text end
 			if runtimePanel and runtimePanel.editModeId and EditMode and EditMode.frames and EditMode.frames[runtimePanel.editModeId] then EditMode.frames[runtimePanel.editModeId].title = text end
@@ -13291,24 +13398,6 @@ function CooldownPanels:RegisterEditModePanel(panelId)
 		refreshEditModePanelFrame(panelId, editModeId)
 		refreshEditModeSettingValues()
 	end
-	local function wouldCauseLoop(candidateName)
-		local targetId = frameNameToPanelId(candidateName)
-		if not targetId then return false end
-		if targetId == panelKey then return true end
-		local seen = {}
-		local currentId = targetId
-		local limit = 20
-		while currentId and limit > 0 do
-			if seen[currentId] then break end
-			seen[currentId] = true
-			if currentId == panelKey then return true end
-			local other = CooldownPanels:GetPanel(currentId)
-			local otherAnchor = other and ensurePanelAnchor(other)
-			currentId = frameNameToPanelId(otherAnchor and otherAnchor.relativeFrame)
-			limit = limit - 1
-		end
-		return false
-	end
 	local function applyAnchorDefaults(a, target)
 		if not a then return end
 		if target == "UIParent" then
@@ -13339,60 +13428,6 @@ function CooldownPanels:RegisterEditModePanel(panelId)
 	local visibilityRuleOptions = PanelVisibility.GetRuleOptions()
 	local settings
 	if SettingType then
-		local function relativeFrameEntries()
-			local entries = {}
-			local seen = {}
-			local function add(key, label)
-				if not key or key == "" or seen[key] then return end
-				if wouldCauseLoop(key) then return end
-				seen[key] = true
-				entries[#entries + 1] = { key = key, label = label or key }
-			end
-
-			add("UIParent", "UIParent")
-			add(FAKE_CURSOR_FRAME_NAME, _G.CURSOR or "Cursor")
-			for _, key in ipairs(Helper.GENERIC_ANCHOR_ORDER) do
-				local info = Helper.GENERIC_ANCHORS[key]
-				if info then add(key, info.label) end
-			end
-			if _G and _G.EssentialCooldownViewer then add("EssentialCooldownViewer", COOLDOWN_VIEWER_SETTINGS_CATEGORY_ESSENTIAL) end
-			if _G and _G.UtilityCooldownViewer then add("UtilityCooldownViewer", COOLDOWN_VIEWER_SETTINGS_CATEGORY_UTILITY) end
-
-			local anchorHelper = CooldownPanels.AnchorHelper
-			if anchorHelper and anchorHelper.CollectAnchorEntries then anchorHelper:CollectAnchorEntries(entries, seen) end
-
-			local root = CooldownPanels:GetRoot()
-			if root and root.panels then
-				for id, other in pairs(root.panels) do
-					local otherId = normalizeId(id)
-					if otherId ~= panelKey then
-						local label = string.format("Panel %s: %s", tostring(otherId), other and other.name or "Cooldown Panel")
-						add(panelFrameName(otherId), label)
-					end
-				end
-			end
-
-			local a = ensureAnchorTable()
-			local cur = a and a.relativeFrame
-			if cur and not seen[cur] then
-				local anchorHelper = CooldownPanels.AnchorHelper
-				local label = anchorHelper and anchorHelper.GetAnchorLabel and anchorHelper:GetAnchorLabel(cur)
-				add(cur, label or cur)
-			end
-
-			return entries
-		end
-
-		local function validateRelativeFrame(a)
-			if not a then return "UIParent" end
-			local cur = Helper.NormalizeRelativeFrameName(a.relativeFrame)
-			local entries = relativeFrameEntries()
-			for _, entry in ipairs(entries) do
-				if entry.key == cur then return cur end
-			end
-			a.relativeFrame = "UIParent"
-			return "UIParent"
-		end
 
 		settings = {
 			{
@@ -13436,19 +13471,20 @@ function CooldownPanels:RegisterEditModePanel(panelId)
 				parentId = "cooldownPanelAnchor",
 				height = 200,
 				get = function()
-					local a = ensureAnchorTable()
-					return validateRelativeFrame(a)
+					return CooldownPanels.ValidateRelativeFrameChoice(panel, panelKey, runtime)
 				end,
 				set = function(_, value)
 					local a = ensureAnchorTable()
 					if not a then return end
 					local target = Helper.NormalizeRelativeFrameName(value)
-					if wouldCauseLoop(target) then target = "UIParent" end
+					local cache = CooldownPanels.GetRelativeFrameCache(runtime, panel, panelKey)
+					if not (cache.valid and cache.valid[target]) then target = "UIParent" end
 					if target == FAKE_CURSOR_FRAME_NAME then
 						CooldownPanels:AttachFakeCursor(panelId)
 						applyAnchorPosition()
 						return
 					end
+					if a.relativeFrame ~= target then CooldownPanels.MarkRelativeFrameEntriesDirty() end
 					a.relativeFrame = target
 					applyAnchorDefaults(a, target)
 					applyAnchorPosition()
@@ -13457,21 +13493,21 @@ function CooldownPanels:RegisterEditModePanel(panelId)
 					if anchorHelper and anchorHelper.MaybeScheduleRefresh then anchorHelper:MaybeScheduleRefresh(target) end
 				end,
 				generator = function(_, root)
-					local entries = relativeFrameEntries()
+					local entries = CooldownPanels.GetRelativeFrameCache(runtime, panel, panelKey).entries
+					local current = CooldownPanels.ValidateRelativeFrameChoice(panel, panelKey, runtime)
 					for _, entry in ipairs(entries) do
-						root:CreateRadio(entry.label, function()
-							local a = ensureAnchorTable()
-							return validateRelativeFrame(a) == entry.key
-						end, function()
+						root:CreateRadio(entry.label, function() return current == entry.key end, function()
 							local a = ensureAnchorTable()
 							if not a then return end
 							local target = entry.key
-							if wouldCauseLoop(target) then target = "UIParent" end
+							local cache = CooldownPanels.GetRelativeFrameCache(runtime, panel, panelKey)
+							if not (cache.valid and cache.valid[target]) then target = "UIParent" end
 							if target == FAKE_CURSOR_FRAME_NAME then
 								CooldownPanels:AttachFakeCursor(panelId)
 								applyAnchorPosition()
 								return
 							end
+							if a.relativeFrame ~= target then CooldownPanels.MarkRelativeFrameEntriesDirty() end
 							a.relativeFrame = target
 							applyAnchorDefaults(a, target)
 							applyAnchorPosition()
@@ -15168,6 +15204,7 @@ function CooldownPanels:AttachFakeCursor(panelId)
 
 	anchor.point = "CENTER"
 	anchor.relativePoint = "CENTER"
+	CooldownPanels.MarkRelativeFrameEntriesDirty()
 	anchor.relativeFrame = FAKE_CURSOR_FRAME_NAME
 	anchor.x = 0
 	anchor.y = 0
