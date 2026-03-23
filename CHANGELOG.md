@@ -8,6 +8,7 @@
 - Unit Frames (Player / Target / Focus): Added incoming heal bars to the regular unit frames. The feature can now be adjusted there just like on the group frames.
 - Group Frames (Party / Raid): Added an optional `Aggro highlight` border in Edit Mode with `All` / `Only non-tanks` mode, sample preview, configurable texture/layer/size/offset, and adjustable color (default orange).
 - Cooldown Panels (Spells): Added an optional `Hide when no resource` setting, so spells can stay hidden until you have enough resource again. This can be set for a whole panel or adjusted per entry.
+- GCD Bar: Added an optional Blizzard `XPBarAnim-OrangeSpark` overlay that tracks the active fill edge, so the bar can be hidden for a spark-only look over resource bars.
 - GCD Bar: Added a configurable `Frame strata` setting in Edit Mode, matching the standalone castbar layering controls and persisting correctly through Edit Mode hydration.
 - Unit Frames (Target): Added `Show group number` unit-status settings to the target unit frame, matching the existing player-frame option set.
 

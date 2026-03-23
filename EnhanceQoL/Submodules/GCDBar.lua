@@ -32,6 +32,7 @@ GCDBar.defaults = GCDBar.defaults
 		height = 18,
 		texture = "DEFAULT",
 		color = { r = 1, g = 0.82, b = 0.2, a = 1 },
+		sparkEnabled = false,
 		bgEnabled = false,
 		bgTexture = "SOLID",
 		bgColor = { r = 0, g = 0, b = 0, a = 0 },
@@ -59,6 +60,7 @@ local DB_WIDTH = "gcdBarWidth"
 local DB_HEIGHT = "gcdBarHeight"
 local DB_TEXTURE = "gcdBarTexture"
 local DB_COLOR = "gcdBarColor"
+local DB_SPARK_ENABLED = "gcdBarSparkEnabled"
 local DB_BG_ENABLED = "gcdBarBackgroundEnabled"
 local DB_BG_TEXTURE = "gcdBarBackgroundTexture"
 local DB_BG_COLOR = "gcdBarBackgroundColor"
@@ -79,6 +81,7 @@ local DB_HIDE_IN_PET_BATTLE = "gcdBarHideInPetBattle"
 local DB_STRATA = "gcdBarStrata"
 
 local DEFAULT_TEX = "Interface\\TargetingFrame\\UI-StatusBar"
+local SPARK_ATLAS = "XPBarAnim-OrangeSpark"
 local GetSpellCooldownInfo = (C_Spell and C_Spell.GetSpellCooldown) or GetSpellCooldown
 local GetTime = GetTime
 local BAR_WIDTH_MIN = 6
@@ -224,6 +227,8 @@ local function isVerticalFillDirection(value) return value == "UP" or value == "
 
 local function isReverseFillDirection(value) return value == "RIGHT" or value == "DOWN" end
 
+local function clamp01(value) return clamp(tonumber(value) or 0, 0, 1) end
+
 local function normalizeAnchorPoint(value, fallback)
 	if value and VALID_ANCHOR_POINTS[value] then return value end
 	if fallback and VALID_ANCHOR_POINTS[fallback] then return fallback end
@@ -300,6 +305,8 @@ function GCDBar:GetTextureKey()
 end
 
 function GCDBar:GetColor() return normalizeColor(getValue(DB_COLOR, defaults.color), defaults.color) end
+
+function GCDBar:GetSparkEnabled() return getValue(DB_SPARK_ENABLED, defaults.sparkEnabled) == true end
 
 function GCDBar:GetBackgroundEnabled() return getValue(DB_BG_ENABLED, defaults.bgEnabled) == true end
 
@@ -532,6 +539,80 @@ function GCDBar:GetResolvedWidth()
 	return math.max(BAR_WIDTH_MIN, relativeWidth)
 end
 
+function GCDBar:HideSpark()
+	if self.frame and self.frame.spark then self.frame.spark:Hide() end
+end
+
+function GCDBar:UpdateSpark(value)
+	if not (self.frame and self.frame.spark) then return end
+	local spark = self.frame.spark
+	if not self:GetSparkEnabled() then
+		spark:Hide()
+		return
+	end
+	if not (self.previewing or self._gcdActive) then
+		spark:Hide()
+		return
+	end
+
+	local width = tonumber(self.frame:GetWidth()) or 0
+	local height = tonumber(self.frame:GetHeight()) or 0
+	if width <= 0 or height <= 0 then
+		spark:Hide()
+		return
+	end
+
+	local progress = value
+	if progress == nil then
+		if self.previewing then
+			progress = 0.5
+		elseif self.frame.GetValue then
+			progress = self.frame:GetValue()
+		end
+	end
+	progress = clamp01(progress)
+
+	local fillDirection = self:GetFillDirection()
+	local x = width * 0.5
+	local y = height * 0.5
+	if isVerticalFillDirection(fillDirection) then
+		if fillDirection == "DOWN" then
+			y = height * progress
+		else
+			y = height * (1 - progress)
+		end
+	else
+		if fillDirection == "RIGHT" then
+			x = width * (1 - progress)
+		else
+			x = width * progress
+		end
+	end
+
+	spark:ClearAllPoints()
+	spark:SetPoint("CENTER", self.frame, "TOPLEFT", x, -y)
+	spark:Show()
+end
+
+function GCDBar:ApplySparkAppearance()
+	if not (self.frame and self.frame.spark) then return end
+	local spark = self.frame.spark
+	if not self:GetSparkEnabled() then
+		spark:Hide()
+		return
+	end
+	if spark.SetAtlas then
+		local ok = spark:SetAtlas(SPARK_ATLAS, true)
+		if ok == false then
+			spark:Hide()
+			return
+		end
+	end
+	spark:SetBlendMode("ADD")
+	spark:SetAlpha(1)
+	self:UpdateSpark()
+end
+
 function GCDBar:ApplyStrata()
 	if not self.frame then return end
 	local strata = self:GetStrata() or ((self.frame.GetParent and self.frame:GetParent() and self.frame:GetParent().GetFrameStrata and self.frame:GetParent():GetFrameStrata()) or self.frame:GetFrameStrata() or "MEDIUM")
@@ -587,6 +668,8 @@ function GCDBar:ApplyAppearance()
 			self.frame.border:Show()
 		end
 	end
+
+	self:ApplySparkAppearance()
 end
 
 function GCDBar:OnMediaRegistered(mediaType, mediaKey)
@@ -626,6 +709,7 @@ function GCDBar:ApplySize()
 	if self.frame.bg then self.frame.bg:SetAllPoints(self.frame) end
 	if self.frame.editBg then self.frame.editBg:SetAllPoints(self.frame) end
 	if self.frame.border then self.frame.border:SetAllPoints(self.frame) end
+	self:UpdateSpark()
 end
 
 function GCDBar:EnsureFrame()
@@ -645,6 +729,11 @@ function GCDBar:EnsureFrame()
 	editBg:SetColorTexture(0.1, 0.6, 0.6, 0.2)
 	editBg:Hide()
 	bar.editBg = editBg
+
+	local spark = bar:CreateTexture(nil, "OVERLAY")
+	spark:SetBlendMode("ADD")
+	spark:Hide()
+	bar.spark = spark
 
 	local border = CreateFrame("Frame", nil, bar, "BackdropTemplate")
 	border:SetAllPoints(bar)
@@ -674,10 +763,12 @@ function GCDBar:ShowEditModeHint(show)
 		self.frame:SetMinMaxValues(0, 1)
 		self.frame:SetValue(1)
 		self.frame:Show()
+		self:UpdateSpark(0.5)
 	else
 		if self.frame.editBg then self.frame.editBg:Hide() end
 		self.frame.label:Hide()
 		self.previewing = nil
+		self:HideSpark()
 		self:UpdateGCD()
 	end
 end
@@ -689,6 +780,7 @@ function GCDBar:StopTimer()
 	self._gcdDuration = nil
 	self._gcdRate = nil
 	if self.frame then self.frame:Hide() end
+	self:HideSpark()
 end
 
 function GCDBar:UpdateTimer()
@@ -716,6 +808,7 @@ function GCDBar:UpdateTimer()
 	self.frame:SetMinMaxValues(0, 1)
 	self.frame:SetValue(value)
 	self.frame:Show()
+	self:UpdateSpark(value)
 end
 
 function GCDBar:UpdateGCD()
@@ -783,6 +876,8 @@ function GCDBar:ApplyLayoutData(data)
 	local height = clamp(data.height or defaults.height, BAR_HEIGHT_MIN, BAR_SIZE_MAX)
 	local texture = data.texture or defaults.texture
 	local r, g, b, a = normalizeColor(data.color or defaults.color, defaults.color)
+	local sparkEnabled = addon.db[DB_SPARK_ENABLED] == true
+	if data.sparkEnabled ~= nil then sparkEnabled = data.sparkEnabled == true end
 	local bgEnabled = data.bgEnabled == true
 	local bgTexture = data.bgTexture or defaults.bgTexture
 	local bgr, bgg, bgb, bga = normalizeColor(data.bgColor or defaults.bgColor, defaults.bgColor)
@@ -812,6 +907,7 @@ function GCDBar:ApplyLayoutData(data)
 	addon.db[DB_HEIGHT] = height
 	addon.db[DB_TEXTURE] = texture
 	addon.db[DB_COLOR] = { r = r, g = g, b = b, a = a }
+	addon.db[DB_SPARK_ENABLED] = sparkEnabled and true or false
 	addon.db[DB_BG_ENABLED] = bgEnabled
 	addon.db[DB_BG_TEXTURE] = bgTexture
 	addon.db[DB_BG_COLOR] = { r = bgr, g = bgg, b = bgb, a = bga }
@@ -859,6 +955,10 @@ local function applySetting(field, value)
 		local r, g, b, a = normalizeColor(value, defaults.color)
 		addon.db[DB_COLOR] = { r = r, g = g, b = b, a = a }
 		value = addon.db[DB_COLOR]
+	elseif field == "sparkEnabled" then
+		local enabled = value == true
+		addon.db[DB_SPARK_ENABLED] = enabled and true or false
+		value = enabled
 	elseif field == "bgEnabled" then
 		local enabled = value == true
 		addon.db[DB_BG_ENABLED] = enabled
@@ -1182,6 +1282,14 @@ function GCDBar:RegisterEditMode()
 				set = function(_, value) applySetting("color", value) end,
 			},
 			{
+				name = L["gcdBarSparkEnabled"] or "Show spark",
+				kind = SettingType.Checkbox,
+				field = "sparkEnabled",
+				default = defaults.sparkEnabled == true,
+				get = function() return GCDBar:GetSparkEnabled() end,
+				set = function(_, value) applySetting("sparkEnabled", value) end,
+			},
+			{
 				name = L["gcdBarBackgroundEnabled"] or "Use background",
 				kind = SettingType.Checkbox,
 				field = "bgEnabled",
@@ -1325,6 +1433,7 @@ function GCDBar:RegisterEditMode()
 		record.width = self:GetWidth()
 		record.height = self:GetHeight()
 		record.texture = self:GetTextureKey()
+		record.sparkEnabled = self:GetSparkEnabled()
 		record.bgEnabled = self:GetBackgroundEnabled()
 		record.bgTexture = self:GetBackgroundTextureKey()
 		do
@@ -1362,6 +1471,7 @@ function GCDBar:RegisterEditMode()
 			width = self:GetWidth(),
 			height = self:GetHeight(),
 			texture = self:GetTextureKey(),
+			sparkEnabled = self:GetSparkEnabled(),
 			bgEnabled = self:GetBackgroundEnabled(),
 			bgTexture = self:GetBackgroundTextureKey(),
 			bgColor = (function()

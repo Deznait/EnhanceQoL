@@ -1222,6 +1222,7 @@ function addon.functions.initUIOptions()
 	addon.functions.InitDBValue("gcdBarHeight", defaults.height or 18)
 	addon.functions.InitDBValue("gcdBarTexture", defaults.texture or "DEFAULT")
 	addon.functions.InitDBValue("gcdBarColor", defaults.color or { r = 1, g = 0.82, b = 0.2, a = 1 })
+	addon.functions.InitDBValue("gcdBarSparkEnabled", defaults.sparkEnabled == true)
 	addon.functions.InitDBValue("gcdBarBackgroundEnabled", defaults.bgEnabled == true)
 	addon.functions.InitDBValue("gcdBarBackgroundTexture", defaults.bgTexture or "SOLID")
 	addon.functions.InitDBValue("gcdBarBackgroundColor", defaults.bgColor or { r = 0, g = 0, b = 0, a = 0 })
@@ -1280,6 +1281,10 @@ function addon.functions.initUIOptions()
 	if addon.db then addon.db["xpBarDebugLast"] = nil end
 
 	if addon.Aura and addon.Aura.ExperienceBar and addon.Aura.ExperienceBar.OnSettingChanged then addon.Aura.ExperienceBar:OnSettingChanged(addon.db["xpBarEnabled"]) end
+	addon.functions.InitDBValue("totalAbsorbTrackerEnabled", false)
+	if addon.Aura and addon.Aura.TotalAbsorbTracker and addon.Aura.TotalAbsorbTracker.OnSettingChanged then
+		addon.Aura.TotalAbsorbTracker:OnSettingChanged(addon.db["totalAbsorbTrackerEnabled"])
+	end
 
 	local combatDefaults = (addon.CombatText and addon.CombatText.defaults) or {}
 	local combatAlwaysModeCombatOnly = addon.CombatText and addon.CombatText.ALWAYS_VISIBLE_MODE_COMBAT_ONLY or "COMBAT_ONLY"
@@ -1356,6 +1361,31 @@ local function createNameplatesCategory()
 
 	table.sort(nameplateData, function(a, b) return a.text < b.text end)
 	addon.functions.SettingsCreateCheckboxes(category, nameplateData)
+end
+
+local function createTotalAbsorbTrackerSettings(category, expandable)
+	if not category or not expandable then return end
+	if addon.SettingsLayout._eqolTotalAbsorbTrackerSettingsBuilt then return end
+	addon.SettingsLayout._eqolTotalAbsorbTrackerSettingsBuilt = true
+
+	addon.functions.SettingsCreateHeadline(category, L["TotalAbsorbTracker"] or "Total Absorb Tracker", {
+		parentSection = expandable,
+	})
+	addon.functions.SettingsCreateCheckbox(category, {
+		var = "totalAbsorbTrackerEnabled",
+		text = L["totalAbsorbTrackerEnabled"] or "Enable Total Absorb tracker",
+		desc = L["totalAbsorbTrackerDesc"] or "Shows your current player absorb amount in a standalone icon tracker.",
+		func = function(value)
+			addon.db["totalAbsorbTrackerEnabled"] = value and true or false
+			if addon.Aura and addon.Aura.TotalAbsorbTracker and addon.Aura.TotalAbsorbTracker.OnSettingChanged then
+				addon.Aura.TotalAbsorbTracker:OnSettingChanged(addon.db["totalAbsorbTrackerEnabled"])
+			end
+		end,
+		parentSection = expandable,
+	})
+	addon.functions.SettingsCreateText(category, "|cffffd700" .. (L["totalAbsorbTrackerEditModeHint"] or "Configure icon, text, anchor, and offsets in Edit Mode.") .. "|r", {
+		parentSection = expandable,
+	})
 end
 
 local function createCastbarCategory()
@@ -1559,15 +1589,17 @@ end
 local function ensureBarsResourcesCategory()
 	local category = addon.SettingsLayout.rootUI
 	local expandable = addon.SettingsLayout.uiBarsResourcesExpandable
-	if expandable then return end
+	if not expandable then
+		expandable = addon.functions.SettingsCreateExpandableSection(category, {
+			name = L["BarsAndResources"] or "Bars & Resources",
+			expanded = false,
+			colorizeTitle = false,
+			newTagID = "ResourceBars",
+		})
+		addon.SettingsLayout.uiBarsResourcesExpandable = expandable
+	end
 
-	expandable = addon.functions.SettingsCreateExpandableSection(category, {
-		name = L["BarsAndResources"] or "Bars & Resources",
-		expanded = false,
-		colorizeTitle = false,
-		newTagID = "ResourceBars",
-	})
-	addon.SettingsLayout.uiBarsResourcesExpandable = expandable
+	createTotalAbsorbTrackerSettings(category, expandable)
 end
 
 createActionBarCategory()

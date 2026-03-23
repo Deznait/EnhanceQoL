@@ -5761,6 +5761,23 @@ local function setAllHooks()
 		end
 	end
 
+	local function refreshTotalAbsorbTrackerForMedia(mediaType, mediaKey)
+		local tracker = addon.Aura and addon.Aura.TotalAbsorbTracker
+		if not (tracker and tracker.IsEnabled and tracker:IsEnabled()) then return end
+		if not tracker.RefreshAppearance then return end
+		local shouldRefresh = false
+		if mediaType == "font" then
+			local fontKey = tracker.GetTextFontKey and tracker:GetTextFontKey() or nil
+			shouldRefresh = mediaKey == fontKey
+		elseif mediaType == "border" then
+			local borderKey = tracker.GetBorderTextureKey and tracker:GetBorderTextureKey() or nil
+			shouldRefresh = mediaKey == borderKey
+		end
+		if not shouldRefresh then return end
+		tracker:RefreshAppearance()
+		if tracker.Refresh then tracker:Refresh() end
+	end
+
 	local function refreshGCDBarForMedia(mediaType, mediaKey)
 		local gcdBar = addon.GCDBar
 		if not (gcdBar and gcdBar.OnMediaRegistered) then return end
@@ -5791,6 +5808,11 @@ local function setAllHooks()
 			if xpBar and xpBar.ApplyAppearance then
 				xpBar:ApplyAppearance()
 				if xpBar.UpdateSoon then xpBar:UpdateSoon() end
+			end
+			local tracker = addon.Aura.TotalAbsorbTracker
+			if tracker and tracker.IsEnabled and tracker:IsEnabled() and tracker.RefreshAppearance then
+				tracker:RefreshAppearance()
+				if tracker.Refresh then tracker:Refresh() end
 			end
 			if addon.Aura.ResourceBars and addon.Aura.ResourceBars.Refresh then addon.Aura.ResourceBars.Refresh() end
 			if addon.Aura.CooldownPanels and addon.Aura.CooldownPanels.RefreshAllPanels then addon.Aura.CooldownPanels:RefreshAllPanels() end
@@ -5839,10 +5861,12 @@ local function setAllHooks()
 		elseif mediaType == "border" then
 			if ActionBarLabels and ActionBarLabels.ResetBorderCache then ActionBarLabels.ResetBorderCache() end
 			refreshExperienceBarForMedia(mediaType, mediaKey)
+			refreshTotalAbsorbTrackerForMedia(mediaType, mediaKey)
 			refreshGCDBarForMedia(mediaType, mediaKey)
 			if addon.MythicPlus and addon.MythicPlus.functions and addon.MythicPlus.functions.refreshBloodlustMedia then addon.MythicPlus.functions.refreshBloodlustMedia(mediaType, mediaKey) end
 		elseif mediaType == "font" then
 			refreshExperienceBarForMedia(mediaType, mediaKey)
+			refreshTotalAbsorbTrackerForMedia(mediaType, mediaKey)
 			if addon.MythicPlus and addon.MythicPlus.functions and addon.MythicPlus.functions.refreshBloodlustMedia then addon.MythicPlus.functions.refreshBloodlustMedia(mediaType, mediaKey) end
 			queueGlobalFontRefresh()
 		end

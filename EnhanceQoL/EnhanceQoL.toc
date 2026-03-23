@@ -86,6 +86,7 @@ Modules\Aura\Init.lua
 Modules\Aura\ResourceBars.lua
 Modules\Aura\ResourceBarsHelpers.lua
 Modules\Aura\ExperienceBar.lua
+Modules\Aura\TotalAbsorbTracker.lua
 Modules\Skinner\Init.lua
 Settings\SettingsUI.xml
 
