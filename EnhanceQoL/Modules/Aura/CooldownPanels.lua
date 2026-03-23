@@ -2234,6 +2234,7 @@ function CooldownPanels:CreateFixedGroup(panelId, column, row, columns, rows, na
 
 	Helper.InvalidateFixedLayoutCache(panel)
 	Helper.EnsureFixedSlotAssignments(panel)
+	self:InvalidateLayoutEditGrid(panelId)
 	return groupId
 end
 
@@ -2245,6 +2246,7 @@ function CooldownPanels:RenameFixedGroup(panelId, groupId, name)
 	if not (group and normalizedName) then return false end
 	if group.name == normalizedName then return false end
 	group.name = normalizedName
+	self:InvalidateLayoutEditGrid(panelId)
 	return true
 end
 
@@ -2279,6 +2281,7 @@ function CooldownPanels:DeleteFixedGroup(panelId, groupId)
 	self:ClearFixedGroupEffectiveLayoutCache(panelId, group.id)
 	Helper.InvalidateFixedLayoutCache(panel)
 	Helper.EnsureFixedSlotAssignments(panel)
+	self:InvalidateLayoutEditGrid(panelId)
 	return true
 end
 
@@ -2299,6 +2302,7 @@ function CooldownPanels:SetFixedGroupMode(panelId, groupId, mode)
 	Helper.NormalizeFixedGroups(panel.layout)
 	Helper.InvalidateFixedLayoutCache(panel)
 	Helper.EnsureFixedSlotAssignments(panel)
+	self:InvalidateLayoutEditGrid(panelId)
 	return true
 end
 
@@ -2317,6 +2321,7 @@ function CooldownPanels:SetFixedGroupIconSize(panelId, groupId, iconSize)
 		if entry and Helper.NormalizeFixedGroupId(entry.fixedGroupId) == group.id then self:SyncEntryFixedGroupState(panel, entry) end
 	end
 	Helper.NormalizeFixedGroups(panel.layout)
+	self:InvalidateLayoutEditGrid(panelId)
 	return true
 end
 
@@ -2409,6 +2414,7 @@ function CooldownPanels:SetFixedGroupLayoutOverride(panelId, groupId, field, val
 	CooldownPanels.BumpFixedGroupEffectiveLayoutVersion(panel)
 	self:ClearFixedGroupEffectiveLayoutCache(panelId, group.id)
 	if field == "readyGlowCheckPower" then self:RebuildPowerIndex() end
+	self:InvalidateLayoutEditGrid(panelId)
 	return true
 end
 
@@ -2462,6 +2468,7 @@ function CooldownPanels:MoveFixedGroup(panelId, groupId, column, row)
 	Helper.NormalizeFixedGroups(panel.layout)
 	Helper.InvalidateFixedLayoutCache(panel)
 	Helper.EnsureFixedSlotAssignments(panel)
+	self:InvalidateLayoutEditGrid(panelId)
 	return true, nil
 end
 
@@ -6348,6 +6355,15 @@ function CooldownPanels:StartFixedGroupMove(panelId, groupId, column, row)
 	return true
 end
 
+function CooldownPanels:InvalidateLayoutEditGrid(panelId)
+	panelId = normalizeId(panelId)
+	local runtime = panelId and getRuntime(panelId) or nil
+	if not runtime then return end
+	runtime._eqolLayoutEditGridCount = nil
+	runtime._eqolLayoutEditGridActive = nil
+	runtime._eqolLayoutEditGridDirty = true
+end
+
 function CooldownPanels:UpdateFixedGroupDragTarget(panelId, column, row)
 	panelId = normalizeId(panelId)
 	local panel = panelId and self:GetPanel(panelId) or nil
@@ -6377,16 +6393,14 @@ function CooldownPanels:FinishFixedGroupDrag(panelId)
 		local groupId = self:CreateFixedGroup(panelId, rect.column, rect.row, rect.columns, rect.rows)
 		if groupId then
 			clearRuntimeLayoutShapeCache(runtime)
-			self:RefreshPanel(panelId)
-			self:RefreshEditor()
+			self:RefreshPanelForCurrentEditContext(panelId, true)
 			return true
 		end
 	elseif drag.mode == "move" then
 		local moved, reason = self:MoveFixedGroup(panelId, drag.groupId, rect.column, rect.row)
 		if moved then
 			clearRuntimeLayoutShapeCache(runtime)
-			self:RefreshPanel(panelId)
-			self:RefreshEditor()
+			self:RefreshPanelForCurrentEditContext(panelId, true)
 			return true
 		end
 	end
@@ -9915,7 +9929,40 @@ function CooldownPanels:RefreshLayoutFixedGroupStandaloneMenu()
 	local group = panel and groupId and CooldownPanels.GetFixedGroupById(panel, groupId) or nil
 	local editor = getEditor()
 	local selectedPanelId = normalizeId(editor and editor.selectedPanelId)
-	if not group or not self:IsPanelLayoutEditActive(panelId) or selectedPanelId ~= panelId then self:HideLayoutFixedGroupStandaloneMenu(panelId) end
+	if not group or not self:IsPanelLayoutEditActive(panelId) or selectedPanelId ~= panelId then
+		self:HideLayoutFixedGroupStandaloneMenu(panelId)
+		return
+	end
+	local dialog = state.dialog
+	if dialog then
+		local title = CooldownPanels.GetFixedGroupDisplayLabel(group)
+		if dialog.context then dialog.context.title = title end
+		if dialog.Title and title then dialog.Title:SetText(title) end
+		if dialog.UpdateSettings then dialog:UpdateSettings() end
+		if dialog.UpdateButtons then dialog:UpdateButtons() end
+		if dialog.Layout then dialog:Layout() end
+	end
+end
+
+function CooldownPanels:ScheduleLayoutFixedGroupStandaloneMenuRefresh(panelId, groupId)
+	local state = self:GetLayoutFixedGroupStandaloneMenuState(false)
+	if not state then return end
+	if state.refreshPending then return end
+	if not (C_Timer and C_Timer.After) then
+		self:RefreshLayoutFixedGroupStandaloneMenu()
+		return
+	end
+	state.refreshPending = true
+	panelId = normalizeId(panelId)
+	groupId = Helper.NormalizeFixedGroupId(groupId)
+	C_Timer.After(0, function()
+		local currentState = CooldownPanels:GetLayoutFixedGroupStandaloneMenuState(false)
+		if currentState then currentState.refreshPending = nil end
+		if not currentState then return end
+		if normalizeId(currentState.panelId) ~= panelId then return end
+		if Helper.NormalizeFixedGroupId(currentState.groupId) ~= groupId then return end
+		CooldownPanels:RefreshLayoutFixedGroupStandaloneMenu()
+	end)
 end
 
 function CooldownPanels:BuildLayoutFixedGroupStandaloneSettings(panelId, groupId)
@@ -9960,6 +10007,7 @@ function CooldownPanels:BuildLayoutFixedGroupStandaloneSettings(panelId, groupId
 			name = L["CooldownPanelRename"] or "Name",
 			kind = SettingType.Input,
 			parentId = "cooldownPanelStandaloneFixedGroupGeneral",
+			labelWidth = 80,
 			inputWidth = 220,
 			get = function()
 				local _, group = getPanelAndGroup()
@@ -10217,9 +10265,23 @@ function CooldownPanels:OpenLayoutFixedGroupStandaloneMenu(panelId, groupId, anc
 	if not (group and hostFrame and settings) then return end
 
 	local spawnPosition = self:GetStandaloneDialogSpawnPosition(anchorFrame, hostFrame, 12, 0)
+	local buttons = {
+		{
+			text = DELETE or "Delete",
+			click = function()
+				local currentPanel = CooldownPanels:GetPanel(panelId)
+				local currentGroup = currentPanel and CooldownPanels.GetFixedGroupById(currentPanel, groupId) or nil
+				local groupName = currentGroup and CooldownPanels.GetFixedGroupName(currentGroup) or nil
+				CooldownPanels:HideLayoutFixedGroupStandaloneMenu(panelId)
+				CooldownPanels:EnsureFixedGroupDeletePopup()
+				StaticPopup_Show("EQOL_COOLDOWN_PANEL_FIXED_GROUP_DELETE", groupName, nil, { panelId = panelId, groupId = groupId })
+			end,
+		},
+	}
 	local dialog = lib:ShowStandaloneSettingsDialog(hostFrame, {
 		title = CooldownPanels.GetFixedGroupDisplayLabel(group),
 		settings = settings,
+		buttons = buttons,
 		showReset = false,
 		showSettingsReset = false,
 		settingsMaxHeight = 560,
@@ -10236,6 +10298,7 @@ function CooldownPanels:OpenLayoutFixedGroupStandaloneMenu(panelId, groupId, anc
 		state.groupId = groupId
 		state.hostFrame = hostFrame
 		state.dialog = dialog
+		self:ScheduleLayoutFixedGroupStandaloneMenuRefresh(panelId, groupId)
 	end
 end
 
@@ -11394,11 +11457,11 @@ function CooldownPanels:EnsureFixedGroupDeletePopup()
 		preferredIndex = 3,
 		OnAccept = function(_, data)
 			if not (data and data.panelId and data.groupId) then return end
+			CooldownPanels:HideLayoutFixedGroupStandaloneMenu(data.panelId)
 			if CooldownPanels:DeleteFixedGroup(data.panelId, data.groupId) then
 				local runtime = getRuntime(data.panelId)
 				if runtime then clearRuntimeLayoutShapeCache(runtime) end
-				CooldownPanels:RefreshPanel(data.panelId)
-				CooldownPanels:RefreshEditor()
+				CooldownPanels:RefreshPanelForCurrentEditContext(data.panelId, true)
 			end
 		end,
 	}
@@ -13645,10 +13708,11 @@ function CooldownPanels:UpdateRuntimeIcons(panelId)
 		if editGridColumns <= 0 then editGridColumns = math.min(math.max(type(panel.order) == "table" and #panel.order or 0, 4), 12) end
 	end
 	local layoutEditGridCount = layoutEditActive and fixedLayout and fixedSlotCount or 0
-	if runtime._eqolLayoutEditGridCount ~= layoutEditGridCount or runtime._eqolLayoutEditGridActive ~= (layoutEditActive == true) then
+	if runtime._eqolLayoutEditGridDirty == true or runtime._eqolLayoutEditGridCount ~= layoutEditGridCount or runtime._eqolLayoutEditGridActive ~= (layoutEditActive == true) then
 		self:UpdateLayoutEditGrid(panelId, layoutEditGridCount)
 		runtime._eqolLayoutEditGridCount = layoutEditGridCount
 		runtime._eqolLayoutEditGridActive = layoutEditActive == true
+		runtime._eqolLayoutEditGridDirty = nil
 	end
 	runtime.readyAt = runtime.readyAt or {}
 	runtime.glowTimers = runtime.glowTimers or {}
