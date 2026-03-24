@@ -1,5 +1,11 @@
 # Changelog
 
+## [9.9.3] - 2026-03-24
+
+### 🐛 Fixed
+
+- Group Frames (Party / Raid / Edit Mode): Fixed the action buttons at the bottom of the settings panel using an uneven layout. They now use a consistent grid and the panel height behaves more cleanly when many options are visible.
+
 ## [9.9.2] - 2026-03-24
 
 ### 🐛 Fixed
