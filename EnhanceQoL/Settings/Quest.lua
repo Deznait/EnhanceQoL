@@ -9,6 +9,11 @@ local function applyParentSection(entries, section)
 	end
 end
 
+local function NormalizeQuestAutomationModifier(value)
+	if value == "SHIFT" or value == "CTRL" or value == "ALT" or value == "NONE" then return value end
+	return nil
+end
+
 local cQuest = addon.SettingsLayout.rootGAMEPLAY
 addon.SettingsLayout.questCategory = cQuest
 
@@ -384,11 +389,12 @@ local questingData = {
 				listFunc = function()
 					local tList = { [""] = "" }
 					for id, name in pairs(addon.db["ignoredQuestNPC"] or {}) do
-						tList[id] = name
+						tList[tostring(id)] = name
 					end
 					return tList
 				end,
 				text = REMOVE,
+				default = "",
 				get = function() return "" end,
 				set = function(key)
 					if not key or key == "" then return end
@@ -401,7 +407,7 @@ local questingData = {
 				end,
 				parent = true,
 				var = "ignoredQuestNPC",
-				type = Settings.VarType.Number,
+				type = Settings.VarType.String,
 				sType = "dropdown",
 			},
 		},
@@ -415,23 +421,21 @@ local questingData = {
 		default = false,
 		children = {
 			{
-				text = "|cff99e599" .. (L["autoGossipHint"] or "Use /eqol aag <id> to add and /eqol rag <id> to remove gossip IDs.") .. "|r",
-				sType = "hint",
-			},
-			{
+				var = "autoGossipModifier",
+				text = L["questAutomationModifier"] or "Quest automation modifier",
+				desc = L["questAutomationModifierDesc"],
 				listFunc = function()
-					local tList = { [""] = "" }
-					for id in pairs(addon.db["autogossipID"] or {}) do
-						tList[id] = tostring(id)
-					end
-					return tList
+					return {
+						NONE = L["modifierNone"] or "None",
+						SHIFT = L["modifierShift"] or "Shift",
+						CTRL = L["modifierCtrl"] or "Ctrl",
+						ALT = L["modifierAlt"] or "Alt",
+					}
 				end,
-				text = L["autoGossipIDs"] or "Configured gossip IDs",
-				get = function() return "" end,
+				get = function() return addon.db and addon.db.autoGossipModifier or "NONE" end,
 				set = function(key)
-					if not key or key == "" then return end
-					local id = tonumber(key) or key
-					if addon.db["autogossipID"][id] then addon.db["autogossipID"][id] = nil end
+					if not key or key == "" then key = "NONE" end
+					addon.db["autoGossipModifier"] = key
 				end,
 				parentCheck = function()
 					return addon.SettingsLayout.elements["autoGossip"]
@@ -439,9 +443,11 @@ local questingData = {
 						and addon.SettingsLayout.elements["autoGossip"].setting:GetValue() == true
 				end,
 				parent = true,
-				var = "autogossipID",
-				type = Settings.VarType.Number,
 				sType = "dropdown",
+			},
+			{
+				text = "|cff99e599" .. (L["autoGossipHint"] or "Use /eqol aag <id> to add and /eqol rag <id> to remove gossip IDs.") .. "|r",
+				sType = "hint",
 			},
 		},
 	},
@@ -613,9 +619,17 @@ function addon.functions.initQuest()
 			addon.db.autoChooseQuest = nil
 		end
 		if addon.db.autoChooseQuestModifier ~= nil then
-			if addon.db.autoAcceptQuestModifier == nil then addon.db.autoAcceptQuestModifier = addon.db.autoChooseQuestModifier end
-			if addon.db.autoTurnInQuestModifier == nil then addon.db.autoTurnInQuestModifier = addon.db.autoChooseQuestModifier end
+			local legacyModifier = NormalizeQuestAutomationModifier(addon.db.autoChooseQuestModifier)
+			if addon.db.autoAcceptQuestModifier == nil then addon.db.autoAcceptQuestModifier = legacyModifier or addon.db.autoChooseQuestModifier end
+			if addon.db.autoTurnInQuestModifier == nil then addon.db.autoTurnInQuestModifier = legacyModifier or addon.db.autoChooseQuestModifier end
+			if addon.db.autoGossipModifier == nil then addon.db.autoGossipModifier = legacyModifier or addon.db.autoChooseQuestModifier end
 			addon.db.autoChooseQuestModifier = nil
+		end
+		if addon.db.autoGossipModifier == nil and addon.db.autoGossip == true then
+			local acceptModifier = NormalizeQuestAutomationModifier(addon.db.autoAcceptQuestModifier)
+			local turnInModifier = NormalizeQuestAutomationModifier(addon.db.autoTurnInQuestModifier)
+			-- Profiles migrated before autoGossip had its own modifier should keep the old combined behavior.
+			if acceptModifier and acceptModifier == turnInModifier and acceptModifier ~= "NONE" then addon.db.autoGossipModifier = acceptModifier end
 		end
 		local hadQuestAutomationFiltersAccept = type(addon.db.questAutomationFiltersAccept) == "table"
 		local hadQuestAutomationFiltersTurnIn = type(addon.db.questAutomationFiltersTurnIn) == "table"
@@ -651,6 +665,7 @@ function addon.functions.initQuest()
 	addon.functions.InitDBValue("autoTurnInQuest", false)
 	addon.functions.InitDBValue("autoTurnInQuestModifier", "NONE")
 	addon.functions.InitDBValue("autoGossip", false)
+	addon.functions.InitDBValue("autoGossipModifier", "NONE")
 	addon.functions.InitDBValue("questAutomationFiltersAccept", {})
 	addon.functions.InitDBValue("questAutomationFiltersTurnIn", {})
 	addon.functions.InitDBValue("ignoreTrivialQuests", false)

@@ -5942,7 +5942,58 @@ function addon.functions.shouldAutoAcceptQuest() return addon.functions.shouldAu
 
 function addon.functions.shouldAutoTurnInQuest() return addon.functions.shouldAutoQuestSetting("autoTurnInQuest", "autoTurnInQuestModifier") end
 
-function addon.functions.shouldAutoGossip() return addon.db and addon.db["autoGossip"] == true end
+function addon.functions.shouldAutoGossip() return addon.functions.shouldAutoQuestSetting("autoGossip", "autoGossipModifier") end
+
+local function selectGossipOptionInfo(optionInfo)
+	if not optionInfo then return false end
+	if optionInfo.gossipOptionID then
+		C_GossipInfo.SelectOption(optionInfo.gossipOptionID)
+		return true
+	end
+	if optionInfo.orderIndex then
+		C_GossipInfo.SelectOptionByIndex(optionInfo.orderIndex)
+		return true
+	end
+	return false
+end
+
+local function handleAutoGossipOptions(hasQuestEntries)
+	if not addon.functions.shouldAutoGossip() then return false end
+
+	local options = C_GossipInfo.GetOptions()
+	if not options or #options == 0 then return false end
+
+	local configuredOptionIDs = addon.db and addon.db["autogossipID"]
+	if type(configuredOptionIDs) == "table" then
+		for _, optionInfo in ipairs(options) do
+			local optionID = optionInfo and optionInfo.gossipOptionID
+			if optionID and configuredOptionIDs[optionID] and selectGossipOptionInfo(optionInfo) then return true end
+		end
+	end
+
+	-- Match Blizzard's behavior: only auto-continue a single gossip option when no quest entries are present.
+	if hasQuestEntries or #options ~= 1 then return false end
+
+	local onlyOption = options[1]
+	if not onlyOption or onlyOption.selectOptionWhenOnlyOption ~= true then return false end
+
+	local clickKey = onlyOption.gossipOptionID or onlyOption.orderIndex
+	if clickKey and addon.variables.gossipClicked[clickKey] then return false end
+	if not selectGossipOptionInfo(onlyOption) then return false end
+
+	if clickKey then addon.variables.gossipClicked[clickKey] = true end
+	return true
+end
+
+local function clearPendingAutoAcceptQuest(questID)
+	local pendingAcceptQuests = addon.variables and addon.variables.acceptQuestID
+	if type(pendingAcceptQuests) ~= "table" then return end
+	if questID then
+		pendingAcceptQuests[questID] = nil
+		return
+	end
+	addon.variables.acceptQuestID = {}
+end
 
 function addon.functions.shouldSkipQuestAutomation(questID, questInfo, mode)
 	if not addon.db then return false end
@@ -6269,44 +6320,32 @@ local eventHandlers = {
 	["GOSSIP_SHOW"] = function()
 		if addon.functions.isQuestAutomationIgnoredNpc() then return end
 
+		local activeQuests = C_GossipInfo.GetActiveQuests()
+		local availableQuests = C_GossipInfo.GetAvailableQuests()
+
 		if addon.functions.shouldAutoTurnInQuest() then
-			local activeQuests = C_GossipInfo.GetActiveQuests()
-			if C_GossipInfo.GetNumActiveQuests() > 0 and activeQuests then
-				for i, quest in pairs(activeQuests) do
-					if quest.isComplete and not addon.functions.shouldSkipQuestAutomation(quest.questID, quest, "turnIn") then C_GossipInfo.SelectActiveQuest(quest.questID) end
+			if activeQuests and #activeQuests > 0 then
+				for _, quest in ipairs(activeQuests) do
+					if quest.isComplete and not addon.functions.shouldSkipQuestAutomation(quest.questID, quest, "turnIn") then
+						C_GossipInfo.SelectActiveQuest(quest.questID)
+						return
+					end
 				end
 			end
 		end
 
 		if addon.functions.shouldAutoAcceptQuest() then
-			local aQuests = C_GossipInfo.GetAvailableQuests()
-			if #aQuests > 0 then
-				for i, quest in pairs(aQuests) do
-					if not addon.functions.shouldSkipQuestAutomation(quest.questID, quest, "accept") then C_GossipInfo.SelectAvailableQuest(quest.questID) end
+			if availableQuests and #availableQuests > 0 then
+				for _, quest in ipairs(availableQuests) do
+					if not addon.functions.shouldSkipQuestAutomation(quest.questID, quest, "accept") then
+						C_GossipInfo.SelectAvailableQuest(quest.questID)
+						return
+					end
 				end
 			end
 		end
 
-		if addon.functions.shouldAutoGossip() then
-			local options = C_GossipInfo.GetOptions()
-			if options and #options > 0 then
-				if #options > 1 then
-					for _, v in pairs(options) do
-						if v.gossipOptionID and addon.db["autogossipID"][v.gossipOptionID] then C_GossipInfo.SelectOption(v.gossipOptionID) end
-						if v.flags == 1 and v.gossipOptionID then
-							C_GossipInfo.SelectOption(v.gossipOptionID)
-							return
-						end
-					end
-				elseif #options == 1 then
-					local onlyOption = options[1]
-					if onlyOption and onlyOption.gossipOptionID and not addon.variables.gossipClicked[onlyOption.gossipOptionID] then
-						addon.variables.gossipClicked[onlyOption.gossipOptionID] = true
-						C_GossipInfo.SelectOption(onlyOption.gossipOptionID)
-					end
-				end
-			end
-		end
+		handleAutoGossipOptions((activeQuests and #activeQuests > 0) or (availableQuests and #availableQuests > 0))
 	end,
 
 	["LFG_ROLE_CHECK_SHOW"] = function()
@@ -6461,6 +6500,7 @@ local eventHandlers = {
 			addon.variables.unitRole = GetSpecializationRole(addon.variables.unitSpec)
 			addon.variables.unitSpecId = specId
 		end
+		if addon.functions and addon.functions.initClassBuffReminder then addon.functions.initClassBuffReminder() end
 
 		if not addon.variables.maxLevel then addon.variables.maxLevel = GetMaxLevelForPlayerExpansion() end
 		addon.variables.isMaxLevel = {}
@@ -6540,24 +6580,34 @@ local eventHandlers = {
 			end
 		end
 	end,
-	["QUEST_DATA_LOAD_RESULT"] = function(arg1)
-		if arg1 and addon.variables.acceptQuestID[arg1] and addon.functions.shouldAutoAcceptQuest() then
-			if addon.functions.isQuestAutomationIgnoredNpc() then return end
-			if addon.functions.shouldSkipQuestAutomation(arg1, nil, "accept") then return end
+	["QUEST_DATA_LOAD_RESULT"] = function(questID, success)
+		if not questID or not addon.variables.acceptQuestID[questID] then return end
 
-			AcceptQuest()
-			if QuestFrame:IsShown() then QuestFrame:Hide() end -- Sometimes the frame is still stuck - hide it forcefully than
-		end
+		clearPendingAutoAcceptQuest(questID)
+
+		if success == false then return end
+		if not addon.functions.shouldAutoAcceptQuest() then return end
+		if addon.functions.isQuestAutomationIgnoredNpc() then return end
+		if addon.functions.shouldSkipQuestAutomation(questID, nil, "accept") then return end
+
+		AcceptQuest()
+		if QuestFrame:IsShown() then QuestFrame:Hide() end -- Sometimes the frame is still stuck - hide it forcefully than
 	end,
 	["QUEST_DETAIL"] = function()
 		if addon.functions.shouldAutoAcceptQuest() then
 			if addon.functions.isQuestAutomationIgnoredNpc() then return end
 
 			local id = GetQuestID()
-			addon.variables.acceptQuestID[id] = true
-			C_QuestLog.RequestLoadQuestByID(id)
+			if id then
+				addon.variables.acceptQuestID[id] = true
+				C_QuestLog.RequestLoadQuestByID(id)
+			end
 		end
 	end,
+	["QUEST_ACCEPTED"] = function(questID)
+		if questID then clearPendingAutoAcceptQuest(questID) end
+	end,
+	["QUEST_FINISHED"] = function() clearPendingAutoAcceptQuest() end,
 	["QUEST_GREETING"] = function()
 		if addon.functions.isQuestAutomationIgnoredNpc() then return end
 		if addon.functions.shouldAutoAcceptQuest() then

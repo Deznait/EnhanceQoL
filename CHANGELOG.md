@@ -23,6 +23,7 @@
 ### 🐛 Fixed
 
 - Group Finder (Raider.IO applicant link): Fixed the LFG applicant context-menu URL builder for cross-realm names so Raider.IO profile links no longer pick up the player's own realm, and skip link generation entirely when the applicant identity is secret.
+- Group Finder (Applicants / secret values): Hardened applicant sorting, ignore highlighting, and applicant-cover tweaks against secret LFG data so raid listings no longer spam taint errors when Group Finder updates while restricted content is active.
 - Gear & Upgrades (Equipment Flyout): Added a separate item-level position setting for equipment flyouts and stopped reusing the Character Frame `Outside` placement there, so upgrade/replace comparisons no longer end up in confusing off-slot positions.
 - Unit Frames (Player): Fixed the player-frame name sometimes staying empty after login or loading screens by refreshing the label again when the EQoL frame is shown and once more after entering the world.
 - Unit Frames / Group Frames: Main group anchors and secure headers are now clamped to the screen so moved layouts cannot be dragged off-screen as easily.
@@ -32,6 +33,9 @@
 - Resource Bars (Runic Power / Maelstrom): Fixed protected Midnight values still using absolute threshold-color handling. Both resource types now use the percent-based secret threshold path instead of absolute threshold colors.
 - Group Frames (Raid / Dynamic Scaling): Fixed `Level` text and `Group <number>` indicators growing with `Preserve content size`. Those two labels now keep their normal size while the slider still compensates the rest of the raid-frame content.
 - Group Frames (Raid / Edit Mode Preview): Fixed grouped raid preview resolving against the current live raid subgroup layout instead of the requested sample size, so preview blocks now stay correct while already inside a raid.
+- Questing & Cinematics (Auto Gossip / Quest Turn-In): Fixed mixed quest-and-gossip NPCs immediately jumping into RP dialogue even while quest turn-in automation was off. Auto gossip no longer overrides quest interactions, and single-option gossip only auto-continues when no quest entries are present.
+- Questing & Cinematics (Auto Accept / Turn-In): Fixed stale pending auto-accept quest state causing modifier-based quest turn-ins to close the quest frame instead of completing the hand-in, and leaving later quest interactions stuck in the same broken state.
+- Questing & Cinematics (Auto Gossip Settings): Fixed the broken `Configured gossip IDs` picker causing Blizzard Settings type errors. Gossip IDs are now managed via `/eqol aag <id>` and `/eqol rag <id>` instead.
 
 ### ❌ Removed
 
