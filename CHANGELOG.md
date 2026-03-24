@@ -5,6 +5,7 @@
 ### 🐛 Fixed
 
 - Cooldown Panels (Items / Healthstones): Fixed `Show item uses` not updating immediately after enabling it on item entries.
+- Unit Frames (Boss): Highlight color wasn't working correctly
 
 ## [9.9.1] - 2026-03-24
 
