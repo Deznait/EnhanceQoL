@@ -302,10 +302,10 @@ local function updateNameplateMobColorContext(forceRefresh)
 	nameplateMobColorState.lieutenantLevel = nil
 
 	local referenceLevel
-	if lfgDungeonID and instanceType == "party" and type(GetMaximumExpansionLevel) == "function" and type(GetMaxLevelForExpansionLevel) == "function" then
-		local maximumExpansionLevel = GetMaximumExpansionLevel()
+	if lfgDungeonID and instanceType == "party" and type(_G.GetMaximumExpansionLevel) == "function" and type(_G.GetMaxLevelForExpansionLevel) == "function" then
+		local maximumExpansionLevel = _G.GetMaximumExpansionLevel()
 		if not isSecretValue(maximumExpansionLevel) then
-			referenceLevel = GetMaxLevelForExpansionLevel(maximumExpansionLevel)
+			referenceLevel = _G.GetMaxLevelForExpansionLevel(maximumExpansionLevel)
 			if isSecretValue(referenceLevel) then referenceLevel = nil end
 		end
 	end
@@ -359,7 +359,7 @@ local function computeNameplateMobColor(unit)
 			if isSecretValue(mobLevel) then mobLevel = nil end
 		end
 
-		local isLieutenant = type(UnitIsLieutenant) == "function" and UnitIsLieutenant(unit) or false
+		local isLieutenant = type(_G.UnitIsLieutenant) == "function" and _G.UnitIsLieutenant(unit) or false
 		if isSecretValue(isLieutenant) then isLieutenant = false end
 
 		local referenceLevel = nameplateMobColorState.referenceLevel
@@ -410,8 +410,8 @@ local function refreshNameplateMobColorUnitFrame(unitFrame)
 	if not unitFrame or isSecretValue(unitFrame) then return end
 	if not isNameplateUnitToken(unitFrame.unit) then return end
 
-	if type(CompactUnitFrame_UpdateHealthColor) == "function" then
-		CompactUnitFrame_UpdateHealthColor(unitFrame)
+	if type(_G.CompactUnitFrame_UpdateHealthColor) == "function" then
+		_G.CompactUnitFrame_UpdateHealthColor(unitFrame)
 		return
 	end
 
@@ -431,12 +431,12 @@ local function ensureNameplateMobColorHooks()
 	if type(hooksecurefunc) ~= "function" then return end
 	local installedAnyHook = false
 
-	if type(CompactUnitFrame_UpdateHealthColor) == "function" then
+	if type(_G.CompactUnitFrame_UpdateHealthColor) == "function" then
 		hooksecurefunc("CompactUnitFrame_UpdateHealthColor", function(unitFrame) applyNameplateMobColor(unitFrame) end)
 		installedAnyHook = true
 	end
 
-	if type(CompactUnitFrame_UpdateAll) == "function" then
+	if type(_G.CompactUnitFrame_UpdateAll) == "function" then
 		hooksecurefunc("CompactUnitFrame_UpdateAll", function(unitFrame) applyNameplateMobColor(unitFrame) end)
 		installedAnyHook = true
 	end
