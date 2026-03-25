@@ -590,6 +590,8 @@ end
 function Helper.NormalizeFixedGroupLayoutOverrides(value)
 	if type(value) ~= "table" then return nil end
 	local normalized = {}
+	if value.iconOffsetX ~= nil then normalized.iconOffsetX = Helper.ClampInt(value.iconOffsetX, -Helper.OFFSET_RANGE, Helper.OFFSET_RANGE, 0) end
+	if value.iconOffsetY ~= nil then normalized.iconOffsetY = Helper.ClampInt(value.iconOffsetY, -Helper.OFFSET_RANGE, Helper.OFFSET_RANGE, 0) end
 	if type(value.procGlowEnabled) == "boolean" then normalized.procGlowEnabled = value.procGlowEnabled == true end
 	if type(value.hideGlowOutOfCombat) == "boolean" then normalized.hideGlowOutOfCombat = value.hideGlowOutOfCombat == true end
 	if value.procGlowStyle ~= nil then normalized.procGlowStyle = Helper.NormalizeGlowStyle(value.procGlowStyle, Helper.PANEL_LAYOUT_DEFAULTS.readyGlowStyle) end

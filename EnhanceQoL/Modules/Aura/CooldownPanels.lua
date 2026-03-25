@@ -10240,7 +10240,12 @@ function CooldownPanels:BuildLayoutFixedGroupStandaloneSettings(panelId, groupId
 		end
 	end
 	local function setOverride(field, value)
-		if CooldownPanels:SetFixedGroupLayoutOverride(panelId, groupId, field, value) then refresh() end
+		if not CooldownPanels:SetFixedGroupLayoutOverride(panelId, groupId, field, value) then return end
+		if field == "iconOffsetX" or field == "iconOffsetY" then
+			CooldownPanels:RefreshPanelForCurrentEditContext(panelId, false)
+			return
+		end
+		refresh()
 	end
 
 	return {
@@ -10341,6 +10346,36 @@ function CooldownPanels:BuildLayoutFixedGroupStandaloneSettings(panelId, groupId
 					end)
 				end
 			end,
+		},
+		{
+			name = L["CooldownPanelIconOffsetX"] or "Icon X",
+			kind = SettingType.Slider,
+			parentId = "cooldownPanelStandaloneFixedGroupGeneral",
+			minValue = -(Helper.OFFSET_RANGE or 200),
+			maxValue = Helper.OFFSET_RANGE or 200,
+			valueStep = 1,
+			allowInput = true,
+			get = function()
+				local layout = getLayout()
+				return Helper.ClampInt(layout and layout.iconOffsetX, -Helper.OFFSET_RANGE, Helper.OFFSET_RANGE, 0)
+			end,
+			set = function(_, value) setOverride("iconOffsetX", value) end,
+			formatter = function(value) return tostring(math.floor((tonumber(value) or 0) + 0.5)) end,
+		},
+		{
+			name = L["CooldownPanelIconOffsetY"] or "Icon Y",
+			kind = SettingType.Slider,
+			parentId = "cooldownPanelStandaloneFixedGroupGeneral",
+			minValue = -(Helper.OFFSET_RANGE or 200),
+			maxValue = Helper.OFFSET_RANGE or 200,
+			valueStep = 1,
+			allowInput = true,
+			get = function()
+				local layout = getLayout()
+				return Helper.ClampInt(layout and layout.iconOffsetY, -Helper.OFFSET_RANGE, Helper.OFFSET_RANGE, 0)
+			end,
+			set = function(_, value) setOverride("iconOffsetY", value) end,
+			formatter = function(value) return tostring(math.floor((tonumber(value) or 0) + 0.5)) end,
 		},
 		{
 			name = L["CooldownPanelUseCustomIconSize"] or "Use custom icon size",
