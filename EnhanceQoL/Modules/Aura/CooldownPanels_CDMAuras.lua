@@ -56,7 +56,6 @@ local function getRuntime()
 		runtime.spellTextureByID = runtime.spellTextureByID or {}
 		runtime.scanInfoPoolByID = runtime.scanInfoPoolByID or {}
 		runtime.scratchSeenFrames = runtime.scratchSeenFrames or {}
-		runtime.scratchMergedBySpellID = runtime.scratchMergedBySpellID or {}
 		runtime.scratchSeenInfo = runtime.scratchSeenInfo or {}
 		runtime.scratchNumericKeys = runtime.scratchNumericKeys or {}
 		runtime.scratchChildren = runtime.scratchChildren or {}
@@ -75,7 +74,6 @@ local function getRuntime()
 		spellTextureByID = {},
 		scanInfoPoolByID = {},
 		scratchSeenFrames = {},
-		scratchMergedBySpellID = {},
 		scratchSeenInfo = {},
 		scratchNumericKeys = {},
 		scratchChildren = {},
@@ -251,19 +249,33 @@ local function getCooldownIDFromFrame(frame, sourceType)
 end
 
 local function getFrameIconTexture(frame)
+	local function isUsableTexture(texture)
+		if texture == nil then return false end
+		local textureType = type(texture)
+		if textureType ~= "number" and textureType ~= "string" then return false end
+		if isSecretValue(texture) then return false end
+		if textureType == "number" then return texture ~= 0 end
+		return texture ~= ""
+	end
+	local function readTexture(region)
+		if not region then return nil end
+		if region.GetTextureFileID then
+			local ok, texture = pcall(region.GetTextureFileID, region)
+			if ok and isUsableTexture(texture) then return texture end
+		end
+		if region.GetTexture then
+			local ok, texture = pcall(region.GetTexture, region)
+			if ok and isUsableTexture(texture) then return texture end
+		end
+		return nil
+	end
 	if not frame then return nil end
-	if frame.Icon and frame.Icon.Icon and frame.Icon.Icon.GetTexture then
-		local texture = frame.Icon.Icon:GetTexture()
-		if texture then return texture end
-	end
-	if frame.Icon and frame.Icon.GetTexture then
-		local texture = frame.Icon:GetTexture()
-		if texture then return texture end
-	end
-	if frame.GetTexture then
-		local texture = frame:GetTexture()
-		if texture then return texture end
-	end
+	local texture = readTexture(frame.Icon and frame.Icon.Icon)
+	if texture then return texture end
+	texture = readTexture(frame.Icon)
+	if texture then return texture end
+	texture = readTexture(frame)
+	if texture then return texture end
 	return nil
 end
 
@@ -365,33 +377,72 @@ local function resolveSpellFromCooldownID(cooldownID, frame)
 	local iconTextureID
 
 	local frameInfo = frame and frame.cooldownInfo or nil
-	local info = getCooldownViewerInfo(cooldownID) or frameInfo
-	if info then
+	local apiInfo = getCooldownViewerInfo(cooldownID)
+	if frameInfo or apiInfo then
 		local auraSpellID = frame and frame.auraSpellID or nil
-		local linkedSpellID = frameInfo and frameInfo.linkedSpellID or nil
-		local baseSpellID = info.spellID
-		local overrideSpellID = info.overrideSpellID
-		local overrideTooltipSpellID = info.overrideTooltipSpellID
-		local linkedSpellIDs = info.linkedSpellIDs
-		local firstLinkedSpellID = linkedSpellIDs and linkedSpellIDs[1] or nil
-		local displaySpellID = getFirstUsableSpellID(auraSpellID, linkedSpellID, overrideTooltipSpellID, firstLinkedSpellID, overrideSpellID, baseSpellID)
-		spellID = spellID or displaySpellID or getFirstUsableSpellID(overrideTooltipSpellID, firstLinkedSpellID, overrideSpellID, baseSpellID)
-		if spellID then
-			buffName = getSpellName(spellID)
-			iconTextureID = getSpellTexture(spellID)
-		end
-		if (not buffName or not iconTextureID) and isUsableSpellID(overrideTooltipSpellID) then
-			buffName = buffName or getSpellName(overrideTooltipSpellID)
-			iconTextureID = iconTextureID or getSpellTexture(overrideTooltipSpellID)
-		end
-		if (not buffName or not iconTextureID) and isUsableSpellID(overrideSpellID) then
-			buffName = buffName or getSpellName(overrideSpellID)
-			iconTextureID = iconTextureID or getSpellTexture(overrideSpellID)
-		end
-		if (not buffName or not iconTextureID) and isUsableSpellID(baseSpellID) then
-			buffName = buffName or getSpellName(baseSpellID)
-			iconTextureID = iconTextureID or getSpellTexture(baseSpellID)
-		end
+		local frameLinkedSpellIDs = frameInfo and frameInfo.linkedSpellIDs or nil
+		local apiLinkedSpellIDs = apiInfo and apiInfo.linkedSpellIDs or nil
+		local frameFirstLinkedSpellID = type(frameLinkedSpellIDs) == "table" and frameLinkedSpellIDs[1] or nil
+		local apiFirstLinkedSpellID = type(apiLinkedSpellIDs) == "table" and apiLinkedSpellIDs[1] or nil
+		local frameLinkedSpellID = frameInfo and frameInfo.linkedSpellID or nil
+		local apiLinkedSpellID = apiInfo and apiInfo.linkedSpellID or nil
+		local frameOverrideTooltipSpellID = frameInfo and frameInfo.overrideTooltipSpellID or nil
+		local apiOverrideTooltipSpellID = apiInfo and apiInfo.overrideTooltipSpellID or nil
+		local frameOverrideSpellID = frameInfo and frameInfo.overrideSpellID or nil
+		local apiOverrideSpellID = apiInfo and apiInfo.overrideSpellID or nil
+		local frameBaseSpellID = frameInfo and frameInfo.spellID or nil
+		local apiBaseSpellID = apiInfo and apiInfo.spellID or nil
+
+		spellID = getFirstUsableSpellID(
+			auraSpellID,
+			frameOverrideTooltipSpellID,
+			frameLinkedSpellID,
+			frameFirstLinkedSpellID,
+			frameOverrideSpellID,
+			frameBaseSpellID,
+			apiOverrideTooltipSpellID,
+			apiLinkedSpellID,
+			apiFirstLinkedSpellID,
+			apiOverrideSpellID,
+			apiBaseSpellID
+		)
+
+		local nameSpellID = getFirstUsableSpellID(
+			auraSpellID,
+			frameOverrideTooltipSpellID,
+			frameLinkedSpellID,
+			frameFirstLinkedSpellID,
+			spellID,
+			frameOverrideSpellID,
+			frameBaseSpellID,
+			apiOverrideTooltipSpellID,
+			apiLinkedSpellID,
+			apiFirstLinkedSpellID,
+			apiOverrideSpellID,
+			apiBaseSpellID
+		)
+		if nameSpellID then buffName = getSpellName(nameSpellID) end
+
+		iconTextureID = getFrameIconTexture(frame)
+		if not iconTextureID and isUsableSpellID(frameOverrideTooltipSpellID) then iconTextureID = getSpellTexture(frameOverrideTooltipSpellID) end
+		if not iconTextureID and isUsableSpellID(apiOverrideTooltipSpellID) then iconTextureID = getSpellTexture(apiOverrideTooltipSpellID) end
+		if not iconTextureID and isUsableSpellID(auraSpellID) then iconTextureID = getSpellTexture(auraSpellID) end
+		if not iconTextureID and isUsableSpellID(frameLinkedSpellID) then iconTextureID = getSpellTexture(frameLinkedSpellID) end
+		if not iconTextureID and isUsableSpellID(frameFirstLinkedSpellID) then iconTextureID = getSpellTexture(frameFirstLinkedSpellID) end
+		if not iconTextureID and isUsableSpellID(spellID) then iconTextureID = getSpellTexture(spellID) end
+		if not iconTextureID and isUsableSpellID(frameOverrideSpellID) then iconTextureID = getSpellTexture(frameOverrideSpellID) end
+		if not iconTextureID and isUsableSpellID(frameBaseSpellID) then iconTextureID = getSpellTexture(frameBaseSpellID) end
+		if not iconTextureID and isUsableSpellID(apiLinkedSpellID) then iconTextureID = getSpellTexture(apiLinkedSpellID) end
+		if not iconTextureID and isUsableSpellID(apiFirstLinkedSpellID) then iconTextureID = getSpellTexture(apiFirstLinkedSpellID) end
+		if not iconTextureID and isUsableSpellID(apiOverrideSpellID) then iconTextureID = getSpellTexture(apiOverrideSpellID) end
+		if not iconTextureID and isUsableSpellID(apiBaseSpellID) then iconTextureID = getSpellTexture(apiBaseSpellID) end
+
+		if not buffName and isUsableSpellID(frameOverrideTooltipSpellID) then buffName = getSpellName(frameOverrideTooltipSpellID) end
+		if not buffName and isUsableSpellID(apiOverrideTooltipSpellID) then buffName = getSpellName(apiOverrideTooltipSpellID) end
+		if not buffName and isUsableSpellID(frameOverrideSpellID) then buffName = getSpellName(frameOverrideSpellID) end
+		if not buffName and isUsableSpellID(frameBaseSpellID) then buffName = getSpellName(frameBaseSpellID) end
+		if not buffName and isUsableSpellID(apiOverrideSpellID) then buffName = getSpellName(apiOverrideSpellID) end
+		if not buffName and isUsableSpellID(apiBaseSpellID) then buffName = getSpellName(apiBaseSpellID) end
 	end
 
 	iconTextureID = iconTextureID or getFrameIconTexture(frame)
@@ -412,8 +463,24 @@ local function resolveEntryScanInfo(entry, byCooldownID, bySpellID)
 	if isUsableSpellID(spellID) and bySpellID then
 		local spellInfo = bySpellID[spellID]
 		if type(spellInfo) == "table" then
-			local resolvedCooldownID = isValidCooldownID(spellInfo.cooldownID) and spellInfo.cooldownID or storedCooldownID
-			return spellInfo, resolvedCooldownID
+			if spellInfo.cooldownID ~= nil then
+				local resolvedCooldownID = isValidCooldownID(spellInfo.cooldownID) and spellInfo.cooldownID or storedCooldownID
+				return spellInfo, resolvedCooldownID
+			end
+			if storedCooldownID then
+				for i = 1, #spellInfo do
+					local candidate = spellInfo[i]
+					if type(candidate) == "table" and cooldownIDsEqual(candidate.cooldownID, storedCooldownID) then
+						local resolvedCooldownID = isValidCooldownID(candidate.cooldownID) and candidate.cooldownID or storedCooldownID
+						return candidate, resolvedCooldownID
+					end
+				end
+			end
+			if #spellInfo == 1 and type(spellInfo[1]) == "table" then
+				local candidate = spellInfo[1]
+				local resolvedCooldownID = isValidCooldownID(candidate.cooldownID) and candidate.cooldownID or storedCooldownID
+				return candidate, resolvedCooldownID
+			end
 		end
 	end
 
@@ -444,36 +511,6 @@ local function ensureScanInfo(scan, cooldownID)
 	info.sortName = nil
 	scan.byCooldownID[cooldownID] = info
 	return info
-end
-
-local function mergeScanInfo(primary, duplicate)
-	if not (primary and duplicate) or primary == duplicate then return primary end
-	primary.availableSources = primary.availableSources or {}
-	for sourceType in pairs(duplicate.availableSources or {}) do
-		primary.availableSources[sourceType] = true
-	end
-	if duplicate.iconFrame and not primary.iconFrame then primary.iconFrame = duplicate.iconFrame end
-	if duplicate.barFrame and not primary.barFrame then primary.barFrame = duplicate.barFrame end
-	if duplicate.auraUnit and not primary.auraUnit then primary.auraUnit = duplicate.auraUnit end
-	if duplicate.spellID and not primary.spellID then primary.spellID = duplicate.spellID end
-	if duplicate.buffName and (not primary.buffName or primary.buffName == "") then primary.buffName = duplicate.buffName end
-	if duplicate.iconTextureID and not primary.iconTextureID then primary.iconTextureID = duplicate.iconTextureID end
-	if duplicate.isActive then primary.isActive = true end
-	if primary.sourceType ~= SOURCE_ICON and duplicate.sourceType == SOURCE_ICON then
-		primary.sourceType = SOURCE_ICON
-		primary.sourceViewer = ICON_VIEWER
-	elseif not primary.sourceType and duplicate.sourceType then
-		primary.sourceType = duplicate.sourceType
-		primary.sourceViewer = duplicate.sourceViewer
-	end
-	return primary
-end
-
-local function getTrackedSpellKey(info)
-	local spellID = tonumber(info and info.spellID)
-	if not spellID then return nil end
-	local auraUnit = normalizeTrackedUnit(info and info.auraUnit) or ""
-	return auraUnit .. ":" .. tostring(spellID)
 end
 
 local function captureValues(buffer, ...)
@@ -538,9 +575,9 @@ local function collectFrame(scan, frame, sourceType, viewerName, seenFrames)
 	if auraUnit and not info.auraUnit then info.auraUnit = auraUnit end
 
 	local spellID, buffName, iconTextureID = resolveSpellFromCooldownID(cooldownID, frame)
-	if spellID and not info.spellID then info.spellID = spellID end
-	if buffName and (not info.buffName or info.buffName == "") then info.buffName = buffName end
-	if iconTextureID and not info.iconTextureID then info.iconTextureID = iconTextureID end
+	if spellID then info.spellID = spellID end
+	if buffName and buffName ~= "" then info.buffName = buffName end
+	if iconTextureID then info.iconTextureID = iconTextureID end
 	if hasAuraInstanceID(frame.auraInstanceID) or frame.totemData ~= nil then info.isActive = true end
 end
 
@@ -614,10 +651,8 @@ function CDMAuras:ScanTrackedBuffs(force)
 	wipe(scan.bySpellID)
 	scan.hasAuthoritativeSeed = false
 	local seenFrames = runtime.scratchSeenFrames
-	local mergedBySpellID = runtime.scratchMergedBySpellID
 	local seenInfo = runtime.scratchSeenInfo
 	wipe(seenFrames)
-	wipe(mergedBySpellID)
 	wipe(seenInfo)
 
 	local trackedBuffCategory = Enum and Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.TrackedBuff or nil
@@ -629,34 +664,30 @@ function CDMAuras:ScanTrackedBuffs(force)
 	collectViewer(scan, BAR_VIEWER, SOURCE_BAR, seenFrames)
 
 	for cooldownID, info in pairs(scan.byCooldownID) do
-		local spellKey = getTrackedSpellKey(info)
-		if spellKey then
-			local primary = mergedBySpellID[spellKey]
-			if primary and primary ~= info then
-				mergeScanInfo(primary, info)
-				scan.byCooldownID[cooldownID] = primary
-			else
-				mergedBySpellID[spellKey] = info
-			end
-		end
-	end
-
-	for cooldownID, info in pairs(scan.byCooldownID) do
 		if not seenInfo[info] then
 			seenInfo[info] = true
-			if not info.spellID then
-				local spellID, buffName, iconTextureID = resolveSpellFromCooldownID(cooldownID, info.iconFrame or info.barFrame)
-				if spellID and not info.spellID then info.spellID = spellID end
-				if buffName and not info.buffName then info.buffName = buffName end
-				if iconTextureID and not info.iconTextureID then info.iconTextureID = iconTextureID end
-			end
+			local spellID, buffName, iconTextureID = resolveSpellFromCooldownID(cooldownID, info.iconFrame or info.barFrame)
+			if spellID then info.spellID = spellID end
+			if buffName and buffName ~= "" then info.buffName = buffName end
+			if iconTextureID then info.iconTextureID = iconTextureID end
 			info.spellID = tonumber(info.spellID)
 			info.buffName = info.buffName or getSpellName(info.spellID) or tostring(cooldownID)
 			info.iconTextureID = info.iconTextureID or getSpellTexture(info.spellID) or Helper.PREVIEW_ICON
 			info.sortName = string.lower(tostring(info.buffName or ""))
 			info.sourceType = normalizeSourceType(info.sourceType or (info.availableSources[SOURCE_ICON] and SOURCE_ICON or SOURCE_BAR))
 			info.sourceViewer = info.sourceType == SOURCE_BAR and BAR_VIEWER or ICON_VIEWER
-			if info.spellID and not scan.bySpellID[info.spellID] then scan.bySpellID[info.spellID] = info end
+			if info.spellID then
+				local spellInfo = scan.bySpellID[info.spellID]
+				if spellInfo == nil then
+					scan.bySpellID[info.spellID] = info
+				elseif spellInfo ~= info then
+					if spellInfo.cooldownID ~= nil then
+						scan.bySpellID[info.spellID] = { spellInfo, info }
+					else
+						spellInfo[#spellInfo + 1] = info
+					end
+				end
+			end
 			scan.list[#scan.list + 1] = info
 		end
 	end
@@ -1139,12 +1170,10 @@ end
 function CDMAuras:FindEntryByValue(panel, idValue)
 	if not panel or not panel.entries then return nil end
 	local lookup = type(idValue) == "table" and idValue.cooldownID or idValue
-	local lookupSpellID = type(idValue) == "table" and tonumber(idValue.spellID) or nil
 	if not isValidCooldownID(lookup) then return nil end
 	for entryId, entry in pairs(panel.entries) do
 		if entry and entry.type == ENTRY_TYPE then
 			if isValidCooldownID(lookup) and cooldownIDsEqual(entry.cooldownID, lookup) then return entryId, entry end
-			if lookupSpellID and tonumber(entry.spellID) == lookupSpellID then return entryId, entry end
 		end
 	end
 	return nil
@@ -1241,22 +1270,28 @@ function CDMAuras:AppendAddMenu(rootDescription, panelId)
 
 	local panel = CooldownPanels.GetPanel and CooldownPanels:GetPanel(panelId) or nil
 	local existingCooldownIDs = {}
-	local existingSpellIDs = {}
 	for _, entry in pairs(panel and panel.entries or {}) do
 		if entry and entry.type == ENTRY_TYPE then
 			if isValidCooldownID(entry.cooldownID) then existingCooldownIDs[tostring(entry.cooldownID)] = true end
-			if isUsableSpellID(entry.spellID) then existingSpellIDs[entry.spellID] = true end
 		end
+	end
+	local duplicateNames = {}
+	for _, info in ipairs(list) do
+		local nameKey = string.lower(tostring(info and (info.buffName or info.cooldownID) or ""))
+		duplicateNames[nameKey] = (duplicateNames[nameKey] or 0) + 1
 	end
 
 	local availableCount = 0
 	buffsMenu:CreateTitle(L["CooldownPanelCDMAuraPickerNote"] or "Auras set to Always Display can be added while inactive. Others only appear while active.")
 	for _, info in ipairs(list) do
-		local spellID = tonumber(info and info.spellID)
-		if not existingCooldownIDs[tostring(info.cooldownID)] and not (spellID and existingSpellIDs[spellID]) then
+		if not existingCooldownIDs[tostring(info.cooldownID)] then
 			availableCount = availableCount + 1
 			local icon = tostring(info.iconTextureID or Helper.PREVIEW_ICON)
-			local label = string.format("|T%s:14:14:0:0:64:64:4:60:4:60|t %s", icon, tostring(info.buffName or info.cooldownID))
+			local nameText = tostring(info.buffName or info.cooldownID)
+			local label = string.format("|T%s:14:14:0:0:64:64:4:60:4:60|t %s", icon, nameText)
+			if (duplicateNames[string.lower(nameText)] or 0) > 1 then
+				label = string.format("%s |cff888888(CD:%s, Spell:%s)|r", label, tostring(info.cooldownID or "?"), tostring(info.spellID or "?"))
+			end
 			buffsMenu:CreateButton(label, function()
 				if CooldownPanels.AddEntrySafe then
 					CooldownPanels:AddEntrySafe(panelId, ENTRY_TYPE, info)
@@ -1291,11 +1326,9 @@ function CDMAuras:ImportEntries(panelId, sourceKind)
 	panel.order = panel.order or {}
 
 	local existingByCooldownID = {}
-	local existingBySpellID = {}
 	for _, entry in pairs(panel.entries) do
 		if entry and entry.type == ENTRY_TYPE then
 			if isValidCooldownID(entry.cooldownID) then existingByCooldownID[tostring(entry.cooldownID)] = true end
-			if isUsableSpellID(entry.spellID) then existingBySpellID[entry.spellID] = true end
 		end
 	end
 
@@ -1309,8 +1342,7 @@ function CDMAuras:ImportEntries(panelId, sourceKind)
 				stats.invalid = stats.invalid + 1
 			else
 				local cooldownKey = tostring(info.cooldownID)
-				local spellID = tonumber(info.spellID)
-				if existingByCooldownID[cooldownKey] or (spellID and existingBySpellID[spellID]) then
+				if existingByCooldownID[cooldownKey] then
 					stats.duplicates = stats.duplicates + 1
 				else
 					local entryInfo = {
@@ -1328,7 +1360,6 @@ function CDMAuras:ImportEntries(panelId, sourceKind)
 						panel.entries[entryId] = entry
 						panel.order[#panel.order + 1] = entryId
 						existingByCooldownID[cooldownKey] = true
-						if isUsableSpellID(entry.spellID) then existingBySpellID[entry.spellID] = true end
 						stats.added = stats.added + 1
 					else
 						stats.invalid = stats.invalid + 1
@@ -1522,12 +1553,8 @@ function CDMAuras:BuildRuntimeData(panelId, entryId, entry, entryLayout, alwaysS
 		end
 	end
 	state.pandemicActive = pandemicActive or nil
-	local iconTextureID = auraData and auraData.icon
-		or getFrameIconTexture(chosenFrame)
-		or entry.iconTextureID
-		or (scanInfo and scanInfo.iconTextureID)
-		or getSpellTexture(entry.spellID)
-		or Helper.PREVIEW_ICON
+	local iconTextureID = auraData and auraData.icon or getFrameIconTexture(chosenFrame) or entry.iconTextureID or (scanInfo and scanInfo.iconTextureID)
+		or getSpellTexture(entry.spellID) or Helper.PREVIEW_ICON
 	local applications = auraData and auraData.applications or nil
 	local stackCount = resolveAuraStackCount(auraUnit, auraInstanceID, applications)
 	local rawDuration = auraData and auraData.duration or nil

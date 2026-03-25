@@ -2628,8 +2628,6 @@ end
 
 local function getEntryIcon(entry)
 	if not entry or type(entry) ~= "table" then return Helper.PREVIEW_ICON end
-	local customIconID = Helper.NormalizeFileDataID(entry.customIconID)
-	if customIconID then return customIconID end
 	if entry.type == "CDM_AURA" then
 		local cdmAuras = CooldownPanels.CDMAuras
 		if cdmAuras and cdmAuras.GetEntryIcon then
@@ -7986,24 +7984,6 @@ function CooldownPanels:OpenLayoutEntryStandaloneMenu(panelId, entryId, anchorFr
 		refreshEntryViews()
 	end
 
-	local function setCustomIconID(_, value)
-		local _, currentEntry = getEntry()
-		if not currentEntry then return end
-		local input = Helper.NormalizeTextureInput(value)
-		local customIconID = nil
-		if input ~= "" then
-			customIconID = Helper.NormalizeFileDataID(input)
-			if not customIconID then
-				showErrorMessage(L["CooldownPanelCustomIconIDInvalid"] or "Icon ID must be a positive number.")
-				refreshEntryViews()
-				return
-			end
-		end
-		if currentEntry.customIconID == customIconID then return end
-		currentEntry.customIconID = customIconID
-		refreshEntryViews()
-	end
-
 	local function isStateTextureSupported()
 		local effectiveType = getEffectiveType()
 		return effectiveType == "SPELL" or effectiveType == "CDM_AURA"
@@ -8543,20 +8523,6 @@ function CooldownPanels:OpenLayoutEntryStandaloneMenu(panelId, entryId, anchorFr
 			end,
 			disabled = function() return entryHasStateTexture() end,
 			set = function(_, value) setEntryBoolean("hideIcon", value) end,
-		},
-		{
-			name = L["CooldownPanelCustomIconID"] or "Custom icon ID",
-			kind = SettingType.Input,
-			parentId = "cooldownPanelStandaloneDisplay",
-			inputWidth = 220,
-			get = function()
-				local _, currentEntry = getEntry()
-				local customIconID = currentEntry and Helper.NormalizeFileDataID(currentEntry.customIconID) or nil
-				return customIconID and tostring(customIconID) or ""
-			end,
-			set = setCustomIconID,
-			default = "",
-			maxChars = 16,
 		},
 		{
 			name = L["CooldownPanelOverwriteGlobalDefault"] or "Overwrite global default",
@@ -10941,16 +10907,8 @@ local function ensureEditor()
 	entryIdBox:SetPoint("TOPLEFT", entryIcon, "BOTTOMLEFT", 0, -8)
 	entryIdBox:SetNumeric(true)
 
-	local customIconLabel = Helper.CreateLabel(rightContent, L["CooldownPanelCustomIconID"] or "Custom icon ID", 11, "OUTLINE")
-	customIconLabel:SetPoint("TOPLEFT", entryIdBox, "BOTTOMLEFT", 2, -8)
-	customIconLabel:SetTextColor(0.9, 0.9, 0.9, 1)
-
-	local customIconBox = Helper.CreateEditBox(rightContent, 120, 20)
-	customIconBox:SetPoint("TOPLEFT", customIconLabel, "BOTTOMLEFT", -2, -4)
-	customIconBox:SetNumeric(true)
-
 	local cbCooldownText = Helper.CreateCheck(rightContent, L["CooldownPanelShowCooldownText"] or "Show cooldown text")
-	cbCooldownText:SetPoint("TOPLEFT", customIconBox, "BOTTOMLEFT", -2, -6)
+	cbCooldownText:SetPoint("TOPLEFT", entryIdBox, "BOTTOMLEFT", -2, -6)
 
 	local cbAlwaysShow = Helper.CreateCheck(rightContent, L["CooldownPanelAlwaysShow"] or "Always show")
 	cbAlwaysShow:SetPoint("TOPLEFT", cbCooldownText, "BOTTOMLEFT", 0, -4)
@@ -11185,8 +11143,6 @@ local function ensureEditor()
 			entryName = entryName,
 			entryType = entryType,
 			entryId = entryIdBox,
-			customIconLabel = customIconLabel,
-			customIconBox = customIconBox,
 			cbCooldownText = cbCooldownText,
 			cbAlwaysShow = cbAlwaysShow,
 			cbCharges = cbCharges,
@@ -11361,43 +11317,6 @@ local function ensureEditor()
 		CooldownPanels:RefreshEditor()
 	end)
 	entryIdBox:SetScript("OnEscapePressed", function(self)
-		self:ClearFocus()
-		CooldownPanels:RefreshEditor()
-	end)
-
-	local function applyCustomIconValue(self)
-		local panelId = editor.selectedPanelId
-		local entryId = editor.selectedEntryId
-		local panel = panelId and CooldownPanels:GetPanel(panelId)
-		local entry = panel and panel.entries and panel.entries[entryId]
-		if not entry then
-			self:ClearFocus()
-			return
-		end
-		local input = Helper.NormalizeTextureInput(self:GetText())
-		local customIconID = nil
-		if input ~= "" then
-			customIconID = Helper.NormalizeFileDataID(input)
-			if not customIconID then
-				showErrorMessage(L["CooldownPanelCustomIconIDInvalid"] or "Icon ID must be a positive number.")
-				self:ClearFocus()
-				CooldownPanels:RefreshEditor()
-				return
-			end
-		end
-		if entry.customIconID == customIconID then
-			self:ClearFocus()
-			return
-		end
-		entry.customIconID = customIconID
-		self:ClearFocus()
-		CooldownPanels:RefreshPanel(panelId)
-		CooldownPanels:RefreshEditor()
-	end
-
-	customIconBox:SetScript("OnEnterPressed", applyCustomIconValue)
-	customIconBox:SetScript("OnEditFocusLost", applyCustomIconValue)
-	customIconBox:SetScript("OnEscapePressed", function(self)
 		self:ClearFocus()
 		CooldownPanels:RefreshEditor()
 	end)
@@ -12937,8 +12856,6 @@ local function layoutInspectorToggles(inspector, entry)
 		hideToggle(inspector.cbUseHighestRank)
 		hideToggle(inspector.cbShowWhenEmpty)
 		hideToggle(inspector.cbShowWhenNoCooldown)
-		hideControl(inspector.customIconLabel)
-		hideControl(inspector.customIconBox)
 		hideControl(inspector.staticTextLabel)
 		hideControl(inspector.staticTextBox)
 		hideToggle(inspector.cbStaticTextDuringCD)
@@ -12983,8 +12900,6 @@ local function layoutInspectorToggles(inspector, entry)
 		end
 	end
 
-	place(inspector.customIconLabel, true, 2, -8)
-	place(inspector.customIconBox, true, -2, -4)
 	place(inspector.cbCooldownText, effectiveType ~= "STANCE", -2)
 	if effectiveType == "SPELL" then
 		place(inspector.cbAlwaysShow, false)
@@ -13159,9 +13074,6 @@ local function refreshInspector(editor, panel, entry)
 			end
 			if inspector.entryId.SetNumeric then inspector.entryId:SetNumeric(showEntryIdBox) end
 		end
-		if inspector.customIconBox then
-			inspector.customIconBox:SetText(entry.customIconID and tostring(entry.customIconID) or "")
-		end
 		if inspector.cbAlwaysShow and inspector.cbAlwaysShow.Text then
 			if effectiveType == "STANCE" then
 				inspector.cbAlwaysShow.Text:SetText(L["CooldownPanelShowWhenMissing"] or "Show when missing")
@@ -13229,7 +13141,6 @@ local function refreshInspector(editor, panel, entry)
 			if inspector.entryId.SetNumeric then inspector.entryId:SetNumeric(true) end
 			inspector.entryId:Hide()
 		end
-		if inspector.customIconBox then inspector.customIconBox:SetText("") end
 		if inspector.cbAlwaysShow and inspector.cbAlwaysShow.Text then inspector.cbAlwaysShow.Text:SetText(L["CooldownPanelAlwaysShow"] or "Always show") end
 		if inspector.cbGlow and inspector.cbGlow.Text then inspector.cbGlow.Text:SetText(L["CooldownPanelGlowReady"] or "Glow when ready") end
 		if inspector.cbPandemicGlow and inspector.cbPandemicGlow.Text then inspector.cbPandemicGlow.Text:SetText(L["CooldownPanelGlowPandemic"] or "Pandemic glow") end
